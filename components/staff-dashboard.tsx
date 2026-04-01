@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EMPTY_FILTERS, FILTER_FIELDS, type FilterOptions, type FilterState, type StudentRow } from "@/lib/types";
 
@@ -150,6 +151,7 @@ export function StaffDashboard() {
   const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
   const maleCount = students.filter((student) => (student.gender || "").toUpperCase() === "M").length;
   const averageClassSize = classCount ? (students.length / classCount).toFixed(1) : "0.0";
+  const gradebookHref = `/gradebook${buildQueryString(filters) ? `?${buildQueryString(filters)}` : ""}`;
 
   return (
     <div className="dashboard-grid">
@@ -251,6 +253,12 @@ export function StaffDashboard() {
           <button className="button secondary" type="button" onClick={clearFilters}>
             Clear filters
           </button>
+          <Link className="button" href={gradebookHref}>
+            Enter Gradebook
+          </Link>
+          <Link className="button secondary" href="/admin/gradebook">
+            Gradebook Setup
+          </Link>
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
         </div>
         {error ? <div className="banner error-banner">{error}</div> : null}
