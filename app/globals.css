@@ -1,16 +1,18 @@
 :root {
   color-scheme: light;
-  --bg: #f6efe4;
-  --panel: rgba(255, 251, 245, 0.92);
-  --panel-strong: #fffaf2;
-  --ink: #1f2937;
-  --muted: #5f6b7a;
-  --line: rgba(85, 57, 22, 0.12);
-  --accent: #0f766e;
-  --accent-strong: #115e59;
-  --accent-soft: rgba(15, 118, 110, 0.12);
-  --gold: #d97706;
-  --shadow: 0 20px 60px rgba(80, 52, 22, 0.12);
+  --bg: #f8f3e8;
+  --panel: rgba(255, 252, 247, 0.94);
+  --panel-strong: #fffdf8;
+  --ink: #261718;
+  --muted: #6c5d56;
+  --line: rgba(118, 18, 29, 0.12);
+  --accent: #9f1724;
+  --accent-strong: #7f1220;
+  --accent-soft: rgba(159, 23, 36, 0.12);
+  --support: #2f7d32;
+  --support-soft: rgba(47, 125, 50, 0.12);
+  --gold: #b45309;
+  --shadow: 0 20px 60px rgba(95, 37, 31, 0.12);
   --radius: 22px;
 }
 
@@ -25,9 +27,9 @@ body {
   min-height: 100%;
   font-family: Georgia, "Times New Roman", serif;
   background:
-    radial-gradient(circle at top left, rgba(217, 119, 6, 0.18), transparent 30%),
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.16), transparent 32%),
-    linear-gradient(180deg, #fffaf2 0%, var(--bg) 100%);
+    radial-gradient(circle at top left, rgba(159, 23, 36, 0.1), transparent 28%),
+    radial-gradient(circle at top right, rgba(47, 125, 50, 0.12), transparent 30%),
+    linear-gradient(180deg, #fffcf7 0%, var(--bg) 100%);
   color: var(--ink);
 }
 
@@ -48,7 +50,56 @@ input {
 .page-shell {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 32px 0 48px;
+  padding: 24px 0 48px;
+}
+
+.site-frame {
+  min-height: 100vh;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 251, 245, 0.88);
+  border-bottom: 1px solid rgba(118, 18, 29, 0.08);
+}
+
+.site-header-inner {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 14px 0;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.brand-logo {
+  width: clamp(220px, 28vw, 300px);
+  height: auto;
+}
+
+.brand-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.brand-kicker {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.brand-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
 }
 
 .hero-card,
@@ -64,6 +115,7 @@ input {
 .hero-card {
   padding: 28px;
   margin-bottom: 20px;
+  border-top: 4px solid var(--accent);
 }
 
 .eyebrow {
@@ -71,7 +123,7 @@ input {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.75rem;
-  color: var(--gold);
+  color: var(--accent);
 }
 
 .hero-title {
@@ -154,7 +206,7 @@ input {
 
 .button.secondary {
   background: transparent;
-  color: var(--accent-strong);
+  color: var(--accent);
   border: 1px solid var(--accent-soft);
 }
 
@@ -167,7 +219,7 @@ input {
 .stat-card {
   padding: 18px;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 247, 237, 0.9));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 247, 242, 0.94));
   border: 1px solid var(--line);
 }
 
@@ -240,8 +292,8 @@ tr:last-child td {
   margin-top: 16px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(15, 118, 110, 0.08);
-  color: var(--accent-strong);
+  background: var(--support-soft);
+  color: #1f5d25;
 }
 
 .error-banner {
@@ -279,7 +331,7 @@ tr:last-child td {
   padding: 18px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 252, 248, 0.95), rgba(255, 247, 237, 0.88));
+  background: linear-gradient(180deg, rgba(255, 252, 248, 0.95), rgba(255, 246, 240, 0.9));
 }
 
 .mi-title {
@@ -317,7 +369,7 @@ tr:last-child td {
   min-width: 120px;
   padding: 7px 10px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.08);
+  background: rgba(159, 23, 36, 0.08);
   overflow: hidden;
   text-align: right;
 }
@@ -325,7 +377,7 @@ tr:last-child td {
 .bar-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, rgba(15, 118, 110, 0.22), rgba(217, 119, 6, 0.2));
+  background: linear-gradient(90deg, rgba(159, 23, 36, 0.24), rgba(47, 125, 50, 0.2));
   border-radius: 999px;
 }
 
@@ -347,6 +399,11 @@ tr:last-child td {
   }
 
   .panel-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brand-lockup {
     flex-direction: column;
     align-items: flex-start;
   }
