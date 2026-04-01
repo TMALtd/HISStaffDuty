@@ -34,6 +34,35 @@ function createEmptyOptions(): FilterOptions {
   };
 }
 
+function getInitial(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "M") {
+    return "Male";
+  }
+  if (normalized === "F") {
+    return "Female";
+  }
+
+  return value;
+}
+
+function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => string) {
+  const counts = new Map<string, number>();
+
+  students.forEach((student) => {
+    const key = getValue(student) || "Unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
 export function StaffDashboard() {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [options, setOptions] = useState<FilterOptions>(createEmptyOptions());
@@ -114,6 +143,13 @@ export function StaffDashboard() {
 
   const selectedCount = Object.values(filters).filter(Boolean).length;
   const classCount = new Set(students.map((student) => student.class_name)).size;
+  const genderBreakdown = buildCounts(students, (student) => getInitial(student.gender));
+  const houseBreakdown = buildCounts(students, (student) => student.academic_house || "Unknown");
+  const yearBreakdown = buildCounts(students, (student) => student.year_code || "Unknown");
+  const classBreakdown = buildCounts(students, (student) => student.class_name);
+  const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
+  const maleCount = students.filter((student) => (student.gender || "").toUpperCase() === "M").length;
+  const averageClassSize = classCount ? (students.length / classCount).toFixed(1) : "0.0";
 
   return (
     <div className="dashboard-grid">
@@ -232,6 +268,86 @@ export function StaffDashboard() {
         <div className="stat-card">
           <p className="stat-label">Classes shown</p>
           <p className="stat-value">{classCount}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-label">Average class size</p>
+          <p className="stat-value">{averageClassSize}</p>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Management information</p>
+            <h2 className="panel-title">Live summary of the current cohort</h2>
+          </div>
+          <p className="hint">These summaries update automatically as you change filters.</p>
+        </div>
+
+        <div className="mi-grid">
+          <article className="mi-card">
+            <h3 className="mi-title">Gender split</h3>
+            <div className="mini-stats">
+              <div>
+                <p className="stat-label">Female</p>
+                <p className="mini-value">{femaleCount}</p>
+              </div>
+              <div>
+                <p className="stat-label">Male</p>
+                <p className="mini-value">{maleCount}</p>
+              </div>
+            </div>
+            <div className="breakdown-list">
+              {genderBreakdown.map((item) => (
+                <div className="breakdown-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="mi-card">
+            <h3 className="mi-title">House distribution</h3>
+            <div className="breakdown-list">
+              {houseBreakdown.map((item) => (
+                <div className="breakdown-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <div className="bar-wrap">
+                    <div
+                      className="bar-fill"
+                      style={{ width: `${students.length ? (item.count / students.length) * 100 : 0}%` }}
+                    />
+                    <strong>{item.count}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="mi-card">
+            <h3 className="mi-title">Year-group distribution</h3>
+            <div className="breakdown-list">
+              {yearBreakdown.map((item) => (
+                <div className="breakdown-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="mi-card">
+            <h3 className="mi-title">Largest classes in view</h3>
+            <div className="breakdown-list">
+              {classBreakdown.slice(0, 8).map((item) => (
+                <div className="breakdown-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
       </section>
 
