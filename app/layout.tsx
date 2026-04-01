@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "HELP International School | Student Filter Portal",
@@ -19,12 +18,9 @@ export default function RootLayout({
           <header className="site-header">
             <div className="site-header-inner">
               <div className="brand-lockup">
-                <Image
+                <img
                   src="/help-international-school-logo.png"
                   alt="HELP International School logo"
-                  width={300}
-                  height={74}
-                  priority
                   className="brand-logo"
                 />
                 <div className="brand-copy">
