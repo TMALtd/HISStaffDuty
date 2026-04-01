@@ -38,6 +38,37 @@ export type StudentRow = {
   academic_house: string | null;
 };
 
+export type GradebookSubject = {
+  id: string;
+  name: string;
+  slug: string;
+  class_name: string | null;
+  is_core: boolean;
+};
+
+export type GradebookFieldDefinition = {
+  id: string;
+  subject_id: string;
+  field_key: string;
+  field_label: string;
+  field_type: "text" | "number" | "date" | "long_text";
+  sort_order: number;
+  is_required: boolean;
+};
+
+export type GradebookEntry = {
+  id: string;
+  student_school_id: string;
+  class_name: string;
+  subject_id: string;
+  assessment_name: string;
+  assessment_date: string;
+  grade: string | null;
+  score: string | null;
+  comment: string | null;
+  field_values: Record<string, string>;
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",
