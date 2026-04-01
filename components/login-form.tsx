@@ -8,16 +8,36 @@ type LoginFormProps = {
 };
 
 export function LoginForm({ message }: LoginFormProps) {
-  const [email, setEmail] = useState("");
   const [status, setStatus] = useState(message ?? "");
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingGoogle, setIsSubmittingGoogle] = useState(false);
+  const [isSubmittingMagicLink, setIsSubmittingMagicLink] = useState(false);
+  const [email, setEmail] = useState("");
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleGoogleSignIn() {
+    setError("");
+    setStatus("");
+    setIsSubmittingGoogle(true);
+
+    const supabase = createSupabaseBrowserClient();
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`
+      }
+    });
+
+    if (authError) {
+      setError(authError.message);
+      setIsSubmittingGoogle(false);
+    }
+  }
+
+  async function handleMagicLinkSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setStatus("");
-    setIsSubmitting(true);
+    setIsSubmittingMagicLink(true);
 
     const supabase = createSupabaseBrowserClient();
     const { error: authError } = await supabase.auth.signInWithOtp({
@@ -29,36 +49,56 @@ export function LoginForm({ message }: LoginFormProps) {
 
     if (authError) {
       setError(authError.message);
-      setIsSubmitting(false);
+      setIsSubmittingMagicLink(false);
       return;
     }
 
     setStatus("Magic link sent. Check your email to continue.");
     setEmail("");
-    setIsSubmitting(false);
+    setIsSubmittingMagicLink(false);
   }
 
   return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <div className="field">
-        <label htmlFor="email">Staff Email</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="name@school.edu"
-          required
-        />
-      </div>
-      <div className="actions">
-        <button className="button" disabled={isSubmitting} type="submit">
-          {isSubmitting ? "Sending..." : "Send Magic Link"}
+    <div className="panel">
+      <div className="actions" style={{ marginTop: 0 }}>
+        <button
+          className="button"
+          disabled={isSubmittingGoogle}
+          type="button"
+          onClick={handleGoogleSignIn}
+        >
+          {isSubmittingGoogle ? "Redirecting..." : "Sign In With Google"}
         </button>
+      </div>
+      <p className="hint">Use your staff Google account for the smoothest sign-in flow.</p>
+      <form onSubmit={handleMagicLinkSubmit}>
+        <div className="field">
+          <label htmlFor="email">Staff Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="name@school.edu"
+            required
+          />
+        </div>
+        <div className="actions">
+          <button className="button secondary" disabled={isSubmittingMagicLink} type="submit">
+            {isSubmittingMagicLink ? "Sending..." : "Send Magic Link Instead"}
+          </button>
+        </div>
+      </form>
+      <div className="field">
+        <label>Important Supabase setup</label>
+        <div className="hint">
+          In Supabase Auth, set the Site URL to your Render domain and add
+          `https://hisstaffduty.onrender.com/auth/callback` to the redirect URLs.
+        </div>
       </div>
       {status ? <div className="banner">{status}</div> : null}
       {error ? <div className="banner error-banner">{error}</div> : null}
-    </form>
+    </div>
   );
 }
