@@ -76,6 +76,7 @@ const PASTORAL_FIELD_ORDER = [
 export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [assessmentName, setAssessmentName] = useState("");
   const [assessmentDate, setAssessmentDate] = useState("");
   const [assessments, setAssessments] = useState<
@@ -93,6 +94,13 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     [selectedSubjectId, subjects]
   );
   const isPastoralPage = selectedSubject?.slug === "student-pastoral";
+  const filteredStudents = useMemo(
+    () =>
+      selectedStudentId
+        ? students.filter((student) => student.school_id === selectedStudentId)
+        : students,
+    [selectedStudentId, students]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -241,6 +249,9 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         });
 
         setStudents(json.students);
+        if (selectedStudentId && !json.students.some((student) => student.school_id === selectedStudentId)) {
+          setSelectedStudentId("");
+        }
         const orderedFields =
           json.subject?.slug === "student-pastoral"
             ? json.fields
@@ -277,7 +288,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     return () => {
       isMounted = false;
     };
-  }, [assessmentDate, assessmentName, initialFilters, selectedSubjectId]);
+  }, [assessmentDate, assessmentName, initialFilters, selectedStudentId, selectedSubjectId]);
 
   function handleAssessmentSelection(value: string) {
     if (!value) {
@@ -396,7 +407,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
   function renderPastoralCards() {
     return (
       <div className="pastoral-grid">
-        {students.map((student) => {
+        {filteredStudents.map((student) => {
           const draft = drafts[student.school_id] ?? makeEmptyDraft();
 
           return (
@@ -522,14 +533,47 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
             </select>
           </div>
           {isPastoralPage ? (
-            <div className="field">
-              <label>Pastoral page</label>
-              <div className="hint">
-                This is an information page. Assessment name and date are not required.
+            <>
+              <div className="field">
+                <label htmlFor="studentFilter">Student filter</label>
+                <select
+                  id="studentFilter"
+                  value={selectedStudentId}
+                  onChange={(event) => setSelectedStudentId(event.target.value)}
+                >
+                  <option value="">Whole class</option>
+                  {students.map((student) => (
+                    <option key={student.school_id} value={student.school_id}>
+                      {student.full_name}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
+              <div className="field">
+                <label>Pastoral page</label>
+                <div className="hint">
+                  This is an information page. Select `Whole class` or focus on one student, then
+                  edit any field and press `Save`.
+                </div>
+              </div>
+            </>
           ) : (
             <>
+              <div className="field">
+                <label htmlFor="studentFilter">Student filter</label>
+                <select
+                  id="studentFilter"
+                  value={selectedStudentId}
+                  onChange={(event) => setSelectedStudentId(event.target.value)}
+                >
+                  <option value="">Whole class</option>
+                  {students.map((student) => (
+                    <option key={student.school_id} value={student.school_id}>
+                      {student.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="field">
                 <label htmlFor="existingAssessment">Existing assessment</label>
                 <select
@@ -573,7 +617,14 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         </div>
         <div className="actions">
           <span className="hint">
-            Active class filter: {initialFilters.className || "All classes"}{selectedSubject ? ` | Subject: ${selectedSubject.name}` : ""}
+            Active class filter: {initialFilters.className || "All classes"}
+            {selectedSubject ? ` | Subject: ${selectedSubject.name}` : ""}
+            {selectedStudentId
+              ? ` | Student: ${
+                  students.find((student) => student.school_id === selectedStudentId)?.full_name ??
+                  "Selected"
+                }`
+              : " | Student: Whole class"}
           </span>
         </div>
         {status ? <div className="banner">{status}</div> : null}
@@ -593,7 +644,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
           </div>
         ) : (
           <div className="table-wrap">
-          <table>
+            <table>
             <thead>
               <tr>
                 <th>{isPastoralPage ? "Full Name" : "Name"}</th>
@@ -619,7 +670,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
               </tr>
             </thead>
             <tbody>
-              {students.map((student) => {
+              {filteredStudents.map((student) => {
                 const draft = drafts[student.school_id] ?? makeEmptyDraft();
 
                 return (
