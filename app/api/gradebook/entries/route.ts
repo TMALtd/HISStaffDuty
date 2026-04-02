@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   deleteGradebookEntry,
+  getGradebookSubjectById,
   getGradebookEntries,
   getGradebookFieldDefinitions,
   getStudents,
@@ -26,16 +27,19 @@ export async function GET(request: Request) {
 
   try {
     const filters = toQueryFilters(url.searchParams);
+    const subject = await getGradebookSubjectById(subjectId);
+    const infoOnly = subject?.slug === "student-pastoral";
     const students = await getStudents(filters);
     const fields = await getGradebookFieldDefinitions(subjectId);
     const entries = await getGradebookEntries({
       subjectId,
       studentIds: students.map((student) => student.school_id),
       assessmentName,
-      assessmentDate
+      assessmentDate,
+      infoOnly
     });
 
-    return NextResponse.json({ students, fields, entries });
+    return NextResponse.json({ students, fields, entries, subject });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load gradebook entries." },
