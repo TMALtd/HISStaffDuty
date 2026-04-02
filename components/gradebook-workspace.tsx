@@ -18,6 +18,7 @@ type EntriesResponse = {
   students: StudentRow[];
   fields: GradebookFieldDefinition[];
   entries: GradebookEntry[];
+  subject: GradebookSubject | null;
 };
 
 type SubjectsResponse = {
@@ -36,6 +37,8 @@ type DraftRow = {
   score: string;
   comment: string;
   fieldValues: Record<string, string>;
+  assessmentName: string;
+  assessmentDate: string;
 };
 
 function buildQueryString(filters: FilterState) {
@@ -53,9 +56,22 @@ function makeEmptyDraft(): DraftRow {
     grade: "",
     score: "",
     comment: "",
-    fieldValues: {}
+    fieldValues: {},
+    assessmentName: "",
+    assessmentDate: ""
   };
 }
+
+const PASTORAL_FIELD_ORDER = [
+  "student_gender",
+  "behaviour_concerns",
+  "social_emotional_concerns",
+  "attitude_towards_learning",
+  "confidential_parent_issues",
+  "personal_character",
+  "certificates_given",
+  "supporting_notes"
+] as const;
 
 export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
@@ -68,9 +84,15 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [fields, setFields] = useState<GradebookFieldDefinition[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({});
+  const [subjectMeta, setSubjectMeta] = useState<GradebookSubject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const selectedSubject = useMemo(
+    () => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
+    [selectedSubjectId, subjects]
+  );
+  const isPastoralPage = selectedSubject?.slug === "student-pastoral";
 
   useEffect(() => {
     let isMounted = true;
@@ -116,7 +138,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     let isMounted = true;
 
     async function loadAssessments() {
-      if (!selectedSubjectId) {
+      if (!selectedSubjectId || isPastoralPage) {
         setAssessments([]);
         return;
       }
@@ -163,7 +185,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     return () => {
       isMounted = false;
     };
-  }, [assessmentDate, assessmentName, initialFilters.className, selectedSubjectId]);
+  }, [assessmentDate, assessmentName, initialFilters.className, isPastoralPage, selectedSubjectId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -201,6 +223,8 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
           return;
         }
 
+        setSubjectMeta(json.subject);
+
         const nextDrafts: Record<string, DraftRow> = {};
         json.students.forEach((student) => {
           const existing = json.entries.find((entry) => entry.student_school_id === student.school_id);
@@ -209,13 +233,33 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
                 grade: existing.grade ?? "",
                 score: existing.score ?? "",
                 comment: existing.comment ?? "",
-                fieldValues: existing.field_values ?? {}
+                fieldValues: existing.field_values ?? {},
+                assessmentName: existing.assessment_name ?? "",
+                assessmentDate: existing.assessment_date ?? ""
               }
             : makeEmptyDraft();
         });
 
         setStudents(json.students);
-        setFields(json.fields);
+        const orderedFields =
+          json.subject?.slug === "student-pastoral"
+            ? json.fields
+                .filter((field) =>
+                  PASTORAL_FIELD_ORDER.includes(
+                    field.field_key as (typeof PASTORAL_FIELD_ORDER)[number]
+                  )
+                )
+                .sort(
+                  (left, right) =>
+                    PASTORAL_FIELD_ORDER.indexOf(
+                      left.field_key as (typeof PASTORAL_FIELD_ORDER)[number]
+                    ) -
+                    PASTORAL_FIELD_ORDER.indexOf(
+                      right.field_key as (typeof PASTORAL_FIELD_ORDER)[number]
+                    )
+                )
+            : json.fields;
+        setFields(orderedFields);
         setDrafts(nextDrafts);
       } catch (loadError) {
         if (isMounted) {
@@ -234,11 +278,6 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
       isMounted = false;
     };
   }, [assessmentDate, assessmentName, initialFilters, selectedSubjectId]);
-
-  const selectedSubject = useMemo(
-    () => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
-    [selectedSubjectId, subjects]
-  );
 
   function handleAssessmentSelection(value: string) {
     if (!value) {
@@ -276,12 +315,18 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
   }
 
   async function saveEntry(student: StudentRow) {
-    if (!selectedSubjectId || !assessmentName || !assessmentDate) {
+    if (!selectedSubjectId || (!isPastoralPage && (!assessmentName || !assessmentDate))) {
       setError("Select a subject and complete the assessment name and date before saving.");
       return;
     }
 
     const draft = drafts[student.school_id] ?? makeEmptyDraft();
+    const effectiveAssessmentName = isPastoralPage
+      ? draft.assessmentName || "Student Pastoral Profile"
+      : assessmentName;
+    const effectiveAssessmentDate = isPastoralPage
+      ? draft.assessmentDate || "2000-01-01"
+      : assessmentDate;
     const response = await fetch("/api/gradebook/entries", {
       method: "POST",
       headers: {
@@ -291,8 +336,8 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         studentSchoolId: student.school_id,
         className: student.class_name,
         subjectId: selectedSubjectId,
-        assessmentName,
-        assessmentDate,
+        assessmentName: effectiveAssessmentName,
+        assessmentDate: effectiveAssessmentDate,
         grade: draft.grade,
         score: draft.score,
         comment: draft.comment,
@@ -311,11 +356,12 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
   }
 
   async function deleteEntry(student: StudentRow) {
-    if (!selectedSubjectId || !assessmentName || !assessmentDate) {
+    if (!selectedSubjectId || (!isPastoralPage && (!assessmentName || !assessmentDate))) {
       setError("Select a subject and complete the assessment name and date before deleting.");
       return;
     }
 
+    const draft = drafts[student.school_id] ?? makeEmptyDraft();
     const response = await fetch("/api/gradebook/entries", {
       method: "DELETE",
       headers: {
@@ -324,8 +370,12 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
       body: JSON.stringify({
         studentSchoolId: student.school_id,
         subjectId: selectedSubjectId,
-        assessmentName,
-        assessmentDate
+        assessmentName: isPastoralPage
+          ? draft.assessmentName || "Student Pastoral Profile"
+          : assessmentName,
+        assessmentDate: isPastoralPage
+          ? draft.assessmentDate || "2000-01-01"
+          : assessmentDate
       })
     });
 
@@ -385,44 +435,55 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
               ))}
             </select>
           </div>
-          <div className="field">
-            <label htmlFor="existingAssessment">Existing assessment</label>
-            <select
-              id="existingAssessment"
-              value={
-                assessmentName && assessmentDate ? `${assessmentName}||${assessmentDate}` : ""
-              }
-              onChange={(event) => handleAssessmentSelection(event.target.value)}
-            >
-              <option value="">New or custom assessment</option>
-              {assessments.map((assessment) => (
-                <option
-                  key={`${assessment.assessment_name}-${assessment.assessment_date}`}
-                  value={`${assessment.assessment_name}||${assessment.assessment_date}`}
+          {isPastoralPage ? (
+            <div className="field">
+              <label>Pastoral page</label>
+              <div className="hint">
+                This is an information page. Assessment name and date are not required.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="field">
+                <label htmlFor="existingAssessment">Existing assessment</label>
+                <select
+                  id="existingAssessment"
+                  value={
+                    assessmentName && assessmentDate ? `${assessmentName}||${assessmentDate}` : ""
+                  }
+                  onChange={(event) => handleAssessmentSelection(event.target.value)}
                 >
-                  {assessment.assessment_name} | {assessment.assessment_date}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="assessmentName">Assessment name</label>
-            <input
-              id="assessmentName"
-              value={assessmentName}
-              onChange={(event) => setAssessmentName(event.target.value)}
-              placeholder="e.g. Term 3 Reading Checkpoint"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="assessmentDate">Assessment date</label>
-            <input
-              id="assessmentDate"
-              type="date"
-              value={assessmentDate}
-              onChange={(event) => setAssessmentDate(event.target.value)}
-            />
-          </div>
+                  <option value="">New or custom assessment</option>
+                  {assessments.map((assessment) => (
+                    <option
+                      key={`${assessment.assessment_name}-${assessment.assessment_date}`}
+                      value={`${assessment.assessment_name}||${assessment.assessment_date}`}
+                    >
+                      {assessment.assessment_name} | {assessment.assessment_date}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="assessmentName">Assessment name</label>
+                <input
+                  id="assessmentName"
+                  value={assessmentName}
+                  onChange={(event) => setAssessmentName(event.target.value)}
+                  placeholder="e.g. Term 3 Reading Checkpoint"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="assessmentDate">Assessment date</label>
+                <input
+                  id="assessmentDate"
+                  type="date"
+                  value={assessmentDate}
+                  onChange={(event) => setAssessmentDate(event.target.value)}
+                />
+              </div>
+            </>
+          )}
         </div>
         <div className="actions">
           <span className="hint">
@@ -438,12 +499,22 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Assessment Name</th>
-                <th>Assessment Date</th>
-                <th>Grade</th>
-                <th>Score</th>
-                <th>Comment</th>
+                <th>{isPastoralPage ? "Full Name" : "Name"}</th>
+                {isPastoralPage ? (
+                  <>
+                    <th>Surname</th>
+                    <th>First Name</th>
+                    <th>Known As</th>
+                  </>
+                ) : (
+                  <>
+                    <th>Assessment Name</th>
+                    <th>Assessment Date</th>
+                    <th>Grade</th>
+                    <th>Score</th>
+                    <th>Comment</th>
+                  </>
+                )}
                 {fields.map((field) => (
                   <th key={field.id}>{field.field_label}</th>
                 ))}
@@ -457,29 +528,45 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
                 return (
                   <tr key={student.school_id}>
                     <td>{student.full_name}</td>
-                    <td>{assessmentName || "Set above"}</td>
-                    <td>{assessmentDate || "Set above"}</td>
-                    <td>
-                      <input
-                        className="cell-input"
-                        value={draft.grade}
-                        onChange={(event) => updateDraft(student.school_id, "grade", event.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="cell-input"
-                        value={draft.score}
-                        onChange={(event) => updateDraft(student.school_id, "score", event.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <textarea
-                        className="cell-textarea"
-                        value={draft.comment}
-                        onChange={(event) => updateDraft(student.school_id, "comment", event.target.value)}
-                      />
-                    </td>
+                    {isPastoralPage ? (
+                      <>
+                        <td>{student.surname || "—"}</td>
+                        <td>{student.first_name || "—"}</td>
+                        <td>{student.preferred_name || "—"}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td>{assessmentName || "Set above"}</td>
+                        <td>{assessmentDate || "Set above"}</td>
+                        <td>
+                          <input
+                            className="cell-input"
+                            value={draft.grade}
+                            onChange={(event) =>
+                              updateDraft(student.school_id, "grade", event.target.value)
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="cell-input"
+                            value={draft.score}
+                            onChange={(event) =>
+                              updateDraft(student.school_id, "score", event.target.value)
+                            }
+                          />
+                        </td>
+                        <td>
+                          <textarea
+                            className="cell-textarea"
+                            value={draft.comment}
+                            onChange={(event) =>
+                              updateDraft(student.school_id, "comment", event.target.value)
+                            }
+                          />
+                        </td>
+                      </>
+                    )}
                     {fields.map((field) => (
                       <td key={field.id}>
                         {field.field_type === "long_text" ? (
