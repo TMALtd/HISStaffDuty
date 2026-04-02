@@ -393,6 +393,92 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     setError("");
   }
 
+  function renderPastoralCards() {
+    return (
+      <div className="pastoral-grid">
+        {students.map((student) => {
+          const draft = drafts[student.school_id] ?? makeEmptyDraft();
+
+          return (
+            <article className="pastoral-card" key={student.school_id}>
+              <div className="pastoral-card-header">
+                <div>
+                  <p className="pastoral-name">{student.full_name}</p>
+                  <p className="pastoral-subtitle">
+                    {student.class_name} | {student.school_id}
+                  </p>
+                </div>
+                <div className="table-actions">
+                  <button className="button" type="button" onClick={() => void saveEntry(student)}>
+                    Save
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => void deleteEntry(student)}
+                  >
+                    Erase
+                  </button>
+                </div>
+              </div>
+
+              <div className="identity-grid">
+                <div className="identity-chip">
+                  <span>Full Name</span>
+                  <strong>{student.full_name}</strong>
+                </div>
+                <div className="identity-chip">
+                  <span>Surname</span>
+                  <strong>{student.surname || "—"}</strong>
+                </div>
+                <div className="identity-chip">
+                  <span>First Name</span>
+                  <strong>{student.first_name || "—"}</strong>
+                </div>
+                <div className="identity-chip">
+                  <span>Known As</span>
+                  <strong>{student.preferred_name || "—"}</strong>
+                </div>
+              </div>
+
+              <div className="pastoral-fields-grid">
+                {fields.map((field) => (
+                  <label className="pastoral-field" key={field.id}>
+                    <span>{field.field_label}</span>
+                    {field.field_type === "long_text" ? (
+                      <textarea
+                        className="cell-textarea"
+                        value={draft.fieldValues[field.field_key] ?? ""}
+                        onChange={(event) =>
+                          updateCustomField(student.school_id, field.field_key, event.target.value)
+                        }
+                      />
+                    ) : (
+                      <input
+                        className="cell-input"
+                        type={
+                          field.field_type === "number"
+                            ? "number"
+                            : field.field_type === "date"
+                              ? "date"
+                              : "text"
+                        }
+                        value={draft.fieldValues[field.field_key] ?? ""}
+                        onChange={(event) =>
+                          updateCustomField(student.school_id, field.field_key, event.target.value)
+                        }
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -495,7 +581,18 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
       </section>
 
       <section className="table-shell">
-        <div className="table-wrap">
+        {isPastoralPage ? (
+          <div className="pastoral-shell">
+            {renderPastoralCards()}
+            {!students.length && !isLoading ? (
+              <div className="empty-state">
+                No students match the current filters. Choose a different class or return to the
+                filter page first.
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -614,7 +711,8 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
               filter page first.
             </div>
           ) : null}
-        </div>
+          </div>
+        )}
       </section>
     </div>
   );
