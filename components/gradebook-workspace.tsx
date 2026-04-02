@@ -24,6 +24,13 @@ type SubjectsResponse = {
   subjects: GradebookSubject[];
 };
 
+type AssessmentsResponse = {
+  assessments: Array<{
+    assessment_name: string;
+    assessment_date: string;
+  }>;
+};
+
 type DraftRow = {
   grade: string;
   score: string;
@@ -55,6 +62,9 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [assessmentName, setAssessmentName] = useState("");
   const [assessmentDate, setAssessmentDate] = useState("");
+  const [assessments, setAssessments] = useState<
+    Array<{ assessment_name: string; assessment_date: string }>
+  >([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [fields, setFields] = useState<GradebookFieldDefinition[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({});
@@ -101,6 +111,59 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
       isMounted = false;
     };
   }, [initialFilters.className, selectedSubjectId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAssessments() {
+      if (!selectedSubjectId) {
+        setAssessments([]);
+        return;
+      }
+
+      const params = new URLSearchParams({ subjectId: selectedSubjectId });
+      if (initialFilters.className) {
+        params.set("className", initialFilters.className);
+      }
+
+      const response = await fetch(`/api/gradebook/assessments?${params.toString()}`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not load assessments.");
+      }
+
+      const json = (await response.json()) as AssessmentsResponse;
+
+      if (!isMounted) {
+        return;
+      }
+
+      setAssessments(json.assessments);
+
+      const hasCurrentMatch = json.assessments.some(
+        (assessment) =>
+          assessment.assessment_name === assessmentName &&
+          assessment.assessment_date === assessmentDate
+      );
+
+      if ((!assessmentName && !assessmentDate && json.assessments[0]) || (!hasCurrentMatch && json.assessments[0])) {
+        setAssessmentName(json.assessments[0].assessment_name);
+        setAssessmentDate(json.assessments[0].assessment_date);
+      }
+    }
+
+    void loadAssessments().catch((loadError) => {
+      if (isMounted) {
+        setError(loadError instanceof Error ? loadError.message : "Could not load assessments.");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [assessmentDate, assessmentName, initialFilters.className, selectedSubjectId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -176,6 +239,18 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     () => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
     [selectedSubjectId, subjects]
   );
+
+  function handleAssessmentSelection(value: string) {
+    if (!value) {
+      setAssessmentName("");
+      setAssessmentDate("");
+      return;
+    }
+
+    const [name, date] = value.split("||");
+    setAssessmentName(name ?? "");
+    setAssessmentDate(date ?? "");
+  }
 
   function updateDraft(studentId: string, field: keyof DraftRow, value: string) {
     setDrafts((current) => ({
@@ -306,6 +381,26 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
                 <option key={subject.id} value={subject.id}>
                   {subject.name}
                   {subject.class_name ? ` (${subject.class_name})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="existingAssessment">Existing assessment</label>
+            <select
+              id="existingAssessment"
+              value={
+                assessmentName && assessmentDate ? `${assessmentName}||${assessmentDate}` : ""
+              }
+              onChange={(event) => handleAssessmentSelection(event.target.value)}
+            >
+              <option value="">New or custom assessment</option>
+              {assessments.map((assessment) => (
+                <option
+                  key={`${assessment.assessment_name}-${assessment.assessment_date}`}
+                  value={`${assessment.assessment_name}||${assessment.assessment_date}`}
+                >
+                  {assessment.assessment_name} | {assessment.assessment_date}
                 </option>
               ))}
             </select>
