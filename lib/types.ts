@@ -30,6 +30,8 @@ export type StudentRow = {
   level: string;
   school_id: string;
   full_name: string;
+  surname: string | null;
+  first_name: string | null;
   preferred_name: string | null;
   gender: string | null;
   form: string;
