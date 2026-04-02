@@ -159,7 +159,19 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
     throw new Error(error.message);
   }
 
-  return (data ?? []) as StudentRow[];
+  return ((data ?? []) as StudentRow[]).map((student) => ({
+    ...student,
+    school_id: String(student.school_id),
+    full_name: student.full_name ?? "",
+    surname: student.surname ?? null,
+    first_name: student.first_name ?? null,
+    preferred_name: student.preferred_name ?? null,
+    gender: student.gender ?? null,
+    form: student.form ?? "",
+    year_code: student.year_code ?? null,
+    tutor: student.tutor ?? null,
+    academic_house: student.academic_house ?? null
+  }));
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
