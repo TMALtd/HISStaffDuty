@@ -129,7 +129,7 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
   let query = supabase
     .from(VIEW_NAME)
     .select(
-      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,preferred_name,gender,form,year_code,tutor,academic_house"
+      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
     )
     .order("class_name")
     .order("full_name");
@@ -160,6 +160,21 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
   }
 
   return (data ?? []) as StudentRow[];
+}
+
+export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(SUBJECTS_TABLE)
+    .select("id,name,slug,class_name,is_core")
+    .eq("id", subjectId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as GradebookSubject | null) ?? null;
 }
 
 export async function getGradebookSubjects(className?: string): Promise<GradebookSubject[]> {
@@ -215,30 +230,56 @@ export async function getGradebookEntries(params: {
   studentIds: string[];
   assessmentName: string;
   assessmentDate: string;
+  infoOnly?: boolean;
 }): Promise<GradebookEntry[]> {
-  if (!params.assessmentName || !params.assessmentDate || !params.studentIds.length) {
+  if (!params.studentIds.length) {
     return [];
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from(ENTRIES_TABLE)
     .select(
       "id,student_school_id,class_name,subject_id,assessment_name,assessment_date,grade,score,comment,field_values"
     )
     .eq("subject_id", params.subjectId)
-    .eq("assessment_name", params.assessmentName)
-    .eq("assessment_date", params.assessmentDate)
     .in("student_school_id", params.studentIds);
+
+  if (params.infoOnly) {
+    query = query.order("assessment_date", { ascending: false }).order("updated_at", { ascending: false });
+  } else {
+    if (!params.assessmentName || !params.assessmentDate) {
+      return [];
+    }
+
+    query = query
+      .eq("assessment_name", params.assessmentName)
+      .eq("assessment_date", params.assessmentDate);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as GradebookEntry[]).map((entry) => ({
+  const entries = ((data ?? []) as GradebookEntry[]).map((entry) => ({
     ...entry,
     field_values: entry.field_values ?? {}
   }));
+
+  if (!params.infoOnly) {
+    return entries;
+  }
+
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    if (seen.has(entry.student_school_id)) {
+      return false;
+    }
+    seen.add(entry.student_school_id);
+    return true;
+  });
 }
 
 export async function getGradebookAssessments(params: {
