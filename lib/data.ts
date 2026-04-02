@@ -175,8 +175,20 @@ export async function getGradebookSubjects(className?: string): Promise<Gradeboo
   }
 
   const subjects = (data ?? []) as GradebookSubject[];
-  return subjects.filter((subject) =>
+  const filtered = subjects.filter((subject) =>
     className ? !subject.class_name || subject.class_name === className : !subject.class_name
+  );
+
+  if (!className) {
+    return filtered;
+  }
+
+  const classSpecificSlugs = new Set(
+    filtered.filter((subject) => subject.class_name === className).map((subject) => subject.slug)
+  );
+
+  return filtered.filter(
+    (subject) => subject.class_name === className || !classSpecificSlugs.has(subject.slug)
   );
 }
 
@@ -227,6 +239,41 @@ export async function getGradebookEntries(params: {
     ...entry,
     field_values: entry.field_values ?? {}
   }));
+}
+
+export async function getGradebookAssessments(params: {
+  subjectId: string;
+  className?: string;
+}): Promise<Array<{ assessment_name: string; assessment_date: string }>> {
+  const supabase = createSupabaseAdminClient();
+  let query = supabase
+    .from(ENTRIES_TABLE)
+    .select("assessment_name,assessment_date")
+    .eq("subject_id", params.subjectId)
+    .order("assessment_date", { ascending: false })
+    .order("assessment_name");
+
+  if (params.className) {
+    query = query.eq("class_name", params.className);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const seen = new Set<string>();
+  return ((data ?? []) as Array<{ assessment_name: string; assessment_date: string }>).filter(
+    (item) => {
+      const key = `${item.assessment_name}|${item.assessment_date}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    }
+  );
 }
 
 export async function createGradebookSubject(input: {
