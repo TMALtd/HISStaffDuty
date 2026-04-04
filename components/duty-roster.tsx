@@ -2,53 +2,88 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { DutyRosterRecord } from "@/lib/types";
+import type { DutyRosterAssignment, DutyRosterGroup } from "@/lib/types";
 
 type DutyRosterProps = {
-  duties: DutyRosterRecord[];
+  groups: DutyRosterGroup[];
 };
 
-function weekdaySortValue(label: string) {
-  const order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const first = label.split(",")[0]?.trim() ?? label;
-  const index = order.indexOf(first);
-  return index === -1 ? 99 : index;
+const WEEKDAYS = [
+  { key: "monday", label: "Mon" },
+  { key: "tuesday", label: "Tue" },
+  { key: "wednesday", label: "Wed" },
+  { key: "thursday", label: "Thu" },
+  { key: "friday", label: "Fri" }
+] as const;
+
+function badgeClassForColor(color: string | null | undefined) {
+  if (!color) {
+    return "";
+  }
+
+  const normalized = color.toLowerCase();
+  if (normalized === "red") {
+    return " duty-lead";
+  }
+  if (normalized === "black") {
+    return " duty-dark";
+  }
+  return "";
 }
 
-export function DutyRoster({ duties }: DutyRosterProps) {
+function assignmentForDay(assignments: DutyRosterAssignment[], dayKey: string) {
+  return assignments.find((assignment) => assignment.dayOfWeek?.toLowerCase() === dayKey) ?? null;
+}
+
+export function DutyRoster({ groups }: DutyRosterProps) {
   const [dayFilter, setDayFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "assigned" | "unassigned">("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const dayOptions = useMemo(
-    () =>
-      Array.from(new Set(duties.map((duty) => duty.dayLabel))).sort(
-        (left, right) => weekdaySortValue(left) - weekdaySortValue(right) || left.localeCompare(right)
-      ),
-    [duties]
-  );
-
-  const filteredDuties = useMemo(() => {
+  const filteredGroups = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    return duties.filter((duty) => {
-      const matchesDay = !dayFilter || duty.dayLabel === dayFilter;
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "assigned" && duty.isAssigned) ||
-        (statusFilter === "unassigned" && !duty.isAssigned);
-      const matchesSearch =
-        !search ||
-        [duty.name, duty.location, duty.assignedStaffName, duty.assignedStaffDepartment]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(search));
+    return groups
+      .map((group) => {
+        const subGroups = group.subGroups.filter((subGroup) => {
+          const visibleAssignments = subGroup.assignments.filter((assignment) => {
+            const matchesDay = !dayFilter || assignment.dayOfWeek?.toLowerCase() === dayFilter;
+            const matchesStatus =
+              statusFilter === "all" ||
+              (statusFilter === "assigned" && assignment.isAssigned) ||
+              (statusFilter === "unassigned" && !assignment.isAssigned);
+            const matchesSearch =
+              !search ||
+              [
+                group.name,
+                subGroup.name,
+                subGroup.location,
+                assignment.assignedStaffName,
+                assignment.assignedStaffDepartment
+              ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search));
 
-      return matchesDay && matchesStatus && matchesSearch;
-    });
-  }, [dayFilter, duties, searchTerm, statusFilter]);
+            return matchesDay && matchesStatus && matchesSearch;
+          });
 
-  const assignedCount = filteredDuties.filter((duty) => duty.isAssigned).length;
-  const unassignedCount = filteredDuties.length - assignedCount;
+          return visibleAssignments.length > 0;
+        });
+
+        return { ...group, subGroups };
+      })
+      .filter((group) => group.subGroups.length > 0);
+  }, [dayFilter, groups, searchTerm, statusFilter]);
+
+  const visibleAssignments = filteredGroups.flatMap((group) =>
+    group.subGroups.flatMap((subGroup) =>
+      subGroup.assignments.filter((assignment) => !dayFilter || assignment.dayOfWeek?.toLowerCase() === dayFilter)
+    )
+  );
+
+  const assignedCount = visibleAssignments.filter((assignment) => assignment.isAssigned).length;
+  const unassignedCount = visibleAssignments.length - assignedCount;
+  const visibleDays = dayFilter ? WEEKDAYS.filter((day) => day.key === dayFilter) : WEEKDAYS;
 
   return (
     <div className="dashboard-grid">
@@ -58,8 +93,9 @@ export function DutyRoster({ duties }: DutyRosterProps) {
           <div>
             <h1 className="hero-title">Duty roster</h1>
             <p className="hero-copy">
-              Review the live duty schedule, scan assigned versus unassigned coverage, and
-              filter quickly by day before we add admin reassignment controls in the next pass.
+              Review the full duty structure by parent group, sub-duty, and daily assignment.
+              Duty Leads and other special roles are highlighted from the live <code>color</code>{" "}
+              field in Supabase.
             </p>
           </div>
           <Link className="button secondary" href="/duties">
@@ -76,7 +112,7 @@ export function DutyRoster({ duties }: DutyRosterProps) {
             <input
               id="rosterSearch"
               type="text"
-              placeholder="Search by duty, location, or staff name..."
+              placeholder="Search by group, duty, location, or staff name..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
@@ -84,10 +120,10 @@ export function DutyRoster({ duties }: DutyRosterProps) {
           <div className="field">
             <label htmlFor="rosterDay">Day</label>
             <select id="rosterDay" value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
-              <option value="">All days</option>
-              {dayOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="">All weekdays</option>
+              {WEEKDAYS.map((day) => (
+                <option key={day.key} value={day.key}>
+                  {day.label}
                 </option>
               ))}
             </select>
@@ -99,7 +135,7 @@ export function DutyRoster({ duties }: DutyRosterProps) {
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as "all" | "assigned" | "unassigned")}
             >
-              <option value="all">All duties</option>
+              <option value="all">All assignments</option>
               <option value="assigned">Assigned only</option>
               <option value="unassigned">Unassigned only</option>
             </select>
@@ -109,8 +145,12 @@ export function DutyRoster({ duties }: DutyRosterProps) {
 
       <section className="stats-row">
         <div className="stat-card">
-          <p className="stat-label">Duty blocks shown</p>
-          <p className="stat-value">{filteredDuties.length}</p>
+          <p className="stat-label">Duty groups shown</p>
+          <p className="stat-value">{filteredGroups.length}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-label">Assignments shown</p>
+          <p className="stat-value">{visibleAssignments.length}</p>
         </div>
         <div className="stat-card">
           <p className="stat-label">Assigned</p>
@@ -120,58 +160,79 @@ export function DutyRoster({ duties }: DutyRosterProps) {
           <p className="stat-label">Unassigned</p>
           <p className="stat-value">{unassignedCount}</p>
         </div>
-        <div className="stat-card">
-          <p className="stat-label">Coverage rate</p>
-          <p className="stat-value">
-            {filteredDuties.length ? Math.round((assignedCount / filteredDuties.length) * 100) : 0}%
-          </p>
-        </div>
       </section>
 
-      <section className="duty-roster-grid">
-        {filteredDuties.map((duty) => (
-          <article className={`duty-roster-card${duty.isAssigned ? "" : " unassigned"}`} key={duty.id}>
-            <div className="duty-card-top">
+      <section className="duty-group-list">
+        {filteredGroups.map((group) => (
+          <article className={`duty-group-card${badgeClassForColor(group.color)}`} key={group.id}>
+            <header className="duty-group-header">
               <div>
-                <p className="duty-card-time">{duty.timeLabel}</p>
-                <h2 className="duty-card-title">{duty.name}</h2>
+                <h2 className="duty-group-title">{group.name}</h2>
+                <p className="duty-group-meta">
+                  {group.timeLabel} | Sort Order: {group.sortOrder ?? 0}
+                </p>
+                <p className="duty-group-days">{group.daysLabel}</p>
               </div>
-              <span className="duty-card-day">{duty.dayLabel}</span>
-            </div>
-            <p className="duty-card-location">{duty.location || "Location to be confirmed"}</p>
+            </header>
 
-            <div className="duty-assignee-block">
-              <p className="eyebrow">Assigned staff</p>
-              {duty.isAssigned ? (
-                <div className="duty-assignee">
-                  <div className="directory-avatar small">
-                    {duty.assignedStaffPhotoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={duty.assignedStaffPhotoUrl}
-                        alt={duty.assignedStaffName ?? "Assigned staff"}
-                        className="directory-avatar-image"
-                      />
-                    ) : (
-                      <span>{duty.assignedStaffName?.[0] ?? "?"}</span>
-                    )}
+            {group.description ? <p className="duty-group-description">{group.description}</p> : null}
+
+            <div className="duty-subgroup-list">
+              {group.subGroups.map((subGroup) => (
+                <section className={`duty-subgroup-card${badgeClassForColor(subGroup.color)}`} key={subGroup.id}>
+                  <div className="duty-subgroup-header">
+                    <div>
+                      <h3 className="duty-subgroup-title">{subGroup.name}</h3>
+                      <p className="duty-subgroup-meta">{subGroup.id}</p>
+                      <p className="duty-subgroup-location">{subGroup.location || "Location to be confirmed"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="duty-assignee-name">{duty.assignedStaffName}</p>
-                    <p className="directory-meta-line">{duty.assignedStaffDepartment ?? "Staff"}</p>
+
+                  <p className="eyebrow">Daily assignments</p>
+                  <div className={`duty-week-grid columns-${visibleDays.length}`}>
+                    {visibleDays.map((day) => {
+                      const assignment = assignmentForDay(subGroup.assignments, day.key);
+                      return (
+                        <div className="duty-day-cell" key={`${subGroup.id}-${day.key}`}>
+                          <p className="duty-day-label">{day.label}</p>
+                          <p className="duty-day-time">{assignment?.timeLabel ?? group.timeLabel}</p>
+                          {assignment ? (
+                            <div className={`duty-assignment-chip${assignment.isAssigned ? "" : " unassigned"}`}>
+                              <div className="directory-avatar xsmall">
+                                {assignment.assignedStaffPhotoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={assignment.assignedStaffPhotoUrl}
+                                    alt={assignment.assignedStaffName ?? "Assigned staff"}
+                                    className="directory-avatar-image"
+                                  />
+                                ) : (
+                                  <span>{assignment.assignedStaffName?.[0] ?? "?"}</span>
+                                )}
+                              </div>
+                              <div>
+                                <p className="duty-assignee-name">
+                                  {assignment.assignedStaffName ?? "Unassigned"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="duty-assignment-chip empty">No day instance</div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-              ) : (
-                <div className="banner error-banner compact-banner">Currently unassigned</div>
-              )}
+                </section>
+              ))}
             </div>
           </article>
         ))}
       </section>
 
-      {!filteredDuties.length ? (
+      {!filteredGroups.length ? (
         <section className="panel">
-          <div className="empty-state">No duties match the current roster filters.</div>
+          <div className="empty-state">No duty groups match the current roster filters.</div>
         </section>
       ) : null}
     </div>
