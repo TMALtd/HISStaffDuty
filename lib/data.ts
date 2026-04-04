@@ -10,6 +10,7 @@ import {
   type FilterField,
   type FilterOptions,
   type FilterState,
+  type StaffDirectoryRecord,
   type StaffProfile,
   type StudentRow
 } from "@/lib/types";
@@ -324,6 +325,56 @@ export async function getDutyDashboardData(email: string): Promise<DutyDashboard
     activeDutyCount: duties.length,
     weekdayLabel
   };
+}
+
+export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
+  const supabase = createSupabaseAdminClient();
+
+  const [{ data: staffData, error: staffError }, { data: dutyData, error: dutyError }] =
+    await Promise.all([
+      supabase
+        .from(STAFF_TABLE)
+        .select(
+          "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
+        )
+        .order("name"),
+      supabase
+        .from(DUTIES_TABLE)
+        .select(
+          "id,name,duty_name,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category"
+        )
+        .eq("is_active", true)
+        .order("start_time")
+    ]);
+
+  if (staffError) {
+    throw new Error(staffError.message);
+  }
+
+  if (dutyError) {
+    throw new Error(dutyError.message);
+  }
+
+  const duties = ((dutyData ?? []) as Record<string, unknown>[]).map(normalizeDutyRow);
+  const dutiesByStaffId = new Map<string, DutySummary[]>();
+
+  duties.forEach((duty) => {
+    if (!duty.assignedStaffId) {
+      return;
+    }
+
+    const current = dutiesByStaffId.get(duty.assignedStaffId) ?? [];
+    current.push(duty);
+    dutiesByStaffId.set(duty.assignedStaffId, current);
+  });
+
+  return ((staffData ?? []) as Record<string, unknown>[]).map((row) => {
+    const profile = normalizeStaffProfile(row);
+    return {
+      ...profile,
+      assigned_duties: dutiesByStaffId.get(profile.id) ?? []
+    };
+  });
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
