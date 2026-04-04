@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Student Filter" },
   { href: "/gradebook", label: "Gradebook" },
   { href: "/duties", label: "Duty" },
+  { href: "/duties/roster", label: "Duty Roster" },
   { href: "/directory", label: "Directory" },
   { href: "/admin/gradebook", label: "Setup" }
 ];
