@@ -110,6 +110,10 @@ export type DutyDashboardData = {
   weekdayLabel: string;
 };
 
+export type StaffDirectoryRecord = StaffProfile & {
+  assigned_duties: DutySummary[];
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",
