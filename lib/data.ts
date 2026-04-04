@@ -1,5 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
+  type DutyDashboardData,
+  type DutySummary,
   EMPTY_FILTERS,
   FILTER_FIELDS,
   type GradebookEntry,
@@ -8,6 +10,7 @@ import {
   type FilterField,
   type FilterOptions,
   type FilterState,
+  type StaffProfile,
   type StudentRow
 } from "@/lib/types";
 
@@ -25,6 +28,8 @@ const VIEW_NAME = "student_class_roster";
 const SUBJECTS_TABLE = "gradebook_subjects";
 const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
+const STAFF_TABLE = "staff";
+const DUTIES_TABLE = "duties";
 
 function normalizeFilterState(filters: Partial<FilterState>): FilterState {
   return {
@@ -69,6 +74,97 @@ function getClassValue(row: ClassRecord, field: FilterField) {
     case "className":
       return row["Class Name"];
   }
+}
+
+function formatDutyLocation(first?: string | null, second?: string | null) {
+  return [first, second].filter(Boolean).join(" / ");
+}
+
+function formatDayLabel(value?: string | null) {
+  if (!value) {
+    return "Unscheduled";
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed) as string[];
+      return parsed
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+        .join(", ");
+    } catch {
+      // Fall through to the plain-text normalizer below.
+    }
+  }
+
+  return trimmed
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .map((part) => part.replace(/[^a-z]/gi, ""))
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1).toLowerCase())
+    .join(", ");
+}
+
+function weekdayInfo() {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kuala_Lumpur",
+    weekday: "long"
+  });
+  const weekdayLabel = formatter.format(new Date());
+  return {
+    weekdayLabel,
+    weekdayKey: weekdayLabel.toLowerCase()
+  };
+}
+
+function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
+  return {
+    id: String(row.id ?? ""),
+    staff_id: row.staff_id ? String(row.staff_id) : null,
+    name: String(row.name ?? ""),
+    first_name: row.first_name ? String(row.first_name) : null,
+    role: row.role ? String(row.role) : null,
+    email: row.email ? String(row.email) : null,
+    department: row.department ? String(row.department) : null,
+    class: row.class ? String(row.class) : null,
+    extension: row.extension ? String(row.extension) : null,
+    max_duties:
+      typeof row.max_duties === "number"
+        ? row.max_duties
+        : row.max_duties
+          ? Number(row.max_duties)
+          : null,
+    status: row.status ? String(row.status) : null,
+    unavailable_reason: row.unavailable_reason ? String(row.unavailable_reason) : null,
+    timetable: row.timetable ? String(row.timetable) : null,
+    photo_url: row.photo_url ? String(row.photo_url) : null,
+    designation: row.designation ? String(row.designation) : null,
+    system_role: row.system_role ? String(row.system_role) : null
+  };
+}
+
+function normalizeDutyRow(row: Record<string, unknown>): DutySummary {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? row.duty_name ?? "Duty"),
+    location: formatDutyLocation(
+      row.first_location ? String(row.first_location) : null,
+      row.second_location ? String(row.second_location) : null
+    ),
+    dayLabel: formatDayLabel(
+      row.day_of_week ? String(row.day_of_week) : row.days_of_week ? String(row.days_of_week) : null
+    ),
+    timeLabel:
+      row.start_time && row.end_time
+        ? `${String(row.start_time)} - ${String(row.end_time)}`
+        : row.start_time
+          ? String(row.start_time)
+          : "Time TBC",
+    category: row.category ? String(row.category) : null,
+    color: row.color ? String(row.color) : null,
+    assignedStaffId: row.assigned_staff_id ? String(row.assigned_staff_id) : null
+  };
 }
 
 export async function getClassRecords() {
@@ -172,6 +268,62 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
     tutor: student.tutor ?? null,
     academic_house: student.academic_house ?? null
   }));
+}
+
+export async function getStaffProfileByEmail(email: string): Promise<StaffProfile | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .select(
+      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
+    )
+    .ilike("email", normalizedEmail)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? normalizeStaffProfile(data as Record<string, unknown>) : null;
+}
+
+export async function getDutyDashboardData(email: string): Promise<DutyDashboardData> {
+  const staffProfile = await getStaffProfileByEmail(email);
+  const { weekdayKey, weekdayLabel } = weekdayInfo();
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(DUTIES_TABLE)
+    .select(
+      "id,name,duty_name,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category"
+    )
+    .eq("is_active", true)
+    .order("start_time");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const duties = ((data ?? []) as Record<string, unknown>[]).map(normalizeDutyRow);
+  const todaysSnapshot = duties.filter((duty) => duty.dayLabel.toLowerCase().includes(weekdayKey));
+  const myUpcomingDuties = staffProfile
+    ? duties.filter((duty) => duty.assignedStaffId === staffProfile.id)
+    : [];
+  const unassignedCount = todaysSnapshot.filter((duty) => !duty.assignedStaffId).length;
+
+  return {
+    staffProfile,
+    myUpcomingDuties,
+    todaysSnapshot,
+    unassignedCount,
+    activeDutyCount: duties.length,
+    weekdayLabel
+  };
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
