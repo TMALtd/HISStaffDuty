@@ -2,18 +2,23 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { DutyRosterAssignment, DutyRosterGroup } from "@/lib/types";
+import type {
+  DutyRosterAssignment,
+  DutyRosterGroup,
+  DutyRosterViewData
+} from "@/lib/types";
 
 type DutyRosterProps = {
-  groups: DutyRosterGroup[];
+  data: DutyRosterViewData;
 };
 
+const UNASSIGNED_STAFF_ID = "__UNASSIGNED__";
 const WEEKDAYS = [
-  { key: "monday", label: "Mon" },
-  { key: "tuesday", label: "Tue" },
-  { key: "wednesday", label: "Wed" },
-  { key: "thursday", label: "Thu" },
-  { key: "friday", label: "Fri" }
+  { key: "monday", label: "Mon", longLabel: "Monday" },
+  { key: "tuesday", label: "Tue", longLabel: "Tuesday" },
+  { key: "wednesday", label: "Wed", longLabel: "Wednesday" },
+  { key: "thursday", label: "Thu", longLabel: "Thursday" },
+  { key: "friday", label: "Fri", longLabel: "Friday" }
 ] as const;
 
 function badgeClassForColor(color: string | null | undefined) {
@@ -48,71 +53,93 @@ function displayStaffName(assignment: DutyRosterAssignment) {
 }
 
 function missingDutyLabel(dayLabel: string) {
-  switch (dayLabel) {
-    case "Mon":
-      return "No Monday Duty";
-    case "Tue":
-      return "No Tuesday Duty";
-    case "Wed":
-      return "No Wednesday Duty";
-    case "Thu":
-      return "No Thursday Duty";
-    case "Fri":
-      return "No Friday Duty";
-    default:
-      return `No ${dayLabel} Duty`;
-  }
+  return `No ${dayLabel} Duty`;
 }
 
-export function DutyRoster({ groups }: DutyRosterProps) {
-  const [dayFilter, setDayFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "assigned" | "unassigned">("all");
+function assignmentMatchesFilters(params: {
+  assignment: DutyRosterAssignment;
+  selectedStaffMember: string;
+  selectedDepartment: string;
+  staffSearchMatch: boolean;
+  hasMetaSearchMatch: boolean;
+}) {
+  const { assignment, selectedStaffMember, selectedDepartment, staffSearchMatch, hasMetaSearchMatch } =
+    params;
+
+  const matchesStaffMember =
+    !selectedStaffMember ||
+    (selectedStaffMember === UNASSIGNED_STAFF_ID
+      ? !assignment.isAssigned
+      : assignment.assignedStaffId === selectedStaffMember);
+
+  const matchesDepartment =
+    !selectedDepartment || assignment.assignedStaffDepartment === selectedDepartment;
+
+  const matchesSearch = hasMetaSearchMatch || staffSearchMatch;
+
+  return matchesStaffMember && matchesDepartment && matchesSearch;
+}
+
+export function DutyRoster({ data }: DutyRosterProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDutyGroup, setSelectedDutyGroup] = useState("");
+  const [selectedStaffMember, setSelectedStaffMember] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
 
   const filteredGroups = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    return groups
+    return data.groups
+      .filter((group) => !selectedDutyGroup || group.id === selectedDutyGroup)
       .map((group) => {
-        const subGroups = group.subGroups.filter((subGroup) => {
-          const visibleAssignments = subGroup.assignments.filter((assignment) => {
-            const matchesDay = !dayFilter || assignment.dayOfWeek?.toLowerCase() === dayFilter;
-            const matchesStatus =
-              statusFilter === "all" ||
-              (statusFilter === "assigned" && assignment.isAssigned) ||
-              (statusFilter === "unassigned" && !assignment.isAssigned);
-            const matchesSearch =
+        const groupSearchMatch =
+          !search ||
+          [group.name, group.description, group.daysLabel]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(search));
+
+        const subGroups = group.subGroups
+          .map((subGroup) => {
+            const subgroupSearchMatch =
               !search ||
-              [
-                group.name,
-                subGroup.name,
-                subGroup.location,
-                assignment.assignedStaffName,
-                assignment.assignedStaffDepartment
-              ]
+              [subGroup.name, subGroup.location]
                 .filter(Boolean)
                 .some((value) => String(value).toLowerCase().includes(search));
 
-            return matchesDay && matchesStatus && matchesSearch;
-          });
+            const visibleAssignments = subGroup.assignments.filter((assignment) => {
+              const staffSearchMatch =
+                !search ||
+                [assignment.assignedStaffName, assignment.assignedStaffFirstName, assignment.assignedStaffDepartment]
+                  .filter(Boolean)
+                  .some((value) => String(value).toLowerCase().includes(search));
 
-          return visibleAssignments.length > 0;
-        });
+              return assignmentMatchesFilters({
+                assignment,
+                selectedStaffMember,
+                selectedDepartment,
+                staffSearchMatch,
+                hasMetaSearchMatch: groupSearchMatch || subgroupSearchMatch
+              });
+            });
+
+            return {
+              ...subGroup,
+              visibleAssignments
+            };
+          })
+          .filter((subGroup) => subGroup.visibleAssignments.length > 0);
 
         return { ...group, subGroups };
       })
       .filter((group) => group.subGroups.length > 0);
-  }, [dayFilter, groups, searchTerm, statusFilter]);
+  }, [data.groups, searchTerm, selectedDepartment, selectedDutyGroup, selectedStaffMember]);
 
   const visibleAssignments = filteredGroups.flatMap((group) =>
-    group.subGroups.flatMap((subGroup) =>
-      subGroup.assignments.filter((assignment) => !dayFilter || assignment.dayOfWeek?.toLowerCase() === dayFilter)
-    )
+    group.subGroups.flatMap((subGroup) => subGroup.visibleAssignments)
   );
 
   const assignedCount = visibleAssignments.filter((assignment) => assignment.isAssigned).length;
   const unassignedCount = visibleAssignments.length - assignedCount;
-  const visibleDays = dayFilter ? WEEKDAYS.filter((day) => day.key === dayFilter) : WEEKDAYS;
 
   return (
     <div className="dashboard-grid">
@@ -120,12 +147,7 @@ export function DutyRoster({ groups }: DutyRosterProps) {
         <p className="eyebrow">Duty module</p>
         <div className="topbar">
           <div>
-            <h1 className="hero-title">Duty roster</h1>
-            <p className="hero-copy">
-              Review the full duty structure by parent group, sub-duty, and daily assignment.
-              Duty Leads and other special roles are highlighted from the live <code>color</code>{" "}
-              field in Supabase.
-            </p>
+            <h1 className="hero-title">Term 3 2025-2026 Duty Roster - Primary</h1>
           </div>
           <Link className="button secondary" href="/duties">
             Back to Duty Dashboard
@@ -134,39 +156,62 @@ export function DutyRoster({ groups }: DutyRosterProps) {
       </section>
 
       <section className="panel">
-        <h2 className="panel-title">Filter the live roster</h2>
-        <div className="filters-grid directory-filters">
-          <div className="field directory-search">
+        <div className="legacy-filter-bar">
+          <span className="legacy-filter-label">Filters:</span>
+          <div className="field">
             <label htmlFor="rosterSearch">Search</label>
             <input
               id="rosterSearch"
               type="text"
-              placeholder="Search by group, duty, location, or staff name..."
+              placeholder="Search duties or staff..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
           </div>
           <div className="field">
-            <label htmlFor="rosterDay">Day</label>
-            <select id="rosterDay" value={dayFilter} onChange={(event) => setDayFilter(event.target.value)}>
-              <option value="">All weekdays</option>
-              {WEEKDAYS.map((day) => (
-                <option key={day.key} value={day.key}>
-                  {day.label}
+            <label htmlFor="dutyGroupFilter">Duty Group</label>
+            <select
+              id="dutyGroupFilter"
+              value={selectedDutyGroup}
+              onChange={(event) => setSelectedDutyGroup(event.target.value)}
+            >
+              <option value="">All Duty Groups</option>
+              {data.dutyGroupOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
                 </option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label htmlFor="rosterStatus">Status</label>
+            <label htmlFor="staffMemberFilter">Staff Member</label>
             <select
-              id="rosterStatus"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "all" | "assigned" | "unassigned")}
+              id="staffMemberFilter"
+              value={selectedStaffMember}
+              onChange={(event) => setSelectedStaffMember(event.target.value)}
             >
-              <option value="all">All assignments</option>
-              <option value="assigned">Assigned only</option>
-              <option value="unassigned">Unassigned only</option>
+              <option value="">All Staff</option>
+              <option value={UNASSIGNED_STAFF_ID}>UNASSIGNED</option>
+              {data.staffOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="departmentFilter">Department</label>
+            <select
+              id="departmentFilter"
+              value={selectedDepartment}
+              onChange={(event) => setSelectedDepartment(event.target.value)}
+            >
+              <option value="">All Departments</option>
+              {data.departmentOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -218,9 +263,9 @@ export function DutyRoster({ groups }: DutyRosterProps) {
                   </div>
 
                   <p className="eyebrow">Daily assignments</p>
-                  <div className={`duty-week-grid columns-${visibleDays.length}`}>
-                    {visibleDays.map((day) => {
-                      const assignment = assignmentForDay(subGroup.assignments, day.key);
+                  <div className="duty-week-grid columns-5">
+                    {WEEKDAYS.map((day) => {
+                      const assignment = assignmentForDay(subGroup.visibleAssignments, day.key);
                       return (
                         <div className="duty-day-cell" key={`${subGroup.id}-${day.key}`}>
                           <p className="duty-day-label">{day.label}</p>
@@ -236,17 +281,17 @@ export function DutyRoster({ groups }: DutyRosterProps) {
                                     className="directory-avatar-image"
                                   />
                                 ) : (
-                                  <span>{assignment.assignedStaffName?.[0] ?? "?"}</span>
+                                  <span>{assignment.assignedStaffFirstName?.[0] ?? "?"}</span>
                                 )}
                               </div>
                               <div>
-                                <p className="duty-assignee-name">
-                                  {displayStaffName(assignment)}
-                                </p>
+                                <p className="duty-assignee-name">{displayStaffName(assignment)}</p>
                               </div>
                             </div>
                           ) : (
-                            <div className="duty-assignment-chip empty">{missingDutyLabel(day.label)}</div>
+                            <div className="duty-assignment-chip empty">
+                              {missingDutyLabel(day.longLabel)}
+                            </div>
                           )}
                         </div>
                       );
