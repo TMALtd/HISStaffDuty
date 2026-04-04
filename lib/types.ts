@@ -116,6 +116,7 @@ export type StaffDirectoryRecord = StaffProfile & {
 
 export type DutyRosterRecord = DutySummary & {
   assignedStaffName: string | null;
+  assignedStaffFirstName: string | null;
   assignedStaffDepartment: string | null;
   assignedStaffPhotoUrl: string | null;
   isAssigned: boolean;
