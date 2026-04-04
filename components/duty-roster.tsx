@@ -36,6 +36,10 @@ function assignmentForDay(assignments: DutyRosterAssignment[], dayKey: string) {
 }
 
 function displayStaffName(assignment: DutyRosterAssignment) {
+  if (assignment.assignedStaffFirstName) {
+    return assignment.assignedStaffFirstName;
+  }
+
   if (!assignment.assignedStaffName) {
     return "Unassigned";
   }
