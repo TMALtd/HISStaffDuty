@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
   type DutyDashboardData,
+  type DutyRosterRecord,
   type DutySummary,
   EMPTY_FILTERS,
   FILTER_FIELDS,
@@ -168,6 +169,23 @@ function normalizeDutyRow(row: Record<string, unknown>): DutySummary {
   };
 }
 
+async function getActiveDutyRows() {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(DUTIES_TABLE)
+    .select(
+      "id,name,duty_name,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category"
+    )
+    .eq("is_active", true)
+    .order("start_time");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeDutyRow);
+}
+
 export async function getClassRecords() {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase.from(TABLE_NAME).select("*");
@@ -296,21 +314,7 @@ export async function getStaffProfileByEmail(email: string): Promise<StaffProfil
 export async function getDutyDashboardData(email: string): Promise<DutyDashboardData> {
   const staffProfile = await getStaffProfileByEmail(email);
   const { weekdayKey, weekdayLabel } = weekdayInfo();
-
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(DUTIES_TABLE)
-    .select(
-      "id,name,duty_name,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category"
-    )
-    .eq("is_active", true)
-    .order("start_time");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const duties = ((data ?? []) as Record<string, unknown>[]).map(normalizeDutyRow);
+  const duties = await getActiveDutyRows();
   const todaysSnapshot = duties.filter((duty) => duty.dayLabel.toLowerCase().includes(weekdayKey));
   const myUpcomingDuties = staffProfile
     ? duties.filter((duty) => duty.assignedStaffId === staffProfile.id)
@@ -373,6 +377,33 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
     return {
       ...profile,
       assigned_duties: dutiesByStaffId.get(profile.id) ?? []
+    };
+  });
+}
+
+export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
+  const [staff, duties] = await Promise.all([getStaffDirectoryData(), getActiveDutyRows()]);
+
+  const staffLookup = new Map(
+    staff.map((person) => [
+      person.id,
+      {
+        name: person.name,
+        department: person.department,
+        photo_url: person.photo_url
+      }
+    ])
+  );
+
+  return duties.map((duty) => {
+    const assignedStaff = duty.assignedStaffId ? staffLookup.get(duty.assignedStaffId) : null;
+
+    return {
+      ...duty,
+      assignedStaffName: assignedStaff?.name ?? null,
+      assignedStaffDepartment: assignedStaff?.department ?? null,
+      assignedStaffPhotoUrl: assignedStaff?.photo_url ?? null,
+      isAssigned: Boolean(duty.assignedStaffId && assignedStaff)
     };
   });
 }
