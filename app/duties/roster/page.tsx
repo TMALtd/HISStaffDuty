@@ -2,11 +2,11 @@ import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DutyRoster } from "@/components/duty-roster";
 import { requireStaffProfile } from "@/lib/auth";
-import { getDutyRosterData } from "@/lib/data";
+import { getDutyRosterGroups } from "@/lib/data";
 
 export default async function DutyRosterPage() {
   const { user, staffProfile } = await requireStaffProfile();
-  const duties = await getDutyRosterData();
+  const groups = await getDutyRosterGroups();
 
   return (
     <main className="page-shell">
@@ -20,7 +20,7 @@ export default async function DutyRosterPage() {
         <SignOutButton />
       </section>
       <PortalNav />
-      <DutyRoster duties={duties} />
+      <DutyRoster groups={groups} />
     </main>
   );
 }
