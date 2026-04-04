@@ -71,6 +71,45 @@ export type GradebookEntry = {
   field_values: Record<string, string>;
 };
 
+export type StaffProfile = {
+  id: string;
+  staff_id: string | null;
+  name: string;
+  first_name: string | null;
+  role: string | null;
+  email: string | null;
+  department: string | null;
+  class: string | null;
+  extension: string | null;
+  max_duties: number | null;
+  status: string | null;
+  unavailable_reason: string | null;
+  timetable: string | null;
+  photo_url: string | null;
+  designation: string | null;
+  system_role: string | null;
+};
+
+export type DutySummary = {
+  id: string;
+  name: string;
+  location: string;
+  dayLabel: string;
+  timeLabel: string;
+  category: string | null;
+  color: string | null;
+  assignedStaffId: string | null;
+};
+
+export type DutyDashboardData = {
+  staffProfile: StaffProfile | null;
+  myUpcomingDuties: DutySummary[];
+  todaysSnapshot: DutySummary[];
+  unassignedCount: number;
+  activeDutyCount: number;
+  weekdayLabel: string;
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",
