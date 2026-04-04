@@ -561,11 +561,19 @@ tr:last-child td {
   gap: 12px;
 }
 
+.duty-list.compact {
+  gap: 10px;
+}
+
 .duty-card {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 248, 242, 0.94));
   padding: 16px;
+}
+
+.duty-card.compact {
+  padding: 14px;
 }
 
 .duty-card-top {
@@ -602,6 +610,108 @@ tr:last-child td {
   color: var(--muted);
 }
 
+.directory-filters {
+  grid-template-columns: 2fr repeat(3, minmax(0, 1fr));
+}
+
+.directory-search {
+  grid-column: span 1;
+}
+
+.directory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.directory-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.directory-card-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.directory-avatar {
+  width: 78px;
+  height: 78px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(159, 23, 36, 0.14), rgba(47, 125, 50, 0.12));
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.directory-avatar span {
+  font-size: 1.5rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.directory-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.directory-name {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.directory-role,
+.directory-meta-line {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.directory-role {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.directory-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.directory-contact {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 251, 245, 0.88);
+  border: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.directory-contact-line {
+  margin: 0;
+  color: var(--muted);
+}
+
+.directory-contact-line + .directory-contact-line {
+  margin-top: 6px;
+}
+
+.directory-duty-section {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.panel-heading.compact {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 900px) {
   .filters-grid,
   .stats-row,
@@ -627,6 +737,12 @@ tr:last-child td {
     align-items: flex-start;
   }
 
+  .directory-grid,
+  .directory-info-grid,
+  .directory-filters {
+    grid-template-columns: 1fr;
+  }
+
   .brand-lockup {
     flex-direction: column;
     align-items: flex-start;
@@ -638,5 +754,9 @@ tr:last-child td {
 
   .duty-card-top {
     flex-direction: column;
+  }
+
+  .directory-card-header {
+    align-items: flex-start;
   }
 }
