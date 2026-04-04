@@ -253,6 +253,9 @@ export function StaffDashboard() {
           <button className="button secondary" type="button" onClick={clearFilters}>
             Clear filters
           </button>
+          <Link className="button secondary" href="/duties">
+            Open Duty
+          </Link>
           <Link className="button" href={gradebookHref}>
             Enter Gradebook
           </Link>
