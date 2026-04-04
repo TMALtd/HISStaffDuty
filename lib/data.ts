@@ -4,8 +4,10 @@ import {
   type DutyRosterAssignment,
   type DutyRosterGroup,
   type DutyRosterRecord,
+  type DutyRosterStaffOption,
   type DutyRosterSubGroup,
   type DutySummary,
+  type DutyRosterViewData,
   EMPTY_FILTERS,
   FILTER_FIELDS,
   type GradebookEntry,
@@ -456,7 +458,7 @@ export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
   });
 }
 
-export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
+export async function getDutyRosterViewData(): Promise<DutyRosterViewData> {
   const supabase = createSupabaseAdminClient();
   const [staff, { data, error }] = await Promise.all([
     getStaffDirectoryData(),
@@ -529,7 +531,7 @@ export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
     };
   };
 
-  return topLevelRows
+  const groups = topLevelRows
     .map((parent): DutyRosterGroup => {
       const subGroups = nonDayRows
         .filter((row) => String(row.parent_duty_id) === String(parent.id))
@@ -586,6 +588,48 @@ export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
       };
     })
     .sort((left, right) => (left.sortOrder ?? 99) - (right.sortOrder ?? 99));
+
+  const dutyGroupOptions = groups.map((group) => ({
+    id: group.id,
+    label: `${group.name} (${group.timeLabel})`
+  }));
+
+  const seenStaff = new Set<string>();
+  const staffOptions: DutyRosterStaffOption[] = [];
+  const departmentSet = new Set<string>();
+
+  groups.forEach((group) => {
+    group.subGroups.forEach((subGroup) => {
+      subGroup.assignments.forEach((assignment) => {
+        if (assignment.assignedStaffDepartment) {
+          departmentSet.add(assignment.assignedStaffDepartment);
+        }
+
+        if (!assignment.assignedStaffId || seenStaff.has(assignment.assignedStaffId)) {
+          return;
+        }
+
+        seenStaff.add(assignment.assignedStaffId);
+        staffOptions.push({
+          id: assignment.assignedStaffId,
+          label: `${assignment.assignedStaffFirstName ?? assignment.assignedStaffName ?? "Staff"} (${assignment.assignedStaffDepartment ?? "Staff"})`,
+          firstName: assignment.assignedStaffFirstName,
+          department: assignment.assignedStaffDepartment
+        });
+      });
+    });
+  });
+
+  staffOptions.sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
+
+  return {
+    groups,
+    dutyGroupOptions,
+    staffOptions,
+    departmentOptions: Array.from(departmentSet).sort((left, right) =>
+      left.localeCompare(right, undefined, { numeric: true })
+    )
+  };
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
