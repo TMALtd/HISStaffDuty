@@ -372,13 +372,36 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
     dutiesByStaffId.set(duty.assignedStaffId, current);
   });
 
-  return ((staffData ?? []) as Record<string, unknown>[]).map((row) => {
-    const profile = normalizeStaffProfile(row);
-    return {
-      ...profile,
-      assigned_duties: dutiesByStaffId.get(profile.id) ?? []
-    };
-  });
+  return ((staffData ?? []) as Record<string, unknown>[])
+    .map((row) => {
+      const profile = normalizeStaffProfile(row);
+      return {
+        ...profile,
+        assigned_duties: dutiesByStaffId.get(profile.id) ?? []
+      };
+    })
+    .sort((left, right) => {
+      const leftOrder = Number(left.staff_id);
+      const rightOrder = Number(right.staff_id);
+      const leftIsNumeric = Number.isFinite(leftOrder);
+      const rightIsNumeric = Number.isFinite(rightOrder);
+
+      if (leftIsNumeric && rightIsNumeric) {
+        return leftOrder - rightOrder;
+      }
+
+      if (leftIsNumeric) {
+        return -1;
+      }
+
+      if (rightIsNumeric) {
+        return 1;
+      }
+
+      return (left.staff_id ?? left.name).localeCompare(right.staff_id ?? right.name, undefined, {
+        numeric: true
+      });
+    });
 }
 
 export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
