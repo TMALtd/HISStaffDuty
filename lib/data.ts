@@ -1,7 +1,10 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
   type DutyDashboardData,
+  type DutyRosterAssignment,
+  type DutyRosterGroup,
   type DutyRosterRecord,
+  type DutyRosterSubGroup,
   type DutySummary,
   EMPTY_FILTERS,
   FILTER_FIELDS,
@@ -80,6 +83,26 @@ function getClassValue(row: ClassRecord, field: FilterField) {
 
 function formatDutyLocation(first?: string | null, second?: string | null) {
   return [first, second].filter(Boolean).join(" / ");
+}
+
+function formatDaysSummary(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed) as string[];
+      return parsed
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1).toLowerCase())
+        .join(", ");
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return trimmed;
 }
 
 function formatDayLabel(value?: string | null) {
@@ -174,7 +197,7 @@ async function getActiveDutyRows() {
   const { data, error } = await supabase
     .from(DUTIES_TABLE)
     .select(
-      "id,name,duty_name,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category"
+      "id,name,duty_name,description,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category,parent_duty_id,is_day_instance,sort_order,day_order,duty_order,daily_order_number,unique_duty_id"
     )
     .eq("is_active", true)
     .order("start_time");
@@ -429,6 +452,136 @@ export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
       isAssigned: Boolean(duty.assignedStaffId && assignedStaff)
     };
   });
+}
+
+export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
+  const supabase = createSupabaseAdminClient();
+  const [staff, { data, error }] = await Promise.all([
+    getStaffDirectoryData(),
+    supabase
+      .from(DUTIES_TABLE)
+      .select(
+        "id,name,duty_name,description,first_location,second_location,start_time,end_time,days_of_week,day_of_week,assigned_staff_id,is_active,color,category,parent_duty_id,is_day_instance,sort_order,day_order,duty_order,daily_order_number,unique_duty_id"
+      )
+      .eq("is_active", true)
+  ]);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const staffLookup = new Map(
+    staff.map((person) => [
+      person.id,
+      {
+        name: person.name,
+        department: person.department,
+        photo_url: person.photo_url
+      }
+    ])
+  );
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const rowById = new Map(rows.map((row) => [String(row.id), row]));
+  const topLevelRows = rows.filter((row) => !row.parent_duty_id);
+  const nonDayRows = rows.filter((row) => row.parent_duty_id && !row.is_day_instance);
+  const dayRows = rows.filter((row) => row.is_day_instance);
+
+  const assignmentFor = (row: Record<string, unknown>): DutyRosterAssignment => {
+    const assignedStaffId = row.assigned_staff_id ? String(row.assigned_staff_id) : null;
+    const assignedStaff = assignedStaffId ? staffLookup.get(assignedStaffId) : null;
+
+    return {
+      id: String(row.id ?? ""),
+      name: String(row.name ?? row.duty_name ?? "Duty"),
+      location: formatDutyLocation(
+        row.first_location ? String(row.first_location) : null,
+        row.second_location ? String(row.second_location) : null
+      ),
+      dayLabel: formatDayLabel(row.day_of_week ? String(row.day_of_week) : null),
+      timeLabel:
+        row.start_time && row.end_time
+          ? `${String(row.start_time)} - ${String(row.end_time)}`
+          : row.start_time
+            ? String(row.start_time)
+            : "Time TBC",
+      category: row.category ? String(row.category) : null,
+      color: row.color ? String(row.color) : null,
+      assignedStaffId,
+      assignedStaffName: assignedStaff?.name ?? null,
+      assignedStaffDepartment: assignedStaff?.department ?? null,
+      assignedStaffPhotoUrl: assignedStaff?.photo_url ?? null,
+      isAssigned: Boolean(assignedStaffId && assignedStaff),
+      uniqueDutyId: row.unique_duty_id ? String(row.unique_duty_id) : null,
+      dayOfWeek: row.day_of_week ? String(row.day_of_week) : null,
+      dayOrder:
+        typeof row.day_order === "number" ? row.day_order : row.day_order ? Number(row.day_order) : null,
+      dailyOrderNumber:
+        typeof row.daily_order_number === "number"
+          ? row.daily_order_number
+          : row.daily_order_number
+            ? Number(row.daily_order_number)
+            : null
+    };
+  };
+
+  return topLevelRows
+    .map((parent): DutyRosterGroup => {
+      const subGroups = nonDayRows
+        .filter((row) => String(row.parent_duty_id) === String(parent.id))
+        .map((sub): DutyRosterSubGroup => {
+          const assignments = dayRows
+            .filter((row) => String(row.parent_duty_id) === String(sub.id))
+            .map(assignmentFor)
+            .sort((left, right) => {
+              const daySort = (left.dayOrder ?? 99) - (right.dayOrder ?? 99);
+              if (daySort !== 0) {
+                return daySort;
+              }
+              return (left.dailyOrderNumber ?? 0) - (right.dailyOrderNumber ?? 0);
+            });
+
+          return {
+            id: String(sub.id ?? ""),
+            name: String(sub.name ?? sub.duty_name ?? "Duty"),
+            location: formatDutyLocation(
+              sub.first_location ? String(sub.first_location) : null,
+              sub.second_location ? String(sub.second_location) : null
+            ),
+            dutyOrder:
+              typeof sub.duty_order === "number"
+                ? sub.duty_order
+                : sub.duty_order
+                  ? Number(sub.duty_order)
+                  : null,
+            color: sub.color ? String(sub.color) : null,
+            assignments
+          };
+        })
+        .sort((left, right) => (left.dutyOrder ?? 99) - (right.dutyOrder ?? 99));
+
+      return {
+        id: String(parent.id ?? ""),
+        name: String(parent.name ?? parent.duty_name ?? "Duty Group"),
+        description: parent.description ? String(parent.description) : null,
+        sortOrder:
+          typeof parent.sort_order === "number"
+            ? parent.sort_order
+            : parent.sort_order
+              ? Number(parent.sort_order)
+              : null,
+        timeLabel:
+          parent.start_time && parent.end_time
+            ? `${String(parent.start_time)} - ${String(parent.end_time)}`
+            : parent.start_time
+              ? String(parent.start_time)
+              : "Time TBC",
+        daysLabel: formatDaysSummary(parent.days_of_week ? String(parent.days_of_week) : null),
+        color: parent.color ? String(parent.color) : null,
+        subGroups
+      };
+    })
+    .sort((left, right) => (left.sortOrder ?? 99) - (right.sortOrder ?? 99));
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {
