@@ -121,6 +121,33 @@ export type DutyRosterRecord = DutySummary & {
   isAssigned: boolean;
 };
 
+export type DutyRosterAssignment = DutyRosterRecord & {
+  uniqueDutyId: string | null;
+  dayOfWeek: string | null;
+  dayOrder: number | null;
+  dailyOrderNumber: number | null;
+};
+
+export type DutyRosterSubGroup = {
+  id: string;
+  name: string;
+  location: string;
+  dutyOrder: number | null;
+  color: string | null;
+  assignments: DutyRosterAssignment[];
+};
+
+export type DutyRosterGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  sortOrder: number | null;
+  timeLabel: string;
+  daysLabel: string;
+  color: string | null;
+  subGroups: DutyRosterSubGroup[];
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",
