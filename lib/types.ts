@@ -114,6 +114,13 @@ export type StaffDirectoryRecord = StaffProfile & {
   assigned_duties: DutySummary[];
 };
 
+export type DutyRosterRecord = DutySummary & {
+  assignedStaffName: string | null;
+  assignedStaffDepartment: string | null;
+  assignedStaffPhotoUrl: string | null;
+  isAssigned: boolean;
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",
