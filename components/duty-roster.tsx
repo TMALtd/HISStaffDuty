@@ -35,6 +35,31 @@ function assignmentForDay(assignments: DutyRosterAssignment[], dayKey: string) {
   return assignments.find((assignment) => assignment.dayOfWeek?.toLowerCase() === dayKey) ?? null;
 }
 
+function displayStaffName(assignment: DutyRosterAssignment) {
+  if (!assignment.assignedStaffName) {
+    return "Unassigned";
+  }
+
+  return assignment.assignedStaffName.split(" ")[0] ?? assignment.assignedStaffName;
+}
+
+function missingDutyLabel(dayLabel: string) {
+  switch (dayLabel) {
+    case "Mon":
+      return "No Monday Duty";
+    case "Tue":
+      return "No Tuesday Duty";
+    case "Wed":
+      return "No Wednesday Duty";
+    case "Thu":
+      return "No Thursday Duty";
+    case "Fri":
+      return "No Friday Duty";
+    default:
+      return `No ${dayLabel} Duty`;
+  }
+}
+
 export function DutyRoster({ groups }: DutyRosterProps) {
   const [dayFilter, setDayFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "assigned" | "unassigned">("all");
@@ -212,12 +237,12 @@ export function DutyRoster({ groups }: DutyRosterProps) {
                               </div>
                               <div>
                                 <p className="duty-assignee-name">
-                                  {assignment.assignedStaffName ?? "Unassigned"}
+                                  {displayStaffName(assignment)}
                                 </p>
                               </div>
                             </div>
                           ) : (
-                            <div className="duty-assignment-chip empty">No day instance</div>
+                            <div className="duty-assignment-chip empty">{missingDutyLabel(day.label)}</div>
                           )}
                         </div>
                       );
