@@ -129,6 +129,13 @@ export type DutyRosterAssignment = DutyRosterRecord & {
   dailyOrderNumber: number | null;
 };
 
+export type DutyRosterStaffOption = {
+  id: string;
+  label: string;
+  firstName: string | null;
+  department: string | null;
+};
+
 export type DutyRosterSubGroup = {
   id: string;
   name: string;
@@ -147,6 +154,13 @@ export type DutyRosterGroup = {
   daysLabel: string;
   color: string | null;
   subGroups: DutyRosterSubGroup[];
+};
+
+export type DutyRosterViewData = {
+  groups: DutyRosterGroup[];
+  dutyGroupOptions: Array<{ id: string; label: string }>;
+  staffOptions: DutyRosterStaffOption[];
+  departmentOptions: string[];
 };
 
 export const EMPTY_FILTERS: FilterState = {
