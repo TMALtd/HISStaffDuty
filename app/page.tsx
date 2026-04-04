@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
 
@@ -7,6 +8,14 @@ export default async function HomePage() {
 
   return (
     <main className="page-shell">
+      <section className="portal-toolbar">
+        <div>
+          <p className="eyebrow">HELP staff workspace</p>
+          <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+        </div>
+        <SignOutButton />
+      </section>
+      <PortalNav />
       <section className="hero-card">
         <p className="eyebrow">Render-ready staff workspace</p>
         <div className="topbar">
@@ -17,9 +26,7 @@ export default async function HomePage() {
               matching students in one place.
             </p>
           </div>
-          <SignOutButton />
         </div>
-        <p className="meta">Signed in as {user.email ?? "staff user"}</p>
       </section>
       <StaffDashboard />
     </main>
