@@ -7,32 +7,23 @@ type StaffDirectoryProps = {
   staff: StaffDirectoryRecord[];
 };
 
-function normalized(value: string | null | undefined) {
-  return (value ?? "").trim();
+function uniqueValues(items: Array<string | null | undefined>) {
+  return Array.from(new Set(items.map((item) => (item ?? "").trim()).filter(Boolean))).sort(
+    (left, right) => left.localeCompare(right, undefined, { numeric: true })
+  );
 }
 
-function uniqueValues(items: Array<string | null | undefined>) {
-  return Array.from(new Set(items.map(normalized).filter(Boolean))).sort((left, right) =>
-    left.localeCompare(right, undefined, { numeric: true })
-  );
+function formatDutyLabel(duty: StaffDirectoryRecord["assigned_duties"][number]) {
+  return `${duty.dayLabel} / ${duty.name} (${duty.timeLabel})`;
 }
 
 export function StaffDirectory({ staff }: StaffDirectoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
-  const [timetableFilter, setTimetableFilter] = useState("");
-  const [designationFilter, setDesignationFilter] = useState("");
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
 
   const departmentOptions = useMemo(
     () => uniqueValues(staff.map((person) => person.department)),
-    [staff]
-  );
-  const timetableOptions = useMemo(
-    () => uniqueValues(staff.map((person) => person.timetable)),
-    [staff]
-  );
-  const designationOptions = useMemo(
-    () => uniqueValues(staff.map((person) => person.designation)),
     [staff]
   );
 
@@ -45,60 +36,46 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
         [
           person.name,
           person.first_name,
+          person.role,
           person.email,
-          person.department,
-          person.timetable,
-          person.class
+          person.class,
+          person.staff_id
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(search));
 
       const matchesDepartment =
-        !departmentFilter || normalized(person.department) === departmentFilter;
-      const matchesTimetable = !timetableFilter || normalized(person.timetable) === timetableFilter;
-      const matchesDesignation =
-        !designationFilter || normalized(person.designation) === designationFilter;
+        !departmentFilter || (person.department ?? "").trim() === departmentFilter;
 
-      return matchesSearch && matchesDepartment && matchesTimetable && matchesDesignation;
+      return matchesSearch && matchesDepartment;
     });
-  }, [departmentFilter, designationFilter, searchTerm, staff, timetableFilter]);
+  }, [departmentFilter, searchTerm, staff]);
 
-  const shownDutyCount = filteredStaff.reduce(
-    (total, person) => total + person.assigned_duties.length,
-    0
-  );
-
-  function clearFilters() {
-    setSearchTerm("");
-    setDepartmentFilter("");
-    setTimetableFilter("");
-    setDesignationFilter("");
-  }
+  const selectedStaff =
+    filteredStaff.find((person) => person.id === selectedStaffId) ??
+    staff.find((person) => person.id === selectedStaffId) ??
+    null;
 
   return (
     <div className="dashboard-grid">
-      <section className="hero-card">
-        <p className="eyebrow">Duty module</p>
-        <div className="topbar">
-          <div>
-            <h1 className="hero-title">Staff directory</h1>
-            <p className="hero-copy">
-              Search the team, filter by department or timetable, and review each staff
-              member&apos;s current duty footprint in one place.
-            </p>
-          </div>
+      <section className="directory-hero">
+        <div>
+          <h1 className="directory-page-title">Staff Management</h1>
+          <p className="directory-page-copy">Manage teaching staff profiles and information</p>
         </div>
+        <button className="directory-add-button" type="button" disabled>
+          + Add Staff Member
+        </button>
       </section>
 
-      <section className="panel">
-        <h2 className="panel-title">Search and filter staff</h2>
-        <div className="filters-grid directory-filters">
-          <div className="field directory-search">
-            <label htmlFor="staffSearch">Search</label>
+      <section className="directory-search-panel">
+        <div className="directory-search-grid">
+          <div className="field directory-search-field">
+            <label htmlFor="staffSearch">Search Staff</label>
             <input
               id="staffSearch"
               type="text"
-              placeholder="Search by name, email, department, class..."
+              placeholder="Search by name, role, class, ID..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
@@ -110,7 +87,7 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
               value={departmentFilter}
               onChange={(event) => setDepartmentFilter(event.target.value)}
             >
-              <option value="">All departments</option>
+              <option value="">All Departments</option>
               {departmentOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -118,53 +95,16 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
               ))}
             </select>
           </div>
-          <div className="field">
-            <label htmlFor="timetableFilter">Timetable</label>
-            <select
-              id="timetableFilter"
-              value={timetableFilter}
-              onChange={(event) => setTimetableFilter(event.target.value)}
-            >
-              <option value="">All timetables</option>
-              {timetableOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="designationFilter">Designation</label>
-            <select
-              id="designationFilter"
-              value={designationFilter}
-              onChange={(event) => setDesignationFilter(event.target.value)}
-            >
-              <option value="">All designations</option>
-              {designationOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="actions">
-          <button className="button secondary" type="button" onClick={clearFilters}>
-            Clear filters
-          </button>
-          <span className="hint">
-            {filteredStaff.length} staff shown | {shownDutyCount} active duties in view
-          </span>
         </div>
       </section>
 
-      <section className="directory-grid">
-        {filteredStaff.map((person) => (
-          <article className="directory-card" key={person.id}>
-            <div className="directory-card-header">
-              <div className="directory-avatar">
+      <section className="directory-card-grid">
+        {filteredStaff.map((person, index) => (
+          <article className="staff-management-card" key={person.id}>
+            <span className="staff-card-badge">#{person.staff_id ?? index + 1}</span>
+
+            <div className="staff-management-header">
+              <div className="directory-avatar management-avatar">
                 {person.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={person.photo_url} alt={person.name} className="directory-avatar-image" />
@@ -172,78 +112,160 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
                   <span>{person.first_name?.[0] ?? person.name[0] ?? "?"}</span>
                 )}
               </div>
-              <div className="directory-card-copy">
-                <h2 className="directory-name">{person.name}</h2>
-                <p className="directory-role">{person.role ?? "Staff"}</p>
-                <p className="directory-meta-line">
-                  {person.department ?? "Department pending"} | {person.timetable ?? "No timetable"}
+              <div className="staff-management-copy">
+                <h2 className="directory-name">{person.first_name ?? person.name}</h2>
+                <p className="staff-management-line primary">{person.department ?? "Department pending"}</p>
+                <p className="staff-management-line accent">
+                  {person.class || person.timetable || person.designation || "Staff profile"}
                 </p>
               </div>
             </div>
 
-            <div className="directory-info-grid">
-              <div className="identity-chip">
-                <span>Designation</span>
-                <strong>{person.designation ?? "—"}</strong>
-              </div>
-              <div className="identity-chip">
-                <span>Class</span>
-                <strong>{person.class ?? "—"}</strong>
-              </div>
-              <div className="identity-chip">
-                <span>Status</span>
-                <strong>{person.status ?? "—"}</strong>
-              </div>
-              <div className="identity-chip">
-                <span>Max Duties</span>
-                <strong>{person.max_duties ?? 0}</strong>
-              </div>
-            </div>
-
-            <div className="directory-contact">
-              <p className="directory-contact-line">
-                <strong>Email:</strong> {person.email ?? "Not set"}
-              </p>
-              {person.extension ? (
-                <p className="directory-contact-line">
-                  <strong>Extension:</strong> {person.extension}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="directory-duty-section">
-              <div className="panel-heading compact">
-                <div>
-                  <p className="eyebrow">Assigned duties</p>
-                  <h3 className="mi-title">Current load</h3>
-                </div>
-                <p className="hint">{person.assigned_duties.length} duties</p>
-              </div>
-
-              {person.assigned_duties.length ? (
-                <div className="duty-list compact">
-                  {person.assigned_duties.map((duty) => (
-                    <article className="duty-card compact" key={duty.id}>
-                      <div className="duty-card-top">
-                        <div>
-                          <p className="duty-card-time">{duty.timeLabel}</p>
-                          <h4 className="duty-card-title">{duty.name}</h4>
-                        </div>
-                        <span className="duty-card-day">{duty.dayLabel}</span>
-                      </div>
-                      <p className="duty-card-location">{duty.location || "Location to be confirmed"}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state compact">
-                  No active duties are currently assigned to this staff member.
-                </div>
-              )}
+            <div className="staff-card-actions">
+              <button className="directory-action edit" type="button" disabled>
+                Edit
+              </button>
+              <button
+                className="directory-action view"
+                type="button"
+                onClick={() => setSelectedStaffId(person.id)}
+              >
+                View
+              </button>
+              <button className="directory-action icon" type="button" disabled>
+                ⋮
+              </button>
             </div>
           </article>
         ))}
       </section>
+
+      {!filteredStaff.length ? (
+        <section className="panel">
+          <div className="empty-state">No staff match the current search.</div>
+        </section>
+      ) : null}
+
+      {selectedStaff ? (
+        <div className="directory-modal-backdrop" role="presentation" onClick={() => setSelectedStaffId(null)}>
+          <section
+            className="directory-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-directory-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="directory-modal-close"
+              type="button"
+              onClick={() => setSelectedStaffId(null)}
+            >
+              ×
+            </button>
+
+            <div className="directory-modal-header">
+              <div className="directory-avatar management-avatar large">
+                {selectedStaff.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedStaff.photo_url}
+                    alt={selectedStaff.name}
+                    className="directory-avatar-image"
+                  />
+                ) : (
+                  <span>{selectedStaff.first_name?.[0] ?? selectedStaff.name[0] ?? "?"}</span>
+                )}
+              </div>
+              <div>
+                <h2 id="staff-directory-modal-title" className="directory-modal-title">
+                  {selectedStaff.name}
+                </h2>
+                <p className="staff-management-line primary">{selectedStaff.role ?? "Staff"}</p>
+                <p className="staff-management-line accent">
+                  {selectedStaff.department ?? "Department pending"}
+                </p>
+              </div>
+            </div>
+
+            <div className="directory-modal-grid">
+              <div className="directory-modal-section">
+                <h3 className="directory-modal-heading">Personal Information</h3>
+                <div className="directory-modal-list">
+                  <div className="directory-modal-row">
+                    <span>First Name</span>
+                    <strong>{selectedStaff.first_name ?? "—"}</strong>
+                  </div>
+                  <div className="directory-modal-row">
+                    <span>Email</span>
+                    <strong>{selectedStaff.email ?? "—"}</strong>
+                  </div>
+                  <div className="directory-modal-row">
+                    <span>Department</span>
+                    <strong>{selectedStaff.department ?? "—"}</strong>
+                  </div>
+                  <div className="directory-modal-row">
+                    <span>Team</span>
+                    <strong>{selectedStaff.class ?? selectedStaff.timetable ?? "—"}</strong>
+                  </div>
+                  <div className="directory-modal-row">
+                    <span>Role</span>
+                    <strong>{selectedStaff.role ?? "—"}</strong>
+                  </div>
+                  <div className="directory-modal-row">
+                    <span>Status</span>
+                    <strong>{selectedStaff.status ?? "—"}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="directory-modal-section">
+                <h3 className="directory-modal-heading">Work Details</h3>
+                <div className="directory-modal-summary">
+                  <span>Assigned Duties</span>
+                  <strong>{selectedStaff.assigned_duties.length}</strong>
+                </div>
+                <div className="directory-duty-stack">
+                  {selectedStaff.assigned_duties.length ? (
+                    selectedStaff.assigned_duties.map((duty) => (
+                      <div className="directory-duty-pill" key={duty.id}>
+                        {formatDutyLabel(duty)}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="directory-duty-pill empty">No assigned duties</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="directory-modal-footer-card">
+              <h3 className="directory-modal-heading">Timetable Visibility</h3>
+              <p className="directory-page-copy compact">
+                Control which timetables this staff member can view. This action will be added in
+                the next admin phase.
+              </p>
+              <button className="directory-add-button full-width" type="button" disabled>
+                + Grant Timetable Access
+              </button>
+            </div>
+
+            <div className="directory-modal-actions">
+              <button className="directory-action edit" type="button" disabled>
+                Edit
+              </button>
+              <button className="directory-action view" type="button" disabled>
+                Photo
+              </button>
+              <button className="directory-action view" type="button" disabled>
+                Password
+              </button>
+              <button className="directory-action close" type="button" onClick={() => setSelectedStaffId(null)}>
+                Close
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
