@@ -681,6 +681,21 @@ tr:last-child td {
   gap: 14px;
 }
 
+.legacy-filter-bar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1.1fr) repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.legacy-filter-label {
+  align-self: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #55606f;
+  padding-right: 6px;
+}
+
 .directory-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1225,12 +1240,18 @@ tr:last-child td {
   .directory-search-grid,
   .directory-card-grid,
   .directory-modal-grid,
-  .directory-modal-actions {
+  .directory-modal-actions,
+  .legacy-filter-bar {
     grid-template-columns: 1fr;
   }
 
   .directory-hero {
     align-items: stretch;
+  }
+
+  .legacy-filter-label {
+    font-size: 1rem;
+    padding-right: 0;
   }
 
   .brand-lockup {
