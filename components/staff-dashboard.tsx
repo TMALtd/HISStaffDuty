@@ -253,6 +253,9 @@ export function StaffDashboard() {
           <button className="button secondary" type="button" onClick={clearFilters}>
             Clear filters
           </button>
+          <Link className="button secondary" href="/directory">
+            Open Directory
+          </Link>
           <Link className="button secondary" href="/duties">
             Open Duty
           </Link>
