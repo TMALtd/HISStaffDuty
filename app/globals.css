@@ -1041,6 +1041,153 @@ tr:last-child td {
   font-weight: 700;
 }
 
+.duty-group-list {
+  display: grid;
+  gap: 18px;
+}
+
+.duty-group-card {
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid #1f2937;
+  background: #fff;
+  box-shadow: 0 20px 48px rgba(29, 24, 24, 0.12);
+}
+
+.duty-group-card.duty-dark .duty-group-header,
+.duty-group-card .duty-group-header {
+  background: #1f2937;
+  color: white;
+}
+
+.duty-group-card.duty-lead .duty-group-header {
+  background: #f8d2d2;
+  color: #8c1d1d;
+}
+
+.duty-group-header {
+  padding: 20px;
+}
+
+.duty-group-title {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.duty-group-meta,
+.duty-group-days {
+  margin: 6px 0 0;
+  opacity: 0.88;
+}
+
+.duty-group-description {
+  margin: 0;
+  padding: 16px 20px 0;
+  color: #4362d9;
+  line-height: 1.6;
+}
+
+.duty-subgroup-list {
+  display: grid;
+  gap: 0;
+  padding: 0 0 8px;
+}
+
+.duty-subgroup-card {
+  padding: 18px 20px 20px;
+  border-top: 4px solid #1f2937;
+}
+
+.duty-subgroup-card.duty-lead {
+  background: #fde2e2;
+  border-top-color: #d94848;
+}
+
+.duty-subgroup-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.duty-subgroup-title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.duty-subgroup-meta,
+.duty-subgroup-location {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.duty-week-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.duty-week-grid.columns-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.duty-week-grid.columns-1 {
+  grid-template-columns: 1fr;
+}
+
+.duty-day-cell {
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e6e9ef;
+  padding: 12px;
+  min-height: 112px;
+}
+
+.duty-day-label {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: #5b6470;
+}
+
+.duty-day-time {
+  margin: 4px 0 10px;
+  text-align: center;
+  color: #6d7887;
+  font-size: 0.85rem;
+}
+
+.duty-assignment-chip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 10px;
+  min-height: 52px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.duty-assignment-chip.unassigned {
+  background: #fff1f2;
+}
+
+.duty-assignment-chip.empty {
+  justify-content: center;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.directory-avatar.xsmall {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.directory-avatar.xsmall span {
+  font-size: 0.8rem;
+}
+
 @media (max-width: 900px) {
   .filters-grid,
   .stats-row,
@@ -1069,7 +1216,8 @@ tr:last-child td {
   .directory-grid,
   .directory-info-grid,
   .directory-filters,
-  .duty-roster-grid {
+  .duty-roster-grid,
+  .duty-week-grid.columns-5 {
     grid-template-columns: 1fr;
   }
 
