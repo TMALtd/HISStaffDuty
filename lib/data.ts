@@ -435,6 +435,7 @@ export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
       person.id,
       {
         name: person.name,
+        first_name: person.first_name,
         department: person.department,
         photo_url: person.photo_url
       }
@@ -447,6 +448,7 @@ export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {
     return {
       ...duty,
       assignedStaffName: assignedStaff?.name ?? null,
+      assignedStaffFirstName: assignedStaff?.first_name ?? null,
       assignedStaffDepartment: assignedStaff?.department ?? null,
       assignedStaffPhotoUrl: assignedStaff?.photo_url ?? null,
       isAssigned: Boolean(duty.assignedStaffId && assignedStaff)
@@ -475,6 +477,7 @@ export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
       person.id,
       {
         name: person.name,
+        first_name: person.first_name,
         department: person.department,
         photo_url: person.photo_url
       }
@@ -509,6 +512,7 @@ export async function getDutyRosterGroups(): Promise<DutyRosterGroup[]> {
       color: row.color ? String(row.color) : null,
       assignedStaffId,
       assignedStaffName: assignedStaff?.name ?? null,
+      assignedStaffFirstName: assignedStaff?.first_name ?? null,
       assignedStaffDepartment: assignedStaff?.department ?? null,
       assignedStaffPhotoUrl: assignedStaff?.photo_url ?? null,
       isAssigned: Boolean(assignedStaffId && assignedStaff),
