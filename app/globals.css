@@ -53,6 +53,43 @@ input {
   padding: 24px 0 48px;
 }
 
+.portal-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.portal-nav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.portal-nav-link {
+  text-decoration: none;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.82);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.portal-nav-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(159, 23, 36, 0.24);
+  color: var(--accent);
+}
+
+.portal-nav-link.active {
+  background: var(--accent);
+  color: white;
+  border-color: transparent;
+}
+
 .site-frame {
   min-height: 100vh;
 }
@@ -270,6 +307,10 @@ tr:last-child td {
 .empty-state {
   padding: 28px;
   color: var(--muted);
+}
+
+.empty-state.compact {
+  padding: 16px 0 0;
 }
 
 .login-shell {
@@ -511,6 +552,56 @@ tr:last-child td {
   min-height: 46px;
 }
 
+.duty-grid {
+  align-items: start;
+}
+
+.duty-list {
+  display: grid;
+  gap: 12px;
+}
+
+.duty-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 248, 242, 0.94));
+  padding: 16px;
+}
+
+.duty-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.duty-card-time {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.duty-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.duty-card-day {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(47, 125, 50, 0.1);
+  color: #1f5d25;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.duty-card-location {
+  margin: 10px 0 0;
+  color: var(--muted);
+}
+
 @media (max-width: 900px) {
   .filters-grid,
   .stats-row,
@@ -526,6 +617,11 @@ tr:last-child td {
     flex-direction: column;
   }
 
+  .portal-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .panel-heading {
     flex-direction: column;
     align-items: flex-start;
@@ -537,6 +633,10 @@ tr:last-child td {
   }
 
   .pastoral-card-header {
+    flex-direction: column;
+  }
+
+  .duty-card-top {
     flex-direction: column;
   }
 }
