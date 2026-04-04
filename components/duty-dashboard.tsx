@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { DutyDashboardData } from "@/lib/types";
 
 type DutyDashboardProps = {
@@ -49,6 +50,9 @@ export function DutyDashboard({ data }: DutyDashboardProps) {
               bridge into the full roster tools we&apos;ll migrate next.
             </p>
           </div>
+          <Link className="button secondary" href="/duties/roster">
+            Open Duty Roster
+          </Link>
         </div>
         <p className="meta">
           {data.staffProfile
