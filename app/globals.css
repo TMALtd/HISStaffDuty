@@ -169,6 +169,11 @@ input {
   line-height: 0.98;
 }
 
+.roster-hero-title {
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  white-space: nowrap;
+}
+
 .hero-copy {
   margin: 12px 0 0;
   max-width: 70ch;
@@ -1216,6 +1221,10 @@ tr:last-child td {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .roster-hero-title {
+    white-space: normal;
   }
 
   .portal-toolbar {

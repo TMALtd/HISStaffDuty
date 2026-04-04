@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import type {
   DutyRosterAssignment,
@@ -147,11 +146,8 @@ export function DutyRoster({ data }: DutyRosterProps) {
         <p className="eyebrow">Duty module</p>
         <div className="topbar">
           <div>
-            <h1 className="hero-title">Term 3 2025-2026 Duty Roster - Primary</h1>
+            <h1 className="hero-title roster-hero-title">Term 3 2025-2026 Duty Roster - Primary</h1>
           </div>
-          <Link className="button secondary" href="/duties">
-            Back to Duty Dashboard
-          </Link>
         </div>
       </section>
 
