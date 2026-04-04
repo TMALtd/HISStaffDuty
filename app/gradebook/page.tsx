@@ -1,4 +1,6 @@
 import { requireUser } from "@/lib/auth";
+import { PortalNav } from "@/components/portal-nav";
+import { SignOutButton } from "@/components/sign-out-button";
 import { GradebookWorkspace } from "@/components/gradebook-workspace";
 
 type GradebookPageProps = {
@@ -10,10 +12,18 @@ function toStringValue(value: string | string[] | undefined) {
 }
 
 export default async function GradebookPage({ searchParams }: GradebookPageProps) {
-  await requireUser();
+  const user = await requireUser();
 
   return (
     <main className="page-shell">
+      <section className="portal-toolbar">
+        <div>
+          <p className="eyebrow">HELP staff workspace</p>
+          <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+        </div>
+        <SignOutButton />
+      </section>
+      <PortalNav />
       <GradebookWorkspace
         initialFilters={{
           school: toStringValue(searchParams.school),
