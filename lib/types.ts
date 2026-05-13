@@ -163,6 +163,97 @@ export type DutyRosterViewData = {
   departmentOptions: string[];
 };
 
+export type TimetableBlockType =
+  | "lesson"
+  | "break"
+  | "lunch"
+  | "dismissal"
+  | "assembly"
+  | "other";
+
+export type TimetableTemplate = {
+  id: string;
+  name: string;
+  school: string | null;
+  designation: string | null;
+  year_group: string | null;
+  is_active: boolean;
+};
+
+export type TimetablePeriod = {
+  id: string;
+  template_id: string;
+  weekday: string;
+  label: string;
+  start_time: string;
+  end_time: string;
+  block_type: TimetableBlockType;
+  sort_order: number;
+};
+
+export type ClassTimetable = {
+  id: string;
+  class_name: string;
+  template_id: string;
+  template_name: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type TimetableBlockStaffAssignment = {
+  staff_id: string;
+  staff_name: string;
+  staff_first_name: string | null;
+  department: string | null;
+  photo_url: string | null;
+};
+
+export type TimetableBlock = {
+  id: string;
+  class_timetable_id: string;
+  period_id: string;
+  weekday: string;
+  period_label: string;
+  start_time: string;
+  end_time: string;
+  block_type: TimetableBlockType;
+  title: string | null;
+  color: string | null;
+  notes: string | null;
+  start_time_override: string | null;
+  end_time_override: string | null;
+  sort_order: number;
+  teachers: TimetableBlockStaffAssignment[];
+};
+
+export type TimetableStaffOption = {
+  id: string;
+  label: string;
+  firstName: string | null;
+  department: string | null;
+  photoUrl: string | null;
+};
+
+export type TimetableClassSummary = {
+  className: string;
+  school: string;
+  designation: string;
+  yearGroup: string;
+  hasTimetable: boolean;
+  timetableId: string | null;
+  templateId: string | null;
+  templateName: string | null;
+};
+
+export type TimetableBuilderData = {
+  classSummary: TimetableClassSummary;
+  templates: TimetableTemplate[];
+  timetable: ClassTimetable | null;
+  periods: TimetablePeriod[];
+  blocks: TimetableBlock[];
+  staffOptions: TimetableStaffOption[];
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",

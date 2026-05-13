@@ -252,6 +252,18 @@ input {
   border: 1px solid var(--accent-soft);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -440,6 +452,216 @@ tr:last-child td {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.timetable-search-field {
+  min-width: min(320px, 100%);
+}
+
+.compact-eyebrow {
+  margin-bottom: 6px;
+}
+
+.timetable-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.timetable-admin-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 252, 248, 0.95), rgba(255, 246, 240, 0.9));
+}
+
+.timetable-admin-card-title {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.timetable-admin-card-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.timetable-admin-card-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.timetable-toolbar {
+  display: grid;
+  grid-template-columns: 220px 220px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.timetable-toolbar-summary {
+  align-self: stretch;
+}
+
+.timetable-toolbar-value {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.timetable-toolbar-actions {
+  margin-top: 0;
+}
+
+.smaller-stat {
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.timetable-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timetable-day-column {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.timetable-day-header {
+  padding: 14px 12px;
+  text-align: center;
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 250, 245, 0.95);
+}
+
+.timetable-day-stack {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+}
+
+.timetable-block-card {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px rgba(38, 23, 24, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.timetable-block-card:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px rgba(38, 23, 24, 0.12), 0 10px 25px rgba(38, 23, 24, 0.08);
+}
+
+.timetable-block-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.timetable-block-meta {
+  margin-top: 4px;
+  font-size: 0.84rem;
+}
+
+.muted-block-meta {
+  opacity: 0.76;
+}
+
+.timetable-block-edit {
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
+.timetable-teacher-strip {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.timetable-teacher-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.timetable-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.timetable-editor-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.timetable-time-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timetable-color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.timetable-color-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 2px solid rgba(38, 23, 24, 0.12);
+  cursor: pointer;
+}
+
+.timetable-color-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(159, 23, 36, 0.12);
+}
+
+.timetable-teacher-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.timetable-teacher-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.timetable-assigned-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.directory-action.icon.danger {
+  background: rgba(185, 28, 28, 0.1);
+  color: #991b1b;
+  border: 1px solid rgba(185, 28, 28, 0.15);
 }
 
 .cell-input,
@@ -1214,6 +1436,7 @@ tr:last-child td {
   .mi-grid,
   .mini-stats,
   .admin-grid,
+  .timetable-admin-grid,
   .identity-grid,
   .pastoral-fields-grid {
     grid-template-columns: 1fr;
@@ -1242,6 +1465,13 @@ tr:last-child td {
   .directory-filters,
   .duty-roster-grid,
   .duty-week-grid.columns-5 {
+    grid-template-columns: 1fr;
+  }
+
+  .timetable-toolbar,
+  .timetable-board,
+  .timetable-time-row,
+  .timetable-teacher-row {
     grid-template-columns: 1fr;
   }
 
@@ -1283,5 +1513,9 @@ tr:last-child td {
   .directory-modal-header,
   .staff-management-header {
     align-items: flex-start;
+  }
+
+  .timetable-day-stack {
+    padding: 10px;
   }
 }

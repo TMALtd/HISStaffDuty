@@ -1,5 +1,14 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
+  type ClassTimetable,
+  type TimetableBlock,
+  type TimetableBlockStaffAssignment,
+  type TimetableBlockType,
+  type TimetableBuilderData,
+  type TimetableClassSummary,
+  type TimetablePeriod,
+  type TimetableStaffOption,
+  type TimetableTemplate,
   type DutyDashboardData,
   type DutyRosterAssignment,
   type DutyRosterGroup,
@@ -37,6 +46,20 @@ const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
+const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
+const TIMETABLE_PERIODS_TABLE = "timetable_periods";
+const CLASS_TIMETABLES_TABLE = "class_timetables";
+const TIMETABLE_BLOCKS_TABLE = "timetable_blocks";
+const TIMETABLE_BLOCK_STAFF_TABLE = "timetable_block_staff";
+const WEEKDAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const;
+const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
+  lesson: "#8be6a8",
+  break: "#6b7280",
+  lunch: "#6b7280",
+  dismissal: "#9ca3af",
+  assembly: "#f59e0b",
+  other: "#c4b5fd"
+};
 
 function normalizeFilterState(filters: Partial<FilterState>): FilterState {
   return {
@@ -143,6 +166,79 @@ function weekdayInfo() {
     weekdayLabel,
     weekdayKey: weekdayLabel.toLowerCase()
   };
+}
+
+function weekdaySortValue(weekday: string) {
+  const normalized = weekday.trim().toLowerCase();
+  const index = WEEKDAY_ORDER.indexOf(normalized as (typeof WEEKDAY_ORDER)[number]);
+  return index === -1 ? 99 : index;
+}
+
+function normalizeTimetableBlockType(value: unknown): TimetableBlockType {
+  const normalized = String(value ?? "lesson").trim().toLowerCase();
+  if (
+    normalized === "lesson" ||
+    normalized === "break" ||
+    normalized === "lunch" ||
+    normalized === "dismissal" ||
+    normalized === "assembly" ||
+    normalized === "other"
+  ) {
+    return normalized;
+  }
+
+  return "lesson";
+}
+
+function normalizeTimetableTemplate(row: Record<string, unknown>): TimetableTemplate {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? "Template"),
+    school: row.school ? String(row.school) : null,
+    designation: row.designation ? String(row.designation) : null,
+    year_group: row.year_group ? String(row.year_group) : null,
+    is_active: Boolean(row.is_active ?? true)
+  };
+}
+
+function normalizeTimetablePeriod(row: Record<string, unknown>): TimetablePeriod {
+  return {
+    id: String(row.id ?? ""),
+    template_id: String(row.template_id ?? ""),
+    weekday: String(row.weekday ?? "").toLowerCase(),
+    label: String(row.label ?? ""),
+    start_time: String(row.start_time ?? ""),
+    end_time: String(row.end_time ?? ""),
+    block_type: normalizeTimetableBlockType(row.block_type),
+    sort_order:
+      typeof row.sort_order === "number" ? row.sort_order : Number(row.sort_order ?? 0)
+  };
+}
+
+function normalizeClassTimetable(
+  row: Record<string, unknown>,
+  templateLookup: Map<string, TimetableTemplate>
+): ClassTimetable {
+  const templateId = String(row.template_id ?? "");
+  return {
+    id: String(row.id ?? ""),
+    class_name: String(row.class_name ?? ""),
+    template_id: templateId,
+    template_name: templateLookup.get(templateId)?.name ?? "Template",
+    created_at: row.created_at ? String(row.created_at) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : null
+  };
+}
+
+function defaultColorForTimetableType(blockType: TimetableBlockType) {
+  return TIMETABLE_DEFAULT_COLORS[blockType] ?? TIMETABLE_DEFAULT_COLORS.lesson;
+}
+
+function defaultTitleForTimetableType(params: {
+  blockType: TimetableBlockType;
+  periodLabel: string;
+}) {
+  return params.blockType === "lesson" ? null : params.periodLabel;
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
@@ -630,6 +726,485 @@ export async function getDutyRosterViewData(): Promise<DutyRosterViewData> {
       left.localeCompare(right, undefined, { numeric: true })
     )
   };
+}
+
+export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TIMETABLE_TEMPLATES_TABLE)
+    .select("id,name,school,designation,year_group,is_active")
+    .eq("is_active", true)
+    .order("year_group", { ascending: true })
+    .order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(normalizeTimetableTemplate);
+}
+
+export async function getTimetableStaffOptions(): Promise<TimetableStaffOption[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .select("id,name,first_name,department,photo_url")
+    .order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id ?? ""),
+    label: `${row.first_name ? String(row.first_name) : String(row.name ?? "Staff")}${row.department ? ` (${String(row.department)})` : ""}`,
+    firstName: row.first_name ? String(row.first_name) : null,
+    department: row.department ? String(row.department) : null,
+    photoUrl: row.photo_url ? String(row.photo_url) : null
+  }));
+}
+
+export async function getTimetableClassSummaries(): Promise<TimetableClassSummary[]> {
+  const [classRecords, templates] = await Promise.all([getClassRecords(), getTimetableTemplates()]);
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .select("id,class_name,template_id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const templateLookup = new Map(templates.map((template) => [template.id, template]));
+  const timetableByClassName = new Map(
+    ((data ?? []) as Array<Record<string, unknown>>).map((row) => [
+      String(row.class_name ?? ""),
+      {
+        id: String(row.id ?? ""),
+        templateId: row.template_id ? String(row.template_id) : null
+      }
+    ])
+  );
+
+  return classRecords
+    .map((row) => {
+      const timetable = timetableByClassName.get(row["Class Name"]);
+      const template = timetable?.templateId ? templateLookup.get(timetable.templateId) : null;
+
+      return {
+        className: row["Class Name"],
+        school: row.School,
+        designation: row.Designation,
+        yearGroup: row["Year Group"],
+        hasTimetable: Boolean(timetable),
+        timetableId: timetable?.id ?? null,
+        templateId: timetable?.templateId ?? null,
+        templateName: template?.name ?? null
+      };
+    })
+    .sort((left, right) =>
+      [left.school, left.designation, left.yearGroup, left.className]
+        .join("|")
+        .localeCompare([right.school, right.designation, right.yearGroup, right.className].join("|"), undefined, {
+          numeric: true
+        })
+    );
+}
+
+async function getClassTimetableRecordByClassName(className: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .select("id,class_name,template_id,created_at,updated_at")
+    .eq("class_name", className)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as Record<string, unknown> | null) ?? null;
+}
+
+async function getTimetablePeriodsByTemplate(templateId: string): Promise<TimetablePeriod[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TIMETABLE_PERIODS_TABLE)
+    .select("id,template_id,weekday,label,start_time,end_time,block_type,sort_order")
+    .eq("template_id", templateId)
+    .order("weekday")
+    .order("sort_order")
+    .order("start_time");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Record<string, unknown>[])
+    .map(normalizeTimetablePeriod)
+    .sort((left, right) => {
+      const daySort = weekdaySortValue(left.weekday) - weekdaySortValue(right.weekday);
+      if (daySort !== 0) {
+        return daySort;
+      }
+
+      if (left.sort_order !== right.sort_order) {
+        return left.sort_order - right.sort_order;
+      }
+
+      return left.start_time.localeCompare(right.start_time);
+    });
+}
+
+async function getTimetableBlocksForTimetable(
+  classTimetableId: string,
+  periods: TimetablePeriod[]
+): Promise<TimetableBlock[]> {
+  const supabase = createSupabaseAdminClient();
+  const [{ data: blockRows, error: blockError }, { data: linkRows, error: linkError }, staffOptions] =
+    await Promise.all([
+      supabase
+        .from(TIMETABLE_BLOCKS_TABLE)
+        .select(
+          "id,class_timetable_id,period_id,title,block_type,color,notes,start_time_override,end_time_override"
+        )
+        .eq("class_timetable_id", classTimetableId),
+      supabase
+        .from(TIMETABLE_BLOCK_STAFF_TABLE)
+        .select("block_id,staff_id")
+        .in(
+          "block_id",
+          (
+            await supabase
+              .from(TIMETABLE_BLOCKS_TABLE)
+              .select("id")
+              .eq("class_timetable_id", classTimetableId)
+          ).data?.map((row) => row.id) ?? [""]
+        ),
+      getTimetableStaffOptions()
+    ]);
+
+  if (blockError) {
+    throw new Error(blockError.message);
+  }
+
+  if (linkError) {
+    throw new Error(linkError.message);
+  }
+
+  const periodLookup = new Map(periods.map((period) => [period.id, period]));
+  const staffLookup = new Map(
+    staffOptions.map((option) => [
+      option.id,
+      {
+        staff_id: option.id,
+        staff_name: option.label.replace(/\s+\([^)]*\)$/, ""),
+        staff_first_name: option.firstName,
+        department: option.department,
+        photo_url: option.photoUrl
+      }
+    ])
+  );
+  const teachersByBlock = new Map<string, TimetableBlockStaffAssignment[]>();
+
+  ((linkRows ?? []) as Array<Record<string, unknown>>).forEach((row) => {
+    const blockId = String(row.block_id ?? "");
+    const staffId = String(row.staff_id ?? "");
+    const teacher = staffLookup.get(staffId);
+
+    if (!teacher) {
+      return;
+    }
+
+    const current = teachersByBlock.get(blockId) ?? [];
+    current.push(teacher);
+    teachersByBlock.set(blockId, current);
+  });
+
+  return ((blockRows ?? []) as Array<Record<string, unknown>>)
+    .map((row) => {
+      const period = periodLookup.get(String(row.period_id ?? ""));
+      if (!period) {
+        return null;
+      }
+
+      return {
+        id: String(row.id ?? ""),
+        class_timetable_id: String(row.class_timetable_id ?? ""),
+        period_id: String(row.period_id ?? ""),
+        weekday: period.weekday,
+        period_label: period.label,
+        start_time: period.start_time,
+        end_time: period.end_time,
+        block_type: normalizeTimetableBlockType(row.block_type ?? period.block_type),
+        title: row.title ? String(row.title) : null,
+        color: row.color ? String(row.color) : null,
+        notes: row.notes ? String(row.notes) : null,
+        start_time_override: row.start_time_override ? String(row.start_time_override) : null,
+        end_time_override: row.end_time_override ? String(row.end_time_override) : null,
+        sort_order: period.sort_order,
+        teachers: teachersByBlock.get(String(row.id ?? "")) ?? []
+      } satisfies TimetableBlock;
+    })
+    .filter((block): block is TimetableBlock => Boolean(block))
+    .sort((left, right) => {
+      const daySort = weekdaySortValue(left.weekday) - weekdaySortValue(right.weekday);
+      if (daySort !== 0) {
+        return daySort;
+      }
+
+      return left.sort_order - right.sort_order;
+    });
+}
+
+export async function getTimetableBuilderData(className: string): Promise<TimetableBuilderData> {
+  const normalizedClassName = className.trim();
+  const [classSummaries, templates, staffOptions, classTimetableRow] = await Promise.all([
+    getTimetableClassSummaries(),
+    getTimetableTemplates(),
+    getTimetableStaffOptions(),
+    getClassTimetableRecordByClassName(normalizedClassName)
+  ]);
+
+  const classSummary = classSummaries.find((entry) => entry.className === normalizedClassName);
+  if (!classSummary) {
+    throw new Error(`Class ${normalizedClassName} was not found.`);
+  }
+
+  const templateLookup = new Map(templates.map((template) => [template.id, template]));
+  const timetable = classTimetableRow ? normalizeClassTimetable(classTimetableRow, templateLookup) : null;
+  const periods = timetable ? await getTimetablePeriodsByTemplate(timetable.template_id) : [];
+  const blocks = timetable ? await getTimetableBlocksForTimetable(timetable.id, periods) : [];
+
+  return {
+    classSummary,
+    templates,
+    timetable,
+    periods,
+    blocks,
+    staffOptions
+  };
+}
+
+export async function createClassTimetable(input: { className: string; templateId: string }) {
+  const className = input.className.trim();
+  if (!className) {
+    throw new Error("className is required.");
+  }
+
+  if (!input.templateId) {
+    throw new Error("templateId is required.");
+  }
+
+  const [classSummaries, templates, periods, existingTimetable] = await Promise.all([
+    getTimetableClassSummaries(),
+    getTimetableTemplates(),
+    getTimetablePeriodsByTemplate(input.templateId),
+    getClassTimetableRecordByClassName(className)
+  ]);
+
+  if (!classSummaries.some((entry) => entry.className === className)) {
+    throw new Error(`Class ${className} was not found.`);
+  }
+
+  if (!templates.some((template) => template.id === input.templateId)) {
+    throw new Error("Selected timetable template was not found.");
+  }
+
+  if (existingTimetable) {
+    throw new Error(`A timetable already exists for ${className}.`);
+  }
+
+  if (!periods.length) {
+    throw new Error("Selected template has no periods.");
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .insert({
+      class_name: className,
+      template_id: input.templateId
+    })
+    .select("id,class_name,template_id,created_at,updated_at")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const classTimetableId = String(data.id);
+  const blockRows = periods.map((period) => {
+    const blockType = normalizeTimetableBlockType(period.block_type);
+    return {
+      class_timetable_id: classTimetableId,
+      period_id: period.id,
+      title: defaultTitleForTimetableType({ blockType, periodLabel: period.label }),
+      block_type: blockType,
+      color: defaultColorForTimetableType(blockType),
+      notes: null,
+      start_time_override: null,
+      end_time_override: null
+    };
+  });
+
+  const { error: blockError } = await supabase.from(TIMETABLE_BLOCKS_TABLE).insert(blockRows);
+  if (blockError) {
+    throw new Error(blockError.message);
+  }
+
+  return data;
+}
+
+export async function upsertTimetableBlock(input: {
+  className: string;
+  blockId: string;
+  title: string | null;
+  blockType: TimetableBlockType;
+  color: string | null;
+  notes?: string | null;
+  staffIds: string[];
+}) {
+  const className = input.className.trim();
+  const classTimetable = await getClassTimetableRecordByClassName(className);
+  if (!classTimetable) {
+    throw new Error(`No timetable exists for ${className}.`);
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: blockRow, error: blockLookupError } = await supabase
+    .from(TIMETABLE_BLOCKS_TABLE)
+    .select("id,class_timetable_id,period_id")
+    .eq("id", input.blockId)
+    .eq("class_timetable_id", String(classTimetable.id))
+    .maybeSingle();
+
+  if (blockLookupError) {
+    throw new Error(blockLookupError.message);
+  }
+
+  if (!blockRow) {
+    throw new Error("Selected timetable block was not found.");
+  }
+
+  const uniqueStaffIds = Array.from(new Set(input.staffIds.filter(Boolean)));
+  if (uniqueStaffIds.length) {
+    const { data: staffRows, error: staffError } = await supabase
+      .from(STAFF_TABLE)
+      .select("id")
+      .in("id", uniqueStaffIds);
+
+    if (staffError) {
+      throw new Error(staffError.message);
+    }
+
+    const validIds = new Set(((staffRows ?? []) as Array<{ id: string }>).map((row) => String(row.id)));
+    const invalidId = uniqueStaffIds.find((staffId) => !validIds.has(staffId));
+    if (invalidId) {
+      throw new Error(`Teacher ${invalidId} is not a valid staff member.`);
+    }
+  }
+
+  const normalizedBlockType = normalizeTimetableBlockType(input.blockType);
+  const { error: updateError } = await supabase
+    .from(TIMETABLE_BLOCKS_TABLE)
+    .update({
+      title: input.title?.trim() ? input.title.trim() : defaultTitleForTimetableType({
+        blockType: normalizedBlockType,
+        periodLabel: ""
+      }),
+      block_type: normalizedBlockType,
+      color: input.color?.trim() ? input.color.trim() : defaultColorForTimetableType(normalizedBlockType),
+      notes: input.notes?.trim() ? input.notes.trim() : null
+    })
+    .eq("id", input.blockId)
+    .eq("class_timetable_id", String(classTimetable.id));
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const { error: deleteLinksError } = await supabase
+    .from(TIMETABLE_BLOCK_STAFF_TABLE)
+    .delete()
+    .eq("block_id", input.blockId);
+
+  if (deleteLinksError) {
+    throw new Error(deleteLinksError.message);
+  }
+
+  if (uniqueStaffIds.length) {
+    const { error: insertLinksError } = await supabase.from(TIMETABLE_BLOCK_STAFF_TABLE).insert(
+      uniqueStaffIds.map((staffId) => ({
+        block_id: input.blockId,
+        staff_id: staffId
+      }))
+    );
+
+    if (insertLinksError) {
+      throw new Error(insertLinksError.message);
+    }
+  }
+}
+
+export async function resetTimetableBlock(input: { className: string; blockId: string }) {
+  const classTimetable = await getClassTimetableRecordByClassName(input.className.trim());
+  if (!classTimetable) {
+    throw new Error(`No timetable exists for ${input.className}.`);
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: blockRow, error: blockError } = await supabase
+    .from(TIMETABLE_BLOCKS_TABLE)
+    .select("id,class_timetable_id,period_id")
+    .eq("id", input.blockId)
+    .eq("class_timetable_id", String(classTimetable.id))
+    .maybeSingle();
+
+  if (blockError) {
+    throw new Error(blockError.message);
+  }
+
+  if (!blockRow) {
+    throw new Error("Selected timetable block was not found.");
+  }
+
+  const { data: periodRow, error: periodError } = await supabase
+    .from(TIMETABLE_PERIODS_TABLE)
+    .select("id,label,block_type")
+    .eq("id", String(blockRow.period_id))
+    .single();
+
+  if (periodError) {
+    throw new Error(periodError.message);
+  }
+
+  const blockType = normalizeTimetableBlockType(periodRow.block_type);
+  const { error: updateError } = await supabase
+    .from(TIMETABLE_BLOCKS_TABLE)
+    .update({
+      title: defaultTitleForTimetableType({ blockType, periodLabel: String(periodRow.label ?? "") }),
+      block_type: blockType,
+      color: defaultColorForTimetableType(blockType),
+      notes: null,
+      start_time_override: null,
+      end_time_override: null
+    })
+    .eq("id", input.blockId)
+    .eq("class_timetable_id", String(classTimetable.id));
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  const { error: deleteLinksError } = await supabase
+    .from(TIMETABLE_BLOCK_STAFF_TABLE)
+    .delete()
+    .eq("block_id", input.blockId);
+
+  if (deleteLinksError) {
+    throw new Error(deleteLinksError.message);
+  }
 }
 
 export async function getGradebookSubjectById(subjectId: string): Promise<GradebookSubject | null> {

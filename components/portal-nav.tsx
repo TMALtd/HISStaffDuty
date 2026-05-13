@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/gradebook", label: "Gradebook" },
   { href: "/duties", label: "Duty" },
   { href: "/duties/roster", label: "Duty Roster" },
+  { href: "/timetables", label: "Timetables" },
   { href: "/directory", label: "Directory" },
   { href: "/admin/gradebook", label: "Setup" }
 ];
