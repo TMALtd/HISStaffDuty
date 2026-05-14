@@ -79,7 +79,32 @@ function minutesBetween(startTime: string, endTime: string) {
 }
 
 function rowHeightForMinutes(minutes: number) {
-  return Math.max(Math.round(minutes * 1.45), 34);
+  if (minutes <= 10) {
+    return 36;
+  }
+  if (minutes <= 15) {
+    return 44;
+  }
+  if (minutes <= 20) {
+    return 56;
+  }
+  if (minutes <= 30) {
+    return 70;
+  }
+  if (minutes <= 40) {
+    return 92;
+  }
+
+  return Math.round(minutes * 2.15);
+}
+
+function formatDisplayTime(value: string) {
+  const [hour, minute] = value.split(":");
+  return `${hour}:${minute}`;
+}
+
+function timeRangeLabel(startTime: string, endTime: string) {
+  return `${formatDisplayTime(startTime)}-${formatDisplayTime(endTime)}`;
 }
 
 function initialsForTeacher(teacher: { staff_first_name: string | null; staff_name: string }) {
@@ -175,6 +200,17 @@ function textColorForBackground(color: string | null) {
 
 function labelForBlock(block: TimetableBlock) {
   return block.title?.trim() || block.period_label;
+}
+
+function blockDensityClass(block: TimetableBlock) {
+  const minutes = minutesBetween(block.start_time, block.end_time);
+  if (minutes <= 15) {
+    return "is-tight";
+  }
+  if (minutes <= 20) {
+    return "is-compact";
+  }
+  return "";
 }
 
 export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
@@ -594,15 +630,14 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
               className={`timetable-export-surface${isExportingImage ? " is-export-clean" : ""}`}
               ref={exportRef}
             >
-              <div className="timetable-export-header">
-                <div>
-                  <p className="eyebrow">Class timetable</p>
-                  <h2 className="timetable-export-title">{data.classSummary.className}</h2>
-                  <p className="timetable-export-copy">
+              <div className="timetable-export-bar">
+                <div className="timetable-export-class">
+                  <strong>{data.classSummary.className}</strong>
+                  <span>
                     {data.classSummary.school} | {data.classSummary.designation} | {data.classSummary.yearGroup}
-                  </p>
+                  </span>
                 </div>
-                <div className="timetable-export-chip">{data.timetable.template_name}</div>
+                <div className="timetable-export-template">{data.timetable.template_name}</div>
               </div>
 
               <div className="timetable-board">
@@ -619,7 +654,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                         return (
                           <button
                             key={block.id}
-                            className="timetable-block-card"
+                            className={`timetable-block-card ${blockDensityClass(block)}`.trim()}
                             type="button"
                             style={{
                               gridRow: `${rowStart} / ${rowEnd}`,
@@ -633,7 +668,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                               <span className="timetable-block-edit">✎</span>
                             </div>
                             <div className="timetable-block-meta">
-                              {block.start_time}-{block.end_time}
+                              {timeRangeLabel(block.start_time, block.end_time)}
                             </div>
                             <div className="timetable-block-meta muted-block-meta">
                               {BLOCK_TYPE_LABELS[block.block_type]}
