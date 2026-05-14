@@ -62,6 +62,15 @@ const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
 };
 const TIMETABLE_SETUP_MESSAGE =
   "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
+const SPECIALIST_SUBJECT_COLORS: Record<string, string> = {
+  BM: "#d95c02",
+  Mandarin: "#d5b8ee",
+  "P.E.": "#1d4ed8",
+  Library: "#6b7280",
+  Music: "#efbadf",
+  Coding: "#76ddd1",
+  Assembly: "#f59e0b"
+};
 const TIMETABLE_YEAR_GROUP_ORDER = [
   "Preschool 1",
   "Preschool 2",
@@ -348,6 +357,123 @@ function compareTimetableClassSummaries(left: TimetableClassSummary, right: Time
   }
 
   return left.designation.localeCompare(right.designation, undefined, { numeric: true });
+}
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentCell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      currentRow.push(currentCell);
+      currentCell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") {
+        index += 1;
+      }
+
+      currentRow.push(currentCell);
+      if (currentRow.some((cell) => cell.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = "";
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  currentRow.push(currentCell);
+  if (currentRow.some((cell) => cell.length > 0)) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+}
+
+function normalizeCsvTimeValue(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{1,2})[.:](\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (hour >= 1 && hour <= 6) {
+    hour += 12;
+  }
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function normalizeCsvTimeRange(value: string) {
+  const match = value.trim().match(/^(.+?)\s*-\s*(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const startTime = normalizeCsvTimeValue(match[1]);
+  const endTime = normalizeCsvTimeValue(match[2]);
+
+  if (!startTime || !endTime) {
+    return null;
+  }
+
+  return { startTime, endTime };
+}
+
+function normalizeSpecialistSubjectLabel(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  const upper = trimmed.toUpperCase().replace(/\./g, "");
+
+  if (upper === "BM" || upper === "BAHASA MELAYU") {
+    return "BM";
+  }
+  if (upper === "MANDARIN") {
+    return "Mandarin";
+  }
+  if (upper === "PE" || upper === "P E") {
+    return "P.E.";
+  }
+  if (upper === "LIBRARY") {
+    return "Library";
+  }
+  if (upper === "MUSIC") {
+    return "Music";
+  }
+  if (upper === "CODING") {
+    return "Coding";
+  }
+  if (upper === "ASSEMBLY") {
+    return "Assembly";
+  }
+
+  return trimmed;
+}
+
+function specialistSubjectColor(subject: string) {
+  return SPECIALIST_SUBJECT_COLORS[subject] ?? "#8be6a8";
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
@@ -1235,6 +1361,157 @@ export async function deleteClassTimetable(input: { className: string }) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+export async function bulkImportSpecialistCsv(input: { csvText: string }) {
+  const rows = parseCsvRows(input.csvText);
+  if (rows.length < 2) {
+    throw new Error("The CSV file is empty or could not be read.");
+  }
+
+  const headerRow = rows.find((row) => row[1]?.trim().toLowerCase() === "time");
+  if (!headerRow) {
+    throw new Error("Could not find the timetable header row in the CSV.");
+  }
+
+  const headerIndex = rows.indexOf(headerRow);
+  const weekdayColumns = headerRow
+    .map((value, index) => ({
+      index,
+      weekday: value.trim().toLowerCase()
+    }))
+    .filter((entry) =>
+      ["monday", "tuesday", "wednesday", "thursday", "friday"].includes(entry.weekday)
+    );
+
+  if (!weekdayColumns.length) {
+    throw new Error("Could not find weekday columns in the CSV.");
+  }
+
+  const timetableClasses = (await getTimetableClassSummaries()).filter((entry) => entry.hasTimetable);
+  const knownClassNames = timetableClasses
+    .map((entry) => entry.className)
+    .sort((left, right) => right.length - left.length);
+
+  const assignments: Array<{
+    className: string;
+    weekday: string;
+    startTime: string;
+    endTime: string;
+    subject: string;
+  }> = [];
+
+  rows.slice(headerIndex + 1).forEach((row) => {
+    const timeValue = row[1]?.trim() ?? "";
+    const timeRange = normalizeCsvTimeRange(timeValue);
+    if (!timeRange) {
+      return;
+    }
+
+    weekdayColumns.forEach(({ index, weekday }) => {
+      const rawCell = row[index]?.trim() ?? "";
+      if (!rawCell) {
+        return;
+      }
+
+      rawCell
+        .split(/\n+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          const compactLine = line.replace(/\s+/g, " ").trim();
+          if (
+            /break|lunch|dismissal/i.test(compactLine) &&
+            !/^library\s+/i.test(compactLine)
+          ) {
+            return;
+          }
+
+          const matchedClasses = knownClassNames.filter((className) => compactLine.includes(className));
+          if (!matchedClasses.length) {
+            return;
+          }
+
+          const firstMatchIndex = matchedClasses.reduce((lowest, className) => {
+            const indexValue = compactLine.indexOf(className);
+            return lowest === -1 || indexValue < lowest ? indexValue : lowest;
+          }, -1);
+
+          const subject = normalizeSpecialistSubjectLabel(
+            compactLine.slice(0, firstMatchIndex).replace(/[,\s]+$/, "")
+          );
+
+          matchedClasses.forEach((className) => {
+            assignments.push({
+              className,
+              weekday,
+              startTime: timeRange.startTime,
+              endTime: timeRange.endTime,
+              subject
+            });
+          });
+        });
+    });
+  });
+
+  if (!assignments.length) {
+    throw new Error("No specialist lesson assignments were found in the CSV.");
+  }
+
+  const classNames = Array.from(new Set(assignments.map((entry) => entry.className)));
+  const summaryByClass = new Map(
+    classNames.map((className) => [
+      className,
+      {
+        className,
+        updatedCount: 0
+      }
+    ])
+  );
+
+  for (const className of classNames) {
+    const builderData = await getTimetableBuilderData(className);
+    if (!builderData.timetable) {
+      continue;
+    }
+
+    const classAssignments = assignments.filter((entry) => entry.className === className);
+    const assignmentBySlot = new Map(
+      classAssignments.map((entry) => [
+        `${entry.weekday}|${entry.startTime}|${entry.endTime}`,
+        entry
+      ])
+    );
+
+    for (const block of builderData.blocks) {
+      const slotKey = `${block.weekday}|${block.start_time}|${block.end_time}`;
+      const assignment = assignmentBySlot.get(slotKey);
+      if (!assignment) {
+        continue;
+      }
+
+      await upsertTimetableBlock({
+        className,
+        blockId: block.id,
+        title: assignment.subject,
+        blockType: "lesson",
+        color: specialistSubjectColor(assignment.subject),
+        notes: "Imported from specialist timetable CSV.",
+        staffIds: []
+      });
+
+      const summary = summaryByClass.get(className);
+      if (summary) {
+        summary.updatedCount += 1;
+      }
+    }
+  }
+
+  return {
+    importedClassCount: classNames.length,
+    assignmentCount: assignments.length,
+    classes: Array.from(summaryByClass.values())
+  };
 }
 
 export async function upsertTimetableBlock(input: {

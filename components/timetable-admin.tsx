@@ -21,6 +21,8 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
   const [error, setError] = useState(setupMessage ?? "");
   const [isCreating, setIsCreating] = useState(false);
   const [deletingClassName, setDeletingClassName] = useState("");
+  const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const filteredClasses = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -116,6 +118,53 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     }
   }
 
+  async function importSpecialistCsv(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("");
+    setError("");
+
+    if (!selectedCsvFile) {
+      setError("Choose a CSV file before importing.");
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      const csvText = await selectedCsvFile.text();
+      const response = await fetch("/api/timetables/import-specialist", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ csvText })
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        result?: {
+          importedClassCount: number;
+          assignmentCount: number;
+          classes: Array<{ className: string; updatedCount: number }>;
+        };
+      };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not import specialist CSV.");
+      }
+
+      await refreshClasses();
+      setSelectedCsvFile(null);
+      setStatus(
+        `Imported ${json.result?.assignmentCount ?? 0} specialist lesson assignments across ${json.result?.importedClassCount ?? 0} timetables.`
+      );
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Could not import specialist CSV.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -176,29 +225,51 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
             </div>
           </form>
 
-          <div className="mi-card">
-            <h2 className="mi-title">Template library</h2>
-            <div className="breakdown-list">
-              {templates.map((template) => (
-                <div className="breakdown-row" key={template.id}>
-                  <span>
-                    {template.name}
-                    {template.year_group ? ` | ${template.year_group}` : ""}
-                  </span>
-                  <strong>{template.school ?? "All school"}</strong>
-                </div>
-              ))}
-              {!templates.length ? (
-                <div className="empty-state compact">
-                  No timetable templates are available yet. Add them in Supabase first.
-                </div>
-              ) : null}
+          <form className="mi-card" onSubmit={importSpecialistCsv}>
+            <h2 className="mi-title">Bulk import specialist CSV</h2>
+            <div className="field">
+              <label htmlFor="specialistCsv">CSV file</label>
+              <input
+                id="specialistCsv"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setSelectedCsvFile(event.target.files?.[0] ?? null)}
+              />
             </div>
-          </div>
+            <p className="hint">
+              Use this for specialist overview CSV files. The importer matches lesson times and
+              updates existing class timetables mentioned in the file.
+            </p>
+            <div className="actions">
+              <button className="button" type="submit" disabled={isImporting}>
+                {isImporting ? "Importing..." : "Import Specialist Lessons"}
+              </button>
+            </div>
+          </form>
         </div>
 
         {status ? <div className="banner">{status}</div> : null}
         {error ? <div className="banner error-banner">{error}</div> : null}
+      </section>
+
+      <section className="panel">
+        <h2 className="panel-title">Template library</h2>
+        <div className="breakdown-list">
+          {templates.map((template) => (
+            <div className="breakdown-row" key={template.id}>
+              <span>
+                {template.name}
+                {template.year_group ? ` | ${template.year_group}` : ""}
+              </span>
+              <strong>{template.school ?? "All school"}</strong>
+            </div>
+          ))}
+          {!templates.length ? (
+            <div className="empty-state compact">
+              No timetable templates are available yet. Add them in Supabase first.
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <section className="panel">
