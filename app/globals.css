@@ -527,9 +527,13 @@ tr:last-child td {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
+  min-width: 1080px;
+  align-items: stretch;
 }
 
 .timetable-day-column {
+  display: grid;
+  grid-template-rows: auto 1fr;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.72);
@@ -544,10 +548,11 @@ tr:last-child td {
   background: rgba(255, 250, 245, 0.95);
 }
 
-.timetable-day-stack {
+.timetable-day-grid {
   display: grid;
   gap: 2px;
   padding: 8px;
+  align-content: stretch;
 }
 
 .timetable-block-card {
@@ -557,6 +562,8 @@ tr:last-child td {
   padding: 10px 10px 12px;
   cursor: pointer;
   text-align: left;
+  display: flex;
+  flex-direction: column;
   box-shadow: inset 0 0 0 1px rgba(38, 23, 24, 0.06);
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
@@ -576,6 +583,7 @@ tr:last-child td {
 .timetable-block-meta {
   margin-top: 4px;
   font-size: 0.84rem;
+  line-height: 1.2;
 }
 
 .muted-block-meta {
@@ -608,6 +616,50 @@ tr:last-child td {
 
 .timetable-modal {
   width: min(560px, calc(100vw - 32px));
+}
+
+.timetable-board-scroll {
+  overflow-x: auto;
+}
+
+.timetable-export-surface {
+  min-width: 1120px;
+  border: 1px solid rgba(38, 23, 24, 0.1);
+  border-radius: 24px;
+  background: #fffdf8;
+  padding: 20px;
+  box-shadow: 0 18px 45px rgba(38, 23, 24, 0.08);
+}
+
+.timetable-export-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.timetable-export-title {
+  margin: 4px 0 0;
+  font-size: 2rem;
+}
+
+.timetable-export-copy {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.timetable-export-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(38, 23, 24, 0.1);
+  background: rgba(255, 250, 245, 0.95);
+  padding: 10px 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.timetable-export-surface.is-export-clean .timetable-block-edit {
+  opacity: 0;
 }
 
 .timetable-editor-grid {
@@ -1515,7 +1567,53 @@ tr:last-child td {
     align-items: flex-start;
   }
 
-  .timetable-day-stack {
+  .timetable-day-grid {
     padding: 10px;
+  }
+
+  .timetable-export-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .timetable-export-surface {
+    min-width: 0;
+    padding: 16px;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .timetable-export-surface,
+  .timetable-export-surface * {
+    visibility: visible;
+  }
+
+  .timetable-export-surface {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 16mm;
+  }
+
+  .timetable-board {
+    min-width: 0;
+  }
+
+  .timetable-block-card {
+    cursor: default;
+    break-inside: avoid;
+  }
+
+  .timetable-block-edit {
+    display: none;
   }
 }

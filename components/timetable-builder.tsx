@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { toPng } from "html-to-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   TimetableBlock,
   TimetableBlockType,
@@ -17,10 +18,22 @@ type TimetableBuilderProps = {
 
 type EditableBlockDraft = {
   blockId: string;
+  targetBlockIds: string[];
   title: string;
   blockType: TimetableBlockType;
   color: string;
   staffIds: string[];
+};
+
+type MergedTimetableBlock = TimetableBlock & {
+  mergedIds: string[];
+};
+
+type TimetableRowSegment = {
+  key: string;
+  startTime: string;
+  endTime: string;
+  minutes: number;
 };
 
 type TimetableClassesResponse = {
@@ -65,6 +78,10 @@ function minutesBetween(startTime: string, endTime: string) {
   return endHour * 60 + endMinute - (startHour * 60 + startMinute);
 }
 
+function rowHeightForMinutes(minutes: number) {
+  return Math.max(Math.round(minutes * 1.45), 34);
+}
+
 function initialsForTeacher(teacher: { staff_first_name: string | null; staff_name: string }) {
   const source = teacher.staff_first_name || teacher.staff_name;
   return source
@@ -100,7 +117,7 @@ function blockSignature(block: TimetableBlock) {
 
 function mergedBlocksForDay(blocks: TimetableBlock[]) {
   const sorted = [...blocks].sort((left, right) => left.sort_order - right.sort_order);
-  const merged: Array<TimetableBlock & { mergedIds: string[]; mergedEndTime: string }> = [];
+  const merged: MergedTimetableBlock[] = [];
 
   sorted.forEach((block) => {
     const current = merged[merged.length - 1];
@@ -110,24 +127,37 @@ function mergedBlocksForDay(blocks: TimetableBlock[]) {
       current.end_time === block.start_time
     ) {
       current.end_time = block.end_time;
-      current.mergedEndTime = block.end_time;
       current.mergedIds.push(block.id);
       return;
     }
 
     merged.push({
       ...block,
-      mergedIds: [block.id],
-      mergedEndTime: block.end_time
+      mergedIds: [block.id]
     });
   });
 
   return merged;
 }
 
-function cardHeight(block: TimetableBlock) {
-  const minutes = Math.max(minutesBetween(block.start_time, block.end_time), 20);
-  return Math.min(Math.max(minutes * 1.55, 54), 172);
+function buildTimetableRowSegments(blocks: TimetableBlock[]) {
+  const boundaryValues = Array.from(
+    new Set(blocks.flatMap((block) => [block.start_time, block.end_time]))
+  ).sort((left, right) => minutesBetween("00:00:00", left) - minutesBetween("00:00:00", right));
+
+  const segments: TimetableRowSegment[] = [];
+  for (let index = 0; index < boundaryValues.length - 1; index += 1) {
+    const startTime = boundaryValues[index];
+    const endTime = boundaryValues[index + 1];
+    segments.push({
+      key: `${startTime}-${endTime}`,
+      startTime,
+      endTime,
+      minutes: minutesBetween(startTime, endTime)
+    });
+  }
+
+  return segments;
 }
 
 function textColorForBackground(color: string | null) {
@@ -149,6 +179,7 @@ function labelForBlock(block: TimetableBlock) {
 
 export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const router = useRouter();
+  const exportRef = useRef<HTMLDivElement | null>(null);
   const [data, setData] = useState(initialData);
   const [classOptions, setClassOptions] = useState<TimetableClassSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialData.timetable?.template_id ?? initialData.templates[0]?.id ?? "");
@@ -158,6 +189,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [isDeletingTimetable, setIsDeletingTimetable] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
 
   useEffect(() => {
     setData(initialData);
@@ -180,8 +212,35 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     })();
   }, []);
 
+  const rowSegments = useMemo(() => buildTimetableRowSegments(data.blocks), [data.blocks]);
+  const boardRowTemplate = useMemo(
+    () => rowSegments.map((segment) => `${rowHeightForMinutes(segment.minutes)}px`).join(" "),
+    [rowSegments]
+  );
+  const rowLineByTime = useMemo(
+    () => new Map(rowSegments.flatMap((segment, index) => [[segment.startTime, index + 1], [segment.endTime, index + 2]])),
+    [rowSegments]
+  );
+
+  const dayColumns = useMemo(
+    () =>
+      WEEKDAYS.map((day) => {
+        const dayBlocks = data.blocks.filter((block) => block.weekday === day.key);
+        return {
+          ...day,
+          blocks: mergedBlocksForDay(dayBlocks)
+        };
+      }),
+    [data.blocks]
+  );
+
+  const visibleBlocks = useMemo(
+    () => dayColumns.flatMap((day) => day.blocks),
+    [dayColumns]
+  );
+
   const selectedBlock = selectedBlockId
-    ? data.blocks.find((block) => block.id === selectedBlockId) ?? null
+    ? visibleBlocks.find((block) => block.id === selectedBlockId) ?? null
     : null;
 
   async function refreshBuilderData() {
@@ -257,10 +316,11 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     }
   }
 
-  function openEditor(block: TimetableBlock) {
+  function openEditor(block: MergedTimetableBlock) {
     setSelectedBlockId(block.id);
     setDraft({
       blockId: block.id,
+      targetBlockIds: block.mergedIds,
       title: block.title ?? "",
       blockType: block.block_type,
       color: block.color ?? "#8be6a8",
@@ -278,26 +338,28 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     setError("");
 
     try {
-      const response = await fetch(
-        `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            blockId: draft.blockId,
-            title: draft.title,
-            blockType: draft.blockType,
-            color: draft.color,
-            staffIds: draft.staffIds
-          })
-        }
-      );
+      for (const targetBlockId of draft.targetBlockIds) {
+        const response = await fetch(
+          `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              blockId: targetBlockId,
+              title: draft.title,
+              blockType: draft.blockType,
+              color: draft.color,
+              staffIds: draft.staffIds
+            })
+          }
+        );
 
-      const json = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(json.error ?? "Could not save timetable block.");
+        const json = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          throw new Error(json.error ?? "Could not save timetable block.");
+        }
       }
 
       await refreshBuilderData();
@@ -312,7 +374,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   async function resetBlock() {
-    if (!selectedBlock) {
+    if (!selectedBlock || !draft) {
       return;
     }
 
@@ -321,16 +383,18 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     setError("");
 
     try {
-      const response = await fetch(
-        `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks/${encodeURIComponent(selectedBlock.id)}`,
-        {
-          method: "DELETE"
-        }
-      );
+      for (const targetBlockId of draft.targetBlockIds) {
+        const response = await fetch(
+          `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks/${encodeURIComponent(targetBlockId)}`,
+          {
+            method: "DELETE"
+          }
+        );
 
-      const json = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(json.error ?? "Could not reset timetable block.");
+        const json = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          throw new Error(json.error ?? "Could not reset timetable block.");
+        }
       }
 
       await refreshBuilderData();
@@ -342,6 +406,41 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  async function exportAsPng() {
+    if (!exportRef.current) {
+      return;
+    }
+
+    setIsExportingImage(true);
+    setStatus("");
+    setError("");
+
+    try {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+      const dataUrl = await toPng(exportRef.current, {
+        cacheBust: true,
+        backgroundColor: "#fffdf8",
+        pixelRatio: 2
+      });
+
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-timetable.png`;
+      link.click();
+      setStatus("Timetable PNG downloaded.");
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Could not export PNG.");
+    } finally {
+      setIsExportingImage(false);
+    }
+  }
+
+  function exportAsPdf() {
+    setStatus("Print dialog opened. Choose Save as PDF to download.");
+    setError("");
+    window.print();
   }
 
   function updateTeacher(index: number, staffId: string) {
@@ -372,14 +471,6 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       staffIds: Array.from(new Set([...draft.staffIds, staffId]))
     });
   }
-
-  const dayColumns = WEEKDAYS.map((day) => {
-    const dayBlocks = data.blocks.filter((block) => block.weekday === day.key);
-    return {
-      ...day,
-      blocks: mergedBlocksForDay(dayBlocks)
-    };
-  });
 
   return (
     <div className="dashboard-grid">
@@ -452,6 +543,16 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
               {data.timetable ? `Live builder using ${data.timetable.template_name}` : "No timetable created yet"}
             </div>
           </div>
+          {data.timetable ? (
+            <div className="actions timetable-toolbar-actions">
+              <button className="button secondary" type="button" onClick={() => exportAsPdf()}>
+                Export PDF
+              </button>
+              <button className="button secondary" type="button" onClick={() => void exportAsPng()} disabled={isExportingImage}>
+                {isExportingImage ? "Exporting..." : "Export PNG"}
+              </button>
+            </div>
+          ) : null}
           {!data.timetable ? (
             <div className="actions timetable-toolbar-actions">
               <button className="button" type="button" onClick={() => void createTimetable()} disabled={isBusy}>
@@ -488,51 +589,72 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
       <section className="panel">
         {data.timetable ? (
-          <div className="timetable-board">
-            {dayColumns.map((day) => (
-              <article className="timetable-day-column" key={day.key}>
-                <header className="timetable-day-header">{day.label}</header>
-                <div className="timetable-day-stack">
-                  {day.blocks.map((block) => {
-                    const background = block.color ?? "#8be6a8";
-                    const foreground = textColorForBackground(background);
-                    return (
-                      <button
-                        key={block.id}
-                        className="timetable-block-card"
-                        type="button"
-                        style={{
-                          minHeight: `${cardHeight(block)}px`,
-                          background,
-                          color: foreground
-                        }}
-                        onClick={() => openEditor(block)}
-                      >
-                        <div className="timetable-block-topline">
-                          <strong>{labelForBlock(block)}</strong>
-                          <span className="timetable-block-edit">✎</span>
-                        </div>
-                        <div className="timetable-block-meta">
-                          {block.start_time}-{block.end_time}
-                        </div>
-                        <div className="timetable-block-meta muted-block-meta">
-                          {BLOCK_TYPE_LABELS[block.block_type]}
-                        </div>
-                        {block.teachers.length ? (
-                          <div className="timetable-teacher-strip">
-                            {block.teachers.map((teacher) => (
-                              <span className="timetable-teacher-badge" key={`${block.id}-${teacher.staff_id}`}>
-                                {initialsForTeacher(teacher)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+          <div className="timetable-board-scroll">
+            <div
+              className={`timetable-export-surface${isExportingImage ? " is-export-clean" : ""}`}
+              ref={exportRef}
+            >
+              <div className="timetable-export-header">
+                <div>
+                  <p className="eyebrow">Class timetable</p>
+                  <h2 className="timetable-export-title">{data.classSummary.className}</h2>
+                  <p className="timetable-export-copy">
+                    {data.classSummary.school} | {data.classSummary.designation} | {data.classSummary.yearGroup}
+                  </p>
                 </div>
-              </article>
-            ))}
+                <div className="timetable-export-chip">{data.timetable.template_name}</div>
+              </div>
+
+              <div className="timetable-board">
+                {dayColumns.map((day) => (
+                  <article className="timetable-day-column" key={day.key}>
+                    <header className="timetable-day-header">{day.label}</header>
+                    <div className="timetable-day-grid" style={{ gridTemplateRows: boardRowTemplate }}>
+                      {day.blocks.map((block) => {
+                        const background = block.color ?? "#8be6a8";
+                        const foreground = textColorForBackground(background);
+                        const rowStart = rowLineByTime.get(block.start_time) ?? 1;
+                        const rowEnd = rowLineByTime.get(block.end_time) ?? rowStart + 1;
+
+                        return (
+                          <button
+                            key={block.id}
+                            className="timetable-block-card"
+                            type="button"
+                            style={{
+                              gridRow: `${rowStart} / ${rowEnd}`,
+                              background,
+                              color: foreground
+                            }}
+                            onClick={() => openEditor(block)}
+                          >
+                            <div className="timetable-block-topline">
+                              <strong>{labelForBlock(block)}</strong>
+                              <span className="timetable-block-edit">✎</span>
+                            </div>
+                            <div className="timetable-block-meta">
+                              {block.start_time}-{block.end_time}
+                            </div>
+                            <div className="timetable-block-meta muted-block-meta">
+                              {BLOCK_TYPE_LABELS[block.block_type]}
+                            </div>
+                            {block.teachers.length ? (
+                              <div className="timetable-teacher-strip">
+                                {block.teachers.map((teacher) => (
+                                  <span className="timetable-teacher-badge" key={`${block.id}-${teacher.staff_id}`}>
+                                    {initialsForTeacher(teacher)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="empty-state">
