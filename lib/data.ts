@@ -62,6 +62,24 @@ const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
 };
 const TIMETABLE_SETUP_MESSAGE =
   "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
+const TIMETABLE_YEAR_GROUP_ORDER = [
+  "Preschool 1",
+  "Preschool 2",
+  "Preschool",
+  "Year 1",
+  "Year 2",
+  "Year 3",
+  "Year 4",
+  "Year 5",
+  "Year 6",
+  "Year 7",
+  "Year 8",
+  "Year 9",
+  "Year 10",
+  "Year 11",
+  "Year 12",
+  "Year 13"
+] as const;
 
 function normalizeFilterState(filters: Partial<FilterState>): FilterState {
   return {
@@ -252,6 +270,84 @@ function isMissingSupabaseRelationError(error: unknown, tableName: string) {
       message.includes("Could not find the table") ||
       message.includes("PGRST205"))
   );
+}
+
+function timetableYearGroupOrderValue(yearGroup: string) {
+  const trimmed = yearGroup.trim();
+  const explicitIndex = TIMETABLE_YEAR_GROUP_ORDER.findIndex(
+    (value) => value.toLowerCase() === trimmed.toLowerCase()
+  );
+
+  if (explicitIndex !== -1) {
+    return explicitIndex;
+  }
+
+  const match = trimmed.match(/year\s*(\d+)/i);
+  if (match) {
+    return TIMETABLE_YEAR_GROUP_ORDER.length + Number(match[1]);
+  }
+
+  return TIMETABLE_YEAR_GROUP_ORDER.length + 999;
+}
+
+function timetableClassNameSortValue(className: string) {
+  const trimmed = className.trim();
+
+  if (/^preschool\s*1\b/i.test(trimmed)) {
+    return { family: 0, number: 1, label: trimmed };
+  }
+
+  if (/^preschool\s*2\b/i.test(trimmed)) {
+    return { family: 0, number: 2, label: trimmed };
+  }
+
+  const numberedMatch = trimmed.match(/^(\d+)\s+(.+)$/);
+  if (numberedMatch) {
+    return {
+      family: 1,
+      number: Number(numberedMatch[1]),
+      label: numberedMatch[2]
+    };
+  }
+
+  return {
+    family: 2,
+    number: 999,
+    label: trimmed
+  };
+}
+
+function compareTimetableClassSummaries(left: TimetableClassSummary, right: TimetableClassSummary) {
+  const yearOrderDelta =
+    timetableYearGroupOrderValue(left.yearGroup) - timetableYearGroupOrderValue(right.yearGroup);
+  if (yearOrderDelta !== 0) {
+    return yearOrderDelta;
+  }
+
+  const leftClassSort = timetableClassNameSortValue(left.className);
+  const rightClassSort = timetableClassNameSortValue(right.className);
+
+  if (leftClassSort.family !== rightClassSort.family) {
+    return leftClassSort.family - rightClassSort.family;
+  }
+
+  if (leftClassSort.number !== rightClassSort.number) {
+    return leftClassSort.number - rightClassSort.number;
+  }
+
+  const labelDelta = leftClassSort.label.localeCompare(rightClassSort.label, undefined, {
+    numeric: true
+  });
+  if (labelDelta !== 0) {
+    return labelDelta;
+  }
+
+  const schoolDelta = left.school.localeCompare(right.school, undefined, { numeric: true });
+  if (schoolDelta !== 0) {
+    return schoolDelta;
+  }
+
+  return left.designation.localeCompare(right.designation, undefined, { numeric: true });
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
@@ -822,13 +918,7 @@ async function buildTimetableClassSummaries(params: {
         templateName: template?.name ?? null
       };
     })
-    .sort((left, right) =>
-      [left.school, left.designation, left.yearGroup, left.className]
-        .join("|")
-        .localeCompare([right.school, right.designation, right.yearGroup, right.className].join("|"), undefined, {
-          numeric: true
-        })
-    );
+    .sort(compareTimetableClassSummaries);
 }
 
 export async function getTimetableClassSummaries(): Promise<TimetableClassSummary[]> {
@@ -869,15 +959,7 @@ export async function getTimetableAdminData(): Promise<{
             templateId: null,
             templateName: null
           }))
-          .sort((left, right) =>
-            [left.school, left.designation, left.yearGroup, left.className]
-              .join("|")
-              .localeCompare(
-                [right.school, right.designation, right.yearGroup, right.className].join("|"),
-                undefined,
-                { numeric: true }
-              )
-          ),
+          .sort(compareTimetableClassSummaries),
         templates: [],
         setupMessage: TIMETABLE_SETUP_MESSAGE
       };
