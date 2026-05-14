@@ -145,6 +145,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
         result?: {
           importedClassCount: number;
           assignmentCount: number;
+          updatedBlockCount: number;
           classes: Array<{ className: string; updatedCount: number }>;
         };
       };
@@ -156,7 +157,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
       await refreshClasses();
       setSelectedCsvFile(null);
       setStatus(
-        `Imported ${json.result?.assignmentCount ?? 0} specialist lesson assignments across ${json.result?.importedClassCount ?? 0} timetables.`
+        `Imported ${json.result?.updatedBlockCount ?? 0} specialist lessons across ${json.result?.importedClassCount ?? 0} timetables.`
       );
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "Could not import specialist CSV.");

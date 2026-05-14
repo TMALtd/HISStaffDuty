@@ -424,7 +424,7 @@ function normalizeCsvTimeValue(value: string) {
     hour += 12;
   }
 
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
 }
 
 function normalizeCsvTimeRange(value: string) {
@@ -474,6 +474,16 @@ function normalizeSpecialistSubjectLabel(value: string) {
 
 function specialistSubjectColor(subject: string) {
   return SPECIALIST_SUBJECT_COLORS[subject] ?? "#8be6a8";
+}
+
+function normalizeTimeKey(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) {
+    return trimmed;
+  }
+
+  return `${match[1]}:${match[2]}:00`;
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
@@ -1478,13 +1488,13 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
     const classAssignments = assignments.filter((entry) => entry.className === className);
     const assignmentBySlot = new Map(
       classAssignments.map((entry) => [
-        `${entry.weekday}|${entry.startTime}|${entry.endTime}`,
+        `${entry.weekday}|${normalizeTimeKey(entry.startTime)}|${normalizeTimeKey(entry.endTime)}`,
         entry
       ])
     );
 
     for (const block of builderData.blocks) {
-      const slotKey = `${block.weekday}|${block.start_time}|${block.end_time}`;
+      const slotKey = `${block.weekday}|${normalizeTimeKey(block.start_time)}|${normalizeTimeKey(block.end_time)}`;
       const assignment = assignmentBySlot.get(slotKey);
       if (!assignment) {
         continue;
@@ -1507,9 +1517,21 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
     }
   }
 
+  const updatedBlockCount = Array.from(summaryByClass.values()).reduce(
+    (total, summary) => total + summary.updatedCount,
+    0
+  );
+
+  if (!updatedBlockCount) {
+    throw new Error(
+      "The CSV was read, but none of its lesson times matched the timetable blocks. Please check that the class timetables use the correct template timings."
+    );
+  }
+
   return {
     importedClassCount: classNames.length,
     assignmentCount: assignments.length,
+    updatedBlockCount,
     classes: Array.from(summaryByClass.values())
   };
 }
