@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getSupabaseBrowserEnvError, hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type LoginFormProps = {
@@ -13,11 +14,18 @@ export function LoginForm({ message }: LoginFormProps) {
   const [isSubmittingGoogle, setIsSubmittingGoogle] = useState(false);
   const [isSubmittingMagicLink, setIsSubmittingMagicLink] = useState(false);
   const [email, setEmail] = useState("");
+  const isSupabaseConfigured = hasSupabaseBrowserEnv();
 
   async function handleGoogleSignIn() {
     setError("");
     setStatus("");
     setIsSubmittingGoogle(true);
+
+    if (!isSupabaseConfigured) {
+      setError(getSupabaseBrowserEnvError());
+      setIsSubmittingGoogle(false);
+      return;
+    }
 
     const supabase = createSupabaseBrowserClient();
     const { error: authError } = await supabase.auth.signInWithOAuth({
@@ -38,6 +46,12 @@ export function LoginForm({ message }: LoginFormProps) {
     setError("");
     setStatus("");
     setIsSubmittingMagicLink(true);
+
+    if (!isSupabaseConfigured) {
+      setError(getSupabaseBrowserEnvError());
+      setIsSubmittingMagicLink(false);
+      return;
+    }
 
     const supabase = createSupabaseBrowserClient();
     const { error: authError } = await supabase.auth.signInWithOtp({
@@ -63,7 +77,7 @@ export function LoginForm({ message }: LoginFormProps) {
       <div className="actions" style={{ marginTop: 0 }}>
         <button
           className="button"
-          disabled={isSubmittingGoogle}
+          disabled={isSubmittingGoogle || !isSupabaseConfigured}
           type="button"
           onClick={handleGoogleSignIn}
         >
@@ -82,10 +96,15 @@ export function LoginForm({ message }: LoginFormProps) {
             onChange={(event) => setEmail(event.target.value)}
             placeholder="name@school.edu"
             required
+            disabled={!isSupabaseConfigured}
           />
         </div>
         <div className="actions">
-          <button className="button secondary" disabled={isSubmittingMagicLink} type="submit">
+          <button
+            className="button secondary"
+            disabled={isSubmittingMagicLink || !isSupabaseConfigured}
+            type="submit"
+          >
             {isSubmittingMagicLink ? "Sending..." : "Send Magic Link Instead"}
           </button>
         </div>

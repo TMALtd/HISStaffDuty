@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { getSupabaseBrowserEnvError, getSupabaseConfig, hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
@@ -8,11 +9,29 @@ function isPublicPath(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  if (!hasSupabaseBrowserEnv()) {
+    if (request.nextUrl.pathname === "/login") {
+      const response = NextResponse.next({ request });
+      response.headers.set("x-config-warning", getSupabaseBrowserEnvError());
+      return response;
+    }
+
+    if (!isPublicPath(request.nextUrl.pathname)) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("message", getSupabaseBrowserEnvError());
+      loginUrl.searchParams.set("next", request.nextUrl.pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    return NextResponse.next({ request });
+  }
+
   const response = NextResponse.next({ request });
+  const config = getSupabaseConfig();
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    config.url,
+    config.anonKey,
     {
       cookies: {
         get(name: string) {

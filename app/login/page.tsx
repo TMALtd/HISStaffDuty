@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
+import { getSupabaseBrowserEnvError, hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
@@ -9,13 +10,19 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
+  let message = searchParams.message;
 
-  if (session) {
-    redirect("/");
+  if (hasSupabaseBrowserEnv()) {
+    const supabase = createSupabaseServerClient();
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (session) {
+      redirect("/");
+    }
+  } else {
+    message = message ?? getSupabaseBrowserEnvError();
   }
 
   return (
@@ -28,7 +35,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           you need it. Once signed in, you can filter by school, designation, year group,
           milepost, level, and class.
         </p>
-        <LoginForm message={searchParams.message} />
+        <LoginForm message={message} />
       </section>
     </main>
   );

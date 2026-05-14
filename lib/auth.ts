@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
 import type { StaffProfile } from "@/lib/types";
 import { getStaffProfileByEmail } from "@/lib/data";
+import { hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function getCurrentUserOrNull() {
+  if (!hasSupabaseBrowserEnv()) {
+    return null;
+  }
+
   const supabase = createSupabaseServerClient();
   const {
     data: { user }

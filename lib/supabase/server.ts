@@ -1,13 +1,25 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getSupabaseAdminEnvError,
+  getSupabaseBrowserEnvError,
+  getSupabaseConfig,
+  hasSupabaseAdminEnv,
+  hasSupabaseBrowserEnv
+} from "@/lib/supabase/config";
 
 export function createSupabaseServerClient() {
+  if (!hasSupabaseBrowserEnv()) {
+    throw new Error(getSupabaseBrowserEnvError());
+  }
+
   const cookieStore = cookies();
+  const config = getSupabaseConfig();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    config.url,
+    config.anonKey,
     {
       cookies: {
         get(name: string) {
@@ -21,9 +33,15 @@ export function createSupabaseServerClient() {
 }
 
 export function createSupabaseAdminClient() {
+  if (!hasSupabaseAdminEnv()) {
+    throw new Error(getSupabaseAdminEnvError());
+  }
+
+  const config = getSupabaseConfig();
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    config.url,
+    config.serviceRoleKey,
     {
       auth: {
         autoRefreshToken: false,
