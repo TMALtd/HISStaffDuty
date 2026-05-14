@@ -1214,6 +1214,29 @@ export async function createClassTimetable(input: { className: string; templateI
   return data;
 }
 
+export async function deleteClassTimetable(input: { className: string }) {
+  const className = input.className.trim();
+  if (!className) {
+    throw new Error("className is required.");
+  }
+
+  const classTimetable = await getClassTimetableRecordByClassName(className);
+  if (!classTimetable) {
+    throw new Error(`No timetable exists for ${className}.`);
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .delete()
+    .eq("id", String(classTimetable.id))
+    .eq("class_name", className);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function upsertTimetableBlock(input: {
   className: string;
   blockId: string;

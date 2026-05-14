@@ -20,6 +20,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
   const [status, setStatus] = useState("");
   const [error, setError] = useState(setupMessage ?? "");
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingClassName, setDeletingClassName] = useState("");
 
   const filteredClasses = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -88,6 +89,30 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
       setError(createError instanceof Error ? createError.message : "Could not create timetable.");
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function deleteTimetable(className: string) {
+    setStatus("");
+    setError("");
+    setDeletingClassName(className);
+
+    try {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(className)}`, {
+        method: "DELETE"
+      });
+
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not delete timetable.");
+      }
+
+      await refreshClasses();
+      setStatus(`Timetable deleted for ${className}.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete timetable.");
+    } finally {
+      setDeletingClassName("");
     }
   }
 
@@ -209,9 +234,19 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
               </div>
               <div className="timetable-admin-card-actions">
                 {entry.hasTimetable ? (
-                  <Link className="button" href={`/timetables/${encodeURIComponent(entry.className)}`}>
-                    Open Builder
-                  </Link>
+                  <>
+                    <Link className="button" href={`/timetables/${encodeURIComponent(entry.className)}`}>
+                      Open Builder
+                    </Link>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={deletingClassName === entry.className}
+                      onClick={() => void deleteTimetable(entry.className)}
+                    >
+                      {deletingClassName === entry.className ? "Deleting..." : "Delete"}
+                    </button>
+                  </>
                 ) : (
                   <button
                     className="button secondary"

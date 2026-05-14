@@ -157,6 +157,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [isDeletingTimetable, setIsDeletingTimetable] = useState(false);
 
   useEffect(() => {
     setData(initialData);
@@ -230,6 +231,29 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       setError(createError instanceof Error ? createError.message : "Could not create timetable.");
     } finally {
       setIsBusy(false);
+    }
+  }
+
+  async function deleteTimetable() {
+    setIsDeletingTimetable(true);
+    setStatus("");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.className)}`, {
+        method: "DELETE"
+      });
+
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not delete timetable.");
+      }
+
+      router.push("/timetables");
+      router.refresh();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete timetable.");
+      setIsDeletingTimetable(false);
     }
   }
 
@@ -372,6 +396,16 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
             <Link className="button secondary" href="/timetables">
               Back to Timetables
             </Link>
+            {data.timetable ? (
+              <button
+                className="button secondary"
+                type="button"
+                disabled={isDeletingTimetable}
+                onClick={() => void deleteTimetable()}
+              >
+                {isDeletingTimetable ? "Deleting..." : "Delete Timetable"}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
