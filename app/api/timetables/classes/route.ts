@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserOrNull } from "@/lib/auth";
-import { getTimetableClassSummaries, getTimetableTemplates } from "@/lib/data";
+import { getTimetableAdminData } from "@/lib/data";
 
 export async function GET() {
   const user = await getCurrentUserOrNull();
@@ -9,12 +9,9 @@ export async function GET() {
   }
 
   try {
-    const [classes, templates] = await Promise.all([
-      getTimetableClassSummaries(),
-      getTimetableTemplates()
-    ]);
+    const { classes, templates, setupMessage } = await getTimetableAdminData();
 
-    return NextResponse.json({ classes, templates });
+    return NextResponse.json({ classes, templates, setupMessage });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load timetable classes." },

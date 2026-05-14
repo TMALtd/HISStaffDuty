@@ -8,16 +8,17 @@ import type { TimetableClassSummary, TimetableTemplate } from "@/lib/types";
 type TimetableAdminProps = {
   initialClasses: TimetableClassSummary[];
   templates: TimetableTemplate[];
+  setupMessage?: string | null;
 };
 
-export function TimetableAdmin({ initialClasses, templates }: TimetableAdminProps) {
+export function TimetableAdmin({ initialClasses, templates, setupMessage }: TimetableAdminProps) {
   const router = useRouter();
   const [classes, setClasses] = useState(initialClasses);
   const [selectedClassName, setSelectedClassName] = useState(initialClasses[0]?.className ?? "");
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
   const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(setupMessage ?? "");
   const [isCreating, setIsCreating] = useState(false);
 
   const filteredClasses = useMemo(() => {
@@ -42,9 +43,14 @@ export function TimetableAdmin({ initialClasses, templates }: TimetableAdminProp
 
     const json = (await response.json()) as {
       classes: TimetableClassSummary[];
+      templates?: TimetableTemplate[];
+      setupMessage?: string | null;
     };
 
     setClasses(json.classes);
+    if (json.setupMessage) {
+      setError(json.setupMessage);
+    }
   }
 
   async function createTimetable(event: React.FormEvent<HTMLFormElement>) {

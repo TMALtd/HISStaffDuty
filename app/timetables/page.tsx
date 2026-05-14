@@ -1,15 +1,12 @@
 import { requireUser } from "@/lib/auth";
-import { getTimetableClassSummaries, getTimetableTemplates } from "@/lib/data";
+import { getTimetableAdminData } from "@/lib/data";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableAdmin } from "@/components/timetable-admin";
 
 export default async function TimetablesPage() {
   const user = await requireUser();
-  const [classes, templates] = await Promise.all([
-    getTimetableClassSummaries(),
-    getTimetableTemplates()
-  ]);
+  const { classes, templates, setupMessage } = await getTimetableAdminData();
 
   return (
     <main className="page-shell">
@@ -21,7 +18,7 @@ export default async function TimetablesPage() {
         <SignOutButton />
       </section>
       <PortalNav />
-      <TimetableAdmin initialClasses={classes} templates={templates} />
+      <TimetableAdmin initialClasses={classes} templates={templates} setupMessage={setupMessage} />
     </main>
   );
 }

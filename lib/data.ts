@@ -60,6 +60,8 @@ const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
   assembly: "#f59e0b",
   other: "#c4b5fd"
 };
+const TIMETABLE_SETUP_MESSAGE =
+  "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
 
 function normalizeFilterState(filters: Partial<FilterState>): FilterState {
   return {
@@ -239,6 +241,17 @@ function defaultTitleForTimetableType(params: {
   periodLabel: string;
 }) {
   return params.blockType === "lesson" ? null : params.periodLabel;
+}
+
+function isMissingSupabaseRelationError(error: unknown, tableName: string) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes(tableName) &&
+    (message.includes("does not exist") ||
+      message.includes("schema cache") ||
+      message.includes("Could not find the table") ||
+      message.includes("PGRST205"))
+  );
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
@@ -728,7 +741,7 @@ export async function getDutyRosterViewData(): Promise<DutyRosterViewData> {
   };
 }
 
-export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
+async function getTimetableTemplatesStrict(): Promise<TimetableTemplate[]> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(TIMETABLE_TEMPLATES_TABLE)
@@ -742,6 +755,10 @@ export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
   }
 
   return ((data ?? []) as Record<string, unknown>[]).map(normalizeTimetableTemplate);
+}
+
+export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
+  return getTimetableTemplatesStrict();
 }
 
 export async function getTimetableStaffOptions(): Promise<TimetableStaffOption[]> {
@@ -764,8 +781,11 @@ export async function getTimetableStaffOptions(): Promise<TimetableStaffOption[]
   }));
 }
 
-export async function getTimetableClassSummaries(): Promise<TimetableClassSummary[]> {
-  const [classRecords, templates] = await Promise.all([getClassRecords(), getTimetableTemplates()]);
+async function buildTimetableClassSummaries(params: {
+  classRecords: ClassRecord[];
+  templates: TimetableTemplate[];
+}): Promise<TimetableClassSummary[]> {
+  const { classRecords, templates } = params;
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(CLASS_TIMETABLES_TABLE)
@@ -809,6 +829,62 @@ export async function getTimetableClassSummaries(): Promise<TimetableClassSummar
           numeric: true
         })
     );
+}
+
+export async function getTimetableClassSummaries(): Promise<TimetableClassSummary[]> {
+  const [classRecords, templates] = await Promise.all([getClassRecords(), getTimetableTemplatesStrict()]);
+  return buildTimetableClassSummaries({ classRecords, templates });
+}
+
+export async function getTimetableAdminData(): Promise<{
+  classes: TimetableClassSummary[];
+  templates: TimetableTemplate[];
+  setupMessage: string | null;
+}> {
+  const classRecords = await getClassRecords();
+
+  try {
+    const templates = await getTimetableTemplatesStrict();
+    const classes = await buildTimetableClassSummaries({ classRecords, templates });
+
+    return {
+      classes,
+      templates,
+      setupMessage: null
+    };
+  } catch (error) {
+    if (
+      isMissingSupabaseRelationError(error, TIMETABLE_TEMPLATES_TABLE) ||
+      isMissingSupabaseRelationError(error, CLASS_TIMETABLES_TABLE)
+    ) {
+      return {
+        classes: classRecords
+          .map((row) => ({
+            className: row["Class Name"],
+            school: row.School,
+            designation: row.Designation,
+            yearGroup: row["Year Group"],
+            hasTimetable: false,
+            timetableId: null,
+            templateId: null,
+            templateName: null
+          }))
+          .sort((left, right) =>
+            [left.school, left.designation, left.yearGroup, left.className]
+              .join("|")
+              .localeCompare(
+                [right.school, right.designation, right.yearGroup, right.className].join("|"),
+                undefined,
+                { numeric: true }
+              )
+          ),
+        templates: [],
+        setupMessage: TIMETABLE_SETUP_MESSAGE
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function getClassTimetableRecordByClassName(className: string) {

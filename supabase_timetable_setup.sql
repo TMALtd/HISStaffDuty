@@ -47,7 +47,7 @@ create table if not exists public.timetable_blocks (
 
 create table if not exists public.timetable_block_staff (
   block_id uuid not null references public.timetable_blocks(id) on delete cascade,
-  staff_id uuid not null references public.staff(id) on delete cascade,
+  staff_id text not null references public.staff(id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (block_id, staff_id)
 );
