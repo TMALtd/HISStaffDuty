@@ -35,6 +35,23 @@ type TimetableRowSegment = {
   endTime: string;
 };
 
+type ParentExportBlock = {
+  id: string;
+  title: string;
+  dayKey: string;
+  color: string | null;
+  rowStart: number;
+  rowEnd: number;
+};
+
+type ParentSharedBar = {
+  id: string;
+  title: string;
+  color: string | null;
+  rowStart: number;
+  rowEnd: number;
+};
+
 type TimetableClassesResponse = {
   classes: TimetableClassSummary[];
 };
@@ -70,6 +87,8 @@ const BLOCK_TYPE_LABELS: Record<TimetableBlockType, string> = {
   assembly: "Assembly",
   other: "Other"
 };
+
+const PARENT_EXPORT_END_TIME = "15:00:00";
 
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
@@ -191,6 +210,19 @@ function blockDensityClass(block: TimetableBlock) {
   return "";
 }
 
+function isBreakOrLunchType(blockType: TimetableBlockType) {
+  return blockType === "break" || blockType === "lunch";
+}
+
+function isParentFillCandidate(block: MergedTimetableBlock) {
+  const label = labelForBlock(block).trim();
+  if (isBreakOrLunchType(block.block_type) || block.block_type === "dismissal") {
+    return false;
+  }
+
+  return !/pastoral/i.test(label);
+}
+
 export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const router = useRouter();
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -227,9 +259,26 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }, []);
 
   const rowSegments = useMemo(() => buildTimetableRowSegments(data.blocks), [data.blocks]);
+  const parentRowSegments = useMemo(
+    () =>
+      rowSegments.filter(
+        (segment) => segment.startTime < PARENT_EXPORT_END_TIME && segment.endTime <= PARENT_EXPORT_END_TIME
+      ),
+    [rowSegments]
+  );
   const rowLineByTime = useMemo(
     () => new Map(rowSegments.flatMap((segment, index) => [[segment.startTime, index + 1], [segment.endTime, index + 2]])),
     [rowSegments]
+  );
+  const parentRowLineByTime = useMemo(
+    () =>
+      new Map(
+        parentRowSegments.flatMap((segment, index) => [
+          [segment.startTime, index + 1],
+          [segment.endTime, index + 2]
+        ])
+      ),
+    [parentRowSegments]
   );
 
   const dayColumns = useMemo(
@@ -248,6 +297,126 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => dayColumns.flatMap((day) => day.blocks),
     [dayColumns]
   );
+  const parentGridData = useMemo(() => {
+    const sharedBars: ParentSharedBar[] = [];
+    const blocks: ParentExportBlock[] = [];
+
+    const sharedSegments = parentRowSegments.map((segment) => {
+      const coveringBlocks = dayColumns.map((day) =>
+        day.blocks.find(
+          (block) => block.start_time <= segment.startTime && block.end_time >= segment.endTime
+        ) ?? null
+      );
+
+      const reference = coveringBlocks[0];
+      if (!reference || !isBreakOrLunchType(reference.block_type)) {
+        return null;
+      }
+
+      const allMatch = coveringBlocks.every((block) => {
+        if (!block) {
+          return false;
+        }
+
+        return (
+          block.block_type === reference.block_type &&
+          labelForBlock(block).trim() === labelForBlock(reference).trim()
+        );
+      });
+
+      if (!allMatch) {
+        return null;
+      }
+
+      return {
+        title: labelForBlock(reference),
+        color: reference.color,
+        blockType: reference.block_type
+      };
+    });
+
+    let sharedIndex = 0;
+    while (sharedIndex < sharedSegments.length) {
+      const segment = sharedSegments[sharedIndex];
+      if (!segment) {
+        sharedIndex += 1;
+        continue;
+      }
+
+      let endIndex = sharedIndex + 1;
+      while (
+        endIndex < sharedSegments.length &&
+        sharedSegments[endIndex] &&
+        sharedSegments[endIndex]?.title === segment.title &&
+        sharedSegments[endIndex]?.blockType === segment.blockType
+      ) {
+        endIndex += 1;
+      }
+
+      sharedBars.push({
+        id: `shared-${sharedIndex}`,
+        title: segment.title,
+        color: segment.color,
+        rowStart: sharedIndex + 2,
+        rowEnd: endIndex + 2
+      });
+
+      sharedIndex = endIndex;
+    }
+
+    dayColumns.forEach((day) => {
+      const clippedBlocks: MergedTimetableBlock[] = [];
+
+      day.blocks.forEach((block) => {
+        if (block.start_time >= PARENT_EXPORT_END_TIME) {
+          return;
+        }
+
+        const clippedEndTime =
+          block.end_time > PARENT_EXPORT_END_TIME ? PARENT_EXPORT_END_TIME : block.end_time;
+
+        clippedBlocks.push({
+          ...block,
+          end_time: clippedEndTime
+        });
+      });
+
+      const lastFillCandidate = [...clippedBlocks]
+        .reverse()
+        .find((block) => isParentFillCandidate(block) && block.end_time <= PARENT_EXPORT_END_TIME);
+
+      if (lastFillCandidate && lastFillCandidate.end_time < PARENT_EXPORT_END_TIME) {
+        clippedBlocks.push({
+          ...lastFillCandidate,
+          id: `${lastFillCandidate.id}-parent-fill`,
+          start_time: lastFillCandidate.end_time,
+          end_time: PARENT_EXPORT_END_TIME,
+          mergedIds: [...lastFillCandidate.mergedIds]
+        });
+      }
+
+      clippedBlocks
+        .filter((block) => !isBreakOrLunchType(block.block_type))
+        .forEach((block) => {
+          const rowStart = (parentRowLineByTime.get(block.start_time) ?? 1) + 1;
+          const rowEnd = (parentRowLineByTime.get(block.end_time) ?? rowStart) + 1;
+          if (rowEnd <= rowStart) {
+            return;
+          }
+
+          blocks.push({
+            id: `${day.key}-${block.id}`,
+            title: labelForBlock(block),
+            dayKey: day.key,
+            color: block.color,
+            rowStart,
+            rowEnd
+          });
+        });
+    });
+
+    return { blocks, sharedBars };
+  }, [dayColumns, parentRowLineByTime, parentRowSegments]);
 
   const selectedBlock = selectedBlockId
     ? visibleBlocks.find((block) => block.id === selectedBlockId) ?? null
@@ -437,9 +606,9 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-timetable.png`;
+      link.download = `${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-parent-timetable.png`;
       link.click();
-      setStatus("Timetable PNG downloaded.");
+      setStatus("Parent timetable PNG downloaded.");
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "Could not export PNG.");
     } finally {
@@ -448,7 +617,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   function exportAsPdf() {
-    setStatus("Print dialog opened. Choose Save as PDF to download.");
+    setStatus("Parent print dialog opened. Choose Save as PDF to download.");
     setError("");
     window.print();
   }
@@ -556,10 +725,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           {data.timetable ? (
             <div className="actions timetable-toolbar-actions">
               <button className="button secondary" type="button" onClick={() => exportAsPdf()}>
-                Export PDF
+                Parent PDF
               </button>
               <button className="button secondary" type="button" onClick={() => void exportAsPng()} disabled={isExportingImage}>
-                {isExportingImage ? "Exporting..." : "Export PNG"}
+                {isExportingImage ? "Exporting..." : "Parent PNG"}
               </button>
             </div>
           ) : null}
@@ -600,10 +769,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       <section className="panel">
         {data.timetable ? (
           <div className="timetable-board-scroll">
-            <div
-              className={`timetable-export-surface${isExportingImage ? " is-export-clean" : ""}`}
-              ref={exportRef}
-            >
+            <div className={`timetable-export-surface${isExportingImage ? " is-export-clean" : ""}`}>
               <div className="timetable-export-bar">
                 <div className="timetable-export-class">
                   <strong>{data.classSummary.className}</strong>
@@ -690,6 +856,85 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                     );
                   })
                 )}
+              </div>
+            </div>
+            <div className="timetable-parent-export-shell" aria-hidden="true">
+              <div className="timetable-parent-export-surface" ref={exportRef}>
+                <div className="timetable-parent-header">
+                  <img
+                    src="/help-international-school-logo.png"
+                    alt="HELP International School logo"
+                    className="timetable-parent-logo"
+                  />
+                  <h2 className="timetable-parent-title">{data.classSummary.className}</h2>
+                </div>
+
+                <div className="timetable-parent-grid">
+                  <div className="timetable-parent-corner" />
+
+                  {WEEKDAYS.map((day, dayIndex) => (
+                    <div
+                      className="timetable-parent-day"
+                      key={`parent-${day.key}`}
+                      style={{ gridColumn: dayIndex + 2, gridRow: 1 }}
+                    >
+                      {day.label}
+                    </div>
+                  ))}
+
+                  {parentRowSegments.map((segment, segmentIndex) => (
+                    <div
+                      className="timetable-parent-time"
+                      key={`parent-time-${segment.key}`}
+                      style={{ gridColumn: 1, gridRow: segmentIndex + 2 }}
+                    >
+                      {timeRangeLabel(segment.startTime, segment.endTime)}
+                    </div>
+                  ))}
+
+                  {WEEKDAYS.flatMap((day, dayIndex) =>
+                    parentRowSegments.map((segment, segmentIndex) => (
+                      <div
+                        className="timetable-parent-slot"
+                        key={`parent-slot-${day.key}-${segment.key}`}
+                        style={{ gridColumn: dayIndex + 2, gridRow: segmentIndex + 2 }}
+                      />
+                    ))
+                  )}
+
+                  {parentGridData.sharedBars.map((bar) => (
+                    <div
+                      className="timetable-parent-shared-bar"
+                      key={bar.id}
+                      style={{
+                        gridColumn: "2 / 7",
+                        gridRow: `${bar.rowStart} / ${bar.rowEnd}`,
+                        background: bar.color ?? "#7c8596"
+                      }}
+                    >
+                      {bar.title}
+                    </div>
+                  ))}
+
+                  {parentGridData.blocks.map((block) => {
+                    const dayIndex = WEEKDAYS.findIndex((day) => day.key === block.dayKey);
+
+                    return (
+                      <div
+                        className="timetable-parent-block"
+                        key={block.id}
+                        style={{
+                          gridColumn: dayIndex + 2,
+                          gridRow: `${block.rowStart} / ${block.rowEnd}`,
+                          background: block.color ?? "#8be6a8",
+                          color: textColorForBackground(block.color ?? "#8be6a8")
+                        }}
+                      >
+                        {block.title}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

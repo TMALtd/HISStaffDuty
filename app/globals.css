@@ -708,6 +708,106 @@ tr:last-child td {
   opacity: 0;
 }
 
+.timetable-parent-export-shell {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  pointer-events: none;
+}
+
+.timetable-parent-export-surface {
+  width: 1180px;
+  border: 1px solid rgba(38, 23, 24, 0.1);
+  border-radius: 28px;
+  background: #fffdf8;
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+.timetable-parent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.timetable-parent-logo {
+  width: 220px;
+  height: auto;
+  object-fit: contain;
+}
+
+.timetable-parent-title {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.05;
+}
+
+.timetable-parent-grid {
+  display: grid;
+  grid-template-columns: 112px repeat(5, minmax(0, 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: minmax(56px, auto);
+  gap: 8px;
+}
+
+.timetable-parent-corner,
+.timetable-parent-day,
+.timetable-parent-time,
+.timetable-parent-slot,
+.timetable-parent-block,
+.timetable-parent-shared-bar {
+  border: 1px solid rgba(229, 214, 207, 0.9);
+  border-radius: 16px;
+}
+
+.timetable-parent-corner,
+.timetable-parent-day,
+.timetable-parent-time,
+.timetable-parent-slot {
+  background: #fffaf6;
+}
+
+.timetable-parent-day {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.timetable-parent-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  text-align: center;
+  color: #6f625b;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.timetable-parent-slot {
+  min-height: 100%;
+}
+
+.timetable-parent-block,
+.timetable-parent-shared-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  box-shadow: inset 0 0 0 1px rgba(38, 23, 24, 0.05);
+}
+
+.timetable-parent-shared-bar {
+  justify-content: center;
+  text-align: center;
+}
+
 .timetable-block-card.is-compact {
   padding: 10px 11px 11px;
 }
@@ -1663,12 +1763,19 @@ tr:last-child td {
     visibility: hidden;
   }
 
-  .timetable-export-surface,
-  .timetable-export-surface * {
+  .timetable-parent-export-surface,
+  .timetable-parent-export-surface * {
     visibility: visible;
   }
 
-  .timetable-export-surface {
+  .timetable-parent-export-shell {
+    position: static;
+    left: auto;
+    top: auto;
+    pointer-events: none;
+  }
+
+  .timetable-parent-export-surface {
     position: absolute;
     left: 0;
     top: 0;
@@ -1677,19 +1784,14 @@ tr:last-child td {
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 16mm;
+    padding: 12mm;
   }
 
-  .timetable-master-grid {
+  .timetable-parent-grid {
     min-width: 0;
   }
 
-  .timetable-block-card {
-    cursor: default;
-    break-inside: avoid;
-  }
-
-  .timetable-block-edit {
-    display: none;
+  .timetable-parent-logo {
+    width: 180px;
   }
 }
