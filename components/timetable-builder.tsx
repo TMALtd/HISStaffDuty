@@ -33,7 +33,6 @@ type TimetableRowSegment = {
   key: string;
   startTime: string;
   endTime: string;
-  minutes: number;
 };
 
 type TimetableClassesResponse = {
@@ -76,26 +75,6 @@ function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
   const [endHour, endMinute] = endTime.split(":").map(Number);
   return endHour * 60 + endMinute - (startHour * 60 + startMinute);
-}
-
-function rowHeightForMinutes(minutes: number) {
-  if (minutes <= 10) {
-    return 36;
-  }
-  if (minutes <= 15) {
-    return 44;
-  }
-  if (minutes <= 20) {
-    return 56;
-  }
-  if (minutes <= 30) {
-    return 70;
-  }
-  if (minutes <= 40) {
-    return 92;
-  }
-
-  return Math.round(minutes * 2.15);
 }
 
 function formatDisplayTime(value: string) {
@@ -177,8 +156,7 @@ function buildTimetableRowSegments(blocks: TimetableBlock[]) {
     segments.push({
       key: `${startTime}-${endTime}`,
       startTime,
-      endTime,
-      minutes: minutesBetween(startTime, endTime)
+      endTime
     });
   }
 
@@ -204,10 +182,10 @@ function labelForBlock(block: TimetableBlock) {
 
 function blockDensityClass(block: TimetableBlock) {
   const minutes = minutesBetween(block.start_time, block.end_time);
-  if (minutes <= 15) {
+  if (minutes <= 20) {
     return "is-tight";
   }
-  if (minutes <= 20) {
+  if (minutes <= 40) {
     return "is-compact";
   }
   return "";
@@ -249,10 +227,6 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }, []);
 
   const rowSegments = useMemo(() => buildTimetableRowSegments(data.blocks), [data.blocks]);
-  const boardRowTemplate = useMemo(
-    () => rowSegments.map((segment) => `${rowHeightForMinutes(segment.minutes)}px`).join(" "),
-    [rowSegments]
-  );
   const rowLineByTime = useMemo(
     () => new Map(rowSegments.flatMap((segment, index) => [[segment.startTime, index + 1], [segment.endTime, index + 2]])),
     [rowSegments]
@@ -640,54 +614,82 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                 <div className="timetable-export-template">{data.timetable.template_name}</div>
               </div>
 
-              <div className="timetable-board">
-                {dayColumns.map((day) => (
-                  <article className="timetable-day-column" key={day.key}>
-                    <header className="timetable-day-header">{day.label}</header>
-                    <div className="timetable-day-grid" style={{ gridTemplateRows: boardRowTemplate }}>
-                      {day.blocks.map((block) => {
-                        const background = block.color ?? "#8be6a8";
-                        const foreground = textColorForBackground(background);
-                        const rowStart = rowLineByTime.get(block.start_time) ?? 1;
-                        const rowEnd = rowLineByTime.get(block.end_time) ?? rowStart + 1;
+              <div className="timetable-master-grid">
+                <div className="timetable-corner-cell" />
 
-                        return (
-                          <button
-                            key={block.id}
-                            className={`timetable-block-card ${blockDensityClass(block)}`.trim()}
-                            type="button"
-                            style={{
-                              gridRow: `${rowStart} / ${rowEnd}`,
-                              background,
-                              color: foreground
-                            }}
-                            onClick={() => openEditor(block)}
-                          >
-                            <div className="timetable-block-topline">
-                              <strong>{labelForBlock(block)}</strong>
-                              <span className="timetable-block-edit">✎</span>
-                            </div>
-                            <div className="timetable-block-meta">
-                              {timeRangeLabel(block.start_time, block.end_time)}
-                            </div>
-                            <div className="timetable-block-meta muted-block-meta">
-                              {BLOCK_TYPE_LABELS[block.block_type]}
-                            </div>
-                            {block.teachers.length ? (
-                              <div className="timetable-teacher-strip">
-                                {block.teachers.map((teacher) => (
-                                  <span className="timetable-teacher-badge" key={`${block.id}-${teacher.staff_id}`}>
-                                    {initialsForTeacher(teacher)}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </article>
+                {WEEKDAYS.map((day, dayIndex) => (
+                  <div
+                    className="timetable-day-header timetable-grid-header"
+                    key={day.key}
+                    style={{ gridColumn: dayIndex + 2, gridRow: 1 }}
+                  >
+                    {day.label}
+                  </div>
                 ))}
+
+                {rowSegments.map((segment, segmentIndex) => (
+                  <div
+                    className="timetable-time-label"
+                    key={segment.key}
+                    style={{ gridColumn: 1, gridRow: segmentIndex + 2 }}
+                  >
+                    <span>{timeRangeLabel(segment.startTime, segment.endTime)}</span>
+                  </div>
+                ))}
+
+                {WEEKDAYS.flatMap((day, dayIndex) =>
+                  rowSegments.map((segment, segmentIndex) => (
+                    <div
+                      className="timetable-grid-slot"
+                      key={`${day.key}-${segment.key}`}
+                      style={{ gridColumn: dayIndex + 2, gridRow: segmentIndex + 2 }}
+                    />
+                  ))
+                )}
+
+                {dayColumns.flatMap((day, dayIndex) =>
+                  day.blocks.map((block) => {
+                    const background = block.color ?? "#8be6a8";
+                    const foreground = textColorForBackground(background);
+                    const rowStart = (rowLineByTime.get(block.start_time) ?? 1) + 1;
+                    const rowEnd = (rowLineByTime.get(block.end_time) ?? rowStart) + 1;
+
+                    return (
+                      <button
+                        key={block.id}
+                        className={`timetable-block-card timetable-grid-block ${blockDensityClass(block)}`.trim()}
+                        type="button"
+                        style={{
+                          gridColumn: dayIndex + 2,
+                          gridRow: `${rowStart} / ${rowEnd}`,
+                          background,
+                          color: foreground
+                        }}
+                        onClick={() => openEditor(block)}
+                      >
+                        <div className="timetable-block-topline">
+                          <strong>{labelForBlock(block)}</strong>
+                          <span className="timetable-block-edit">✎</span>
+                        </div>
+                        <div className="timetable-block-meta">
+                          {timeRangeLabel(block.start_time, block.end_time)}
+                        </div>
+                        <div className="timetable-block-meta muted-block-meta">
+                          {BLOCK_TYPE_LABELS[block.block_type]}
+                        </div>
+                        {block.teachers.length ? (
+                          <div className="timetable-teacher-strip">
+                            {block.teachers.map((teacher) => (
+                              <span className="timetable-teacher-badge" key={`${block.id}-${teacher.staff_id}`}>
+                                {initialsForTeacher(teacher)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
