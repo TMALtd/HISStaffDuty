@@ -1763,19 +1763,22 @@ tr:last-child td {
     visibility: hidden;
   }
 
-  .timetable-parent-export-surface,
-  .timetable-parent-export-surface * {
+  body[data-print-variant="parent"] .timetable-parent-export-surface,
+  body[data-print-variant="parent"] .timetable-parent-export-surface *,
+  body[data-print-variant="standard"] .timetable-export-surface,
+  body[data-print-variant="standard"] .timetable-export-surface * {
     visibility: visible;
   }
 
-  .timetable-parent-export-shell {
+  body[data-print-variant="parent"] .timetable-parent-export-shell {
     position: static;
     left: auto;
     top: auto;
     pointer-events: none;
   }
 
-  .timetable-parent-export-surface {
+  body[data-print-variant="parent"] .timetable-parent-export-surface,
+  body[data-print-variant="standard"] .timetable-export-surface {
     position: absolute;
     left: 0;
     top: 0;
@@ -1787,11 +1790,21 @@ tr:last-child td {
     padding: 12mm;
   }
 
-  .timetable-parent-grid {
+  body[data-print-variant="parent"] .timetable-parent-grid,
+  body[data-print-variant="standard"] .timetable-master-grid {
     min-width: 0;
   }
 
-  .timetable-parent-logo {
+  body[data-print-variant="parent"] .timetable-parent-logo {
     width: 180px;
+  }
+
+  body[data-print-variant="standard"] .timetable-block-card {
+    cursor: default;
+    break-inside: avoid;
+  }
+
+  body[data-print-variant="standard"] .timetable-block-edit {
+    display: none;
   }
 }

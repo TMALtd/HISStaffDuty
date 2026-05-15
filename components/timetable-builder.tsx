@@ -89,6 +89,7 @@ const BLOCK_TYPE_LABELS: Record<TimetableBlockType, string> = {
 };
 
 const PARENT_EXPORT_END_TIME = "15:00:00";
+const STANDARD_PARENT_EXPORT_END_TIME = "12:00:00";
 
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
@@ -223,9 +224,26 @@ function isParentFillCandidate(block: MergedTimetableBlock) {
   return !/pastoral/i.test(label);
 }
 
+function normalizeLabelForCompare(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function daySpecificParentEndTime(dayKey: string, templateName: string | undefined) {
+  const normalizedTemplateName = normalizeLabelForCompare(templateName ?? "");
+  const isYearOneTwoTemplate =
+    normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2");
+
+  if (isYearOneTwoTemplate && dayKey === "friday") {
+    return STANDARD_PARENT_EXPORT_END_TIME;
+  }
+
+  return PARENT_EXPORT_END_TIME;
+}
+
 export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const router = useRouter();
-  const exportRef = useRef<HTMLDivElement | null>(null);
+  const standardExportRef = useRef<HTMLDivElement | null>(null);
+  const parentExportRef = useRef<HTMLDivElement | null>(null);
   const [data, setData] = useState(initialData);
   const [classOptions, setClassOptions] = useState<TimetableClassSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialData.timetable?.template_id ?? initialData.templates[0]?.id ?? "");
@@ -235,7 +253,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [isDeletingTimetable, setIsDeletingTimetable] = useState(false);
-  const [isExportingImage, setIsExportingImage] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState<"standard" | "parent" | null>(null);
 
   useEffect(() => {
     setData(initialData);
@@ -365,15 +383,16 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     }
 
     dayColumns.forEach((day) => {
+      const dayParentEndTime = daySpecificParentEndTime(day.key, data.timetable?.template_name);
       const clippedBlocks: MergedTimetableBlock[] = [];
 
       day.blocks.forEach((block) => {
-        if (block.start_time >= PARENT_EXPORT_END_TIME) {
+        if (block.start_time >= dayParentEndTime) {
           return;
         }
 
         const clippedEndTime =
-          block.end_time > PARENT_EXPORT_END_TIME ? PARENT_EXPORT_END_TIME : block.end_time;
+          block.end_time > dayParentEndTime ? dayParentEndTime : block.end_time;
 
         clippedBlocks.push({
           ...block,
@@ -381,18 +400,46 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         });
       });
 
-      const lastFillCandidate = [...clippedBlocks]
-        .reverse()
-        .find((block) => isParentFillCandidate(block) && block.end_time <= PARENT_EXPORT_END_TIME);
+      const normalizedTemplateName = normalizeLabelForCompare(data.timetable?.template_name ?? "");
+      const isYearOneTwoTemplate =
+        normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2");
 
-      if (lastFillCandidate && lastFillCandidate.end_time < PARENT_EXPORT_END_TIME) {
-        clippedBlocks.push({
-          ...lastFillCandidate,
-          id: `${lastFillCandidate.id}-parent-fill`,
-          start_time: lastFillCandidate.end_time,
-          end_time: PARENT_EXPORT_END_TIME,
-          mergedIds: [...lastFillCandidate.mergedIds]
-        });
+      if (isYearOneTwoTemplate && day.key !== "tuesday" && day.key !== "friday") {
+        const rowStartsAt1420 = clippedBlocks.filter((block) => block.start_time >= "14:20:00");
+        const dismissalSource =
+          rowStartsAt1420.find((block) => block.block_type === "dismissal") ??
+          rowStartsAt1420.find((block) => /dismissal/i.test(labelForBlock(block)));
+        const fallbackBlock = dismissalSource ?? clippedBlocks[clippedBlocks.length - 1];
+
+        if (rowStartsAt1420.length && fallbackBlock) {
+          const keptBlocks = clippedBlocks.filter((block) => block.start_time < "14:20:00");
+          clippedBlocks.length = 0;
+          clippedBlocks.push(...keptBlocks);
+          clippedBlocks.push({
+            ...fallbackBlock,
+            id: `${day.key}-parent-dismissal`,
+            title: "Dismissal",
+            period_label: "Dismissal",
+            block_type: "dismissal",
+            start_time: "14:20:00",
+            end_time: PARENT_EXPORT_END_TIME,
+            mergedIds: dismissalSource?.mergedIds ?? []
+          });
+        }
+      } else if (!(isYearOneTwoTemplate && day.key === "friday")) {
+        const lastFillCandidate = [...clippedBlocks]
+          .reverse()
+          .find((block) => isParentFillCandidate(block) && block.end_time <= dayParentEndTime);
+
+        if (lastFillCandidate && lastFillCandidate.end_time < dayParentEndTime) {
+          clippedBlocks.push({
+            ...lastFillCandidate,
+            id: `${lastFillCandidate.id}-parent-fill`,
+            start_time: lastFillCandidate.end_time,
+            end_time: dayParentEndTime,
+            mergedIds: [...lastFillCandidate.mergedIds]
+          });
+        }
       }
 
       clippedBlocks
@@ -416,7 +463,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     });
 
     return { blocks, sharedBars };
-  }, [dayColumns, parentRowLineByTime, parentRowSegments]);
+  }, [data.timetable?.template_name, dayColumns, parentRowLineByTime, parentRowSegments]);
 
   const selectedBlock = selectedBlockId
     ? visibleBlocks.find((block) => block.id === selectedBlockId) ?? null
@@ -587,18 +634,23 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     }
   }
 
-  async function exportAsPng() {
-    if (!exportRef.current) {
+  async function exportSurfaceAsPng(
+    variant: "standard" | "parent",
+    target: HTMLDivElement | null,
+    filenameSuffix: string,
+    successMessage: string
+  ) {
+    if (!target) {
       return;
     }
 
-    setIsExportingImage(true);
+    setIsExportingImage(variant);
     setStatus("");
     setError("");
 
     try {
       await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
-      const dataUrl = await toPng(exportRef.current, {
+      const dataUrl = await toPng(target, {
         cacheBust: true,
         backgroundColor: "#fffdf8",
         pixelRatio: 2
@@ -606,17 +658,53 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-parent-timetable.png`;
+      link.download = `${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-${filenameSuffix}.png`;
       link.click();
-      setStatus("Parent timetable PNG downloaded.");
+      setStatus(successMessage);
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : "Could not export PNG.");
     } finally {
-      setIsExportingImage(false);
+      setIsExportingImage(null);
     }
   }
 
-  function exportAsPdf() {
+  async function exportStandardPng() {
+    await exportSurfaceAsPng(
+      "standard",
+      standardExportRef.current,
+      "timetable",
+      "Timetable PNG downloaded."
+    );
+  }
+
+  async function exportParentPng() {
+    await exportSurfaceAsPng(
+      "parent",
+      parentExportRef.current,
+      "parent-timetable",
+      "Parent timetable PNG downloaded."
+    );
+  }
+
+  function exportStandardPdf() {
+    document.body.dataset.printVariant = "standard";
+    const resetPrintVariant = () => {
+      delete document.body.dataset.printVariant;
+      window.removeEventListener("afterprint", resetPrintVariant);
+    };
+    window.addEventListener("afterprint", resetPrintVariant);
+    setStatus("Print dialog opened. Choose Save as PDF to download.");
+    setError("");
+    window.print();
+  }
+
+  function exportParentPdf() {
+    document.body.dataset.printVariant = "parent";
+    const resetPrintVariant = () => {
+      delete document.body.dataset.printVariant;
+      window.removeEventListener("afterprint", resetPrintVariant);
+    };
+    window.addEventListener("afterprint", resetPrintVariant);
     setStatus("Parent print dialog opened. Choose Save as PDF to download.");
     setError("");
     window.print();
@@ -724,11 +812,17 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           </div>
           {data.timetable ? (
             <div className="actions timetable-toolbar-actions">
-              <button className="button secondary" type="button" onClick={() => exportAsPdf()}>
+              <button className="button secondary" type="button" onClick={() => exportStandardPdf()}>
+                Export PDF
+              </button>
+              <button className="button secondary" type="button" onClick={() => void exportStandardPng()} disabled={isExportingImage !== null}>
+                {isExportingImage === "standard" ? "Exporting..." : "Export PNG"}
+              </button>
+              <button className="button secondary" type="button" onClick={() => exportParentPdf()}>
                 Parent PDF
               </button>
-              <button className="button secondary" type="button" onClick={() => void exportAsPng()} disabled={isExportingImage}>
-                {isExportingImage ? "Exporting..." : "Parent PNG"}
+              <button className="button secondary" type="button" onClick={() => void exportParentPng()} disabled={isExportingImage !== null}>
+                {isExportingImage === "parent" ? "Exporting..." : "Parent PNG"}
               </button>
             </div>
           ) : null}
@@ -769,7 +863,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       <section className="panel">
         {data.timetable ? (
           <div className="timetable-board-scroll">
-            <div className={`timetable-export-surface${isExportingImage ? " is-export-clean" : ""}`}>
+            <div
+              className={`timetable-export-surface${isExportingImage === "standard" ? " is-export-clean" : ""}`}
+              ref={standardExportRef}
+            >
               <div className="timetable-export-bar">
                 <div className="timetable-export-class">
                   <strong>{data.classSummary.className}</strong>
@@ -859,7 +956,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
               </div>
             </div>
             <div className="timetable-parent-export-shell" aria-hidden="true">
-              <div className="timetable-parent-export-surface" ref={exportRef}>
+              <div className="timetable-parent-export-surface" ref={parentExportRef}>
                 <div className="timetable-parent-header">
                   <img
                     src="/help-international-school-logo.png"
