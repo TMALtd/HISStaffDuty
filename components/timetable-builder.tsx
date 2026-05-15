@@ -92,6 +92,22 @@ const BLOCK_TYPE_LABELS: Record<TimetableBlockType, string> = {
 
 const PARENT_EXPORT_END_TIME = "15:00:00";
 const STANDARD_PARENT_EXPORT_END_TIME = "12:00:00";
+const MILEPOST_ONE_SUBJECTS = [
+  "English",
+  "Maths",
+  "IPC",
+  "PSHE",
+  "Mandarin",
+  "BM",
+  "P.E.",
+  "Coding",
+  "Library",
+  "Shared Reading",
+  "Phonics",
+  "Guided Reading",
+  "Assembly",
+  "Financial Literacy"
+] as const;
 
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
@@ -230,6 +246,27 @@ function normalizeLabelForCompare(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isMilepostOneYearGroup(yearGroup: string) {
+  const normalized = normalizeLabelForCompare(yearGroup);
+  return normalized === "year 1" || normalized === "year 2";
+}
+
+function subjectMatchesBlockTitle(subject: string, title: string) {
+  const normalizedTitle = normalizeLabelForCompare(title);
+
+  switch (subject) {
+    case "BM":
+      return (
+        normalizedTitle.includes("bm") ||
+        normalizedTitle.includes("bahasa melayu")
+      );
+    case "P.E.":
+      return normalizedTitle.includes("p.e.") || normalizedTitle.includes("pe");
+    default:
+      return normalizedTitle.includes(normalizeLabelForCompare(subject));
+  }
+}
+
 function daySpecificParentEndTime(dayKey: string, templateName: string | undefined) {
   const normalizedTemplateName = normalizeLabelForCompare(templateName ?? "");
   const isYearOneTwoTemplate =
@@ -335,6 +372,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizeLabelForCompare(data.timetable?.template_name ?? ""),
     [data.timetable?.template_name]
   );
+  const isMilepostOneTimetable = useMemo(
+    () => isMilepostOneYearGroup(data.classSummary.yearGroup),
+    [data.classSummary.yearGroup]
+  );
   const isYearOneTwoTemplate = useMemo(
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
@@ -375,6 +416,34 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => dayColumns.flatMap((day) => day.blocks),
     [dayColumns]
   );
+  const curriculumMinuteCards = useMemo(() => {
+    if (!isMilepostOneTimetable) {
+      return [];
+    }
+
+    const totals = new Map<string, number>(
+      MILEPOST_ONE_SUBJECTS.map((subject) => [subject, 0])
+    );
+
+    data.blocks.forEach((block) => {
+      const title = labelForBlock(block);
+      const minutes = minutesBetween(block.start_time, block.end_time);
+      if (!title.trim() || minutes <= 0) {
+        return;
+      }
+
+      MILEPOST_ONE_SUBJECTS.forEach((subject) => {
+        if (subjectMatchesBlockTitle(subject, title)) {
+          totals.set(subject, (totals.get(subject) ?? 0) + minutes);
+        }
+      });
+    });
+
+    return MILEPOST_ONE_SUBJECTS.map((subject) => ({
+      subject,
+      minutes: totals.get(subject) ?? 0
+    }));
+  }, [data.blocks, isMilepostOneTimetable]);
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
@@ -997,25 +1066,32 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         {error ? <div className="banner error-banner">{error}</div> : null}
       </section>
 
-      <section className="stats-row">
-        <div className="stat-card">
-          <p className="stat-label">Blocks</p>
-          <p className="stat-value">{data.blocks.length}</p>
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2 className="panel-title">Subject Allocation</h2>
+            <p className="meta">
+              {isMilepostOneTimetable
+                ? "Milepost 1 totals in minutes. Mixed labels count their full time toward each subject."
+                : "Subject-minute totals are currently configured for Milepost 1 only."}
+            </p>
+          </div>
         </div>
-        <div className="stat-card">
-          <p className="stat-label">Teachers linked</p>
-          <p className="stat-value">
-            {Array.from(new Set(data.blocks.flatMap((block) => block.teachers.map((teacher) => teacher.staff_id)))).length}
-          </p>
-        </div>
-        <div className="stat-card">
-          <p className="stat-label">Template</p>
-          <p className="stat-value smaller-stat">{data.timetable?.template_name ?? "None"}</p>
-        </div>
-        <div className="stat-card">
-          <p className="stat-label">Days</p>
-          <p className="stat-value">5</p>
-        </div>
+
+        {isMilepostOneTimetable ? (
+          <div className="stats-row">
+            {curriculumMinuteCards.map((entry) => (
+              <div className="stat-card" key={entry.subject}>
+                <p className="stat-label">{entry.subject}</p>
+                <p className="stat-value">{entry.minutes}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">
+            This timetable is not in Milepost 1, so these subject-minute metrics are not shown yet.
+          </div>
+        )}
       </section>
 
       <section className="panel">
