@@ -96,7 +96,6 @@ const MILEPOST_ONE_SUBJECTS = [
   "English",
   "Maths",
   "IPC",
-  "PSHE",
   "Mandarin",
   "BM",
   "P.E.",
@@ -108,6 +107,22 @@ const MILEPOST_ONE_SUBJECTS = [
   "Assembly",
   "Financial Literacy"
 ] as const;
+
+const MILEPOST_ONE_MAINSTREAM_TARGETS: Record<(typeof MILEPOST_ONE_SUBJECTS)[number], number> = {
+  English: 160,
+  Maths: 240,
+  IPC: 240,
+  Mandarin: 120,
+  BM: 120,
+  "P.E.": 120,
+  Coding: 40,
+  Library: 40,
+  "Shared Reading": 160,
+  Phonics: 160,
+  "Guided Reading": 160,
+  Assembly: 40,
+  "Financial Literacy": 40
+};
 
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
@@ -376,6 +391,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => isMilepostOneYearGroup(data.classSummary.yearGroup),
     [data.classSummary.yearGroup]
   );
+  const isMainstreamTimetable = useMemo(
+    () => normalizeLabelForCompare(data.classSummary.designation) === "mainstream",
+    [data.classSummary.designation]
+  );
   const isYearOneTwoTemplate = useMemo(
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
@@ -416,8 +435,8 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => dayColumns.flatMap((day) => day.blocks),
     [dayColumns]
   );
-  const curriculumMinuteCards = useMemo(() => {
-    if (!isMilepostOneTimetable) {
+  const curriculumChecks = useMemo(() => {
+    if (!isMilepostOneTimetable || !isMainstreamTimetable) {
       return [];
     }
 
@@ -439,11 +458,18 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       });
     });
 
-    return MILEPOST_ONE_SUBJECTS.map((subject) => ({
-      subject,
-      minutes: totals.get(subject) ?? 0
-    }));
-  }, [data.blocks, isMilepostOneTimetable]);
+    return MILEPOST_ONE_SUBJECTS.map((subject) => {
+      const actualMinutes = totals.get(subject) ?? 0;
+      const targetMinutes = MILEPOST_ONE_MAINSTREAM_TARGETS[subject];
+
+      return {
+        subject,
+        actualMinutes,
+        targetMinutes,
+        matches: actualMinutes === targetMinutes
+      };
+    });
+  }, [data.blocks, isMainstreamTimetable, isMilepostOneTimetable]);
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
@@ -1071,25 +1097,31 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           <div>
             <h2 className="panel-title">Subject Allocation</h2>
             <p className="meta">
-              {isMilepostOneTimetable
-                ? "Milepost 1 totals in minutes. Mixed labels count their full time toward each subject."
-                : "Subject-minute totals are currently configured for Milepost 1 only."}
+              {isMilepostOneTimetable && isMainstreamTimetable
+                ? "Milepost 1 Mainstream allocation check. Mixed labels count their full time toward each subject."
+                : "Allocation checks are currently configured for Milepost 1 Mainstream only."}
             </p>
           </div>
         </div>
 
-        {isMilepostOneTimetable ? (
-          <div className="stats-row">
-            {curriculumMinuteCards.map((entry) => (
-              <div className="stat-card" key={entry.subject}>
-                <p className="stat-label">{entry.subject}</p>
-                <p className="stat-value">{entry.minutes}</p>
+        {isMilepostOneTimetable && isMainstreamTimetable ? (
+          <div className="subject-check-row">
+            {curriculumChecks.map((entry) => (
+              <div className="subject-check-card" key={entry.subject}>
+                <p className="subject-check-label">{entry.subject}</p>
+                <p
+                  className={`subject-check-icon ${entry.matches ? "match" : "mismatch"}`}
+                  title={`${entry.subject}: ${entry.actualMinutes} / ${entry.targetMinutes} minutes`}
+                  aria-label={`${entry.subject} ${entry.matches ? "matches" : "does not match"} target`}
+                >
+                  {entry.matches ? "✓" : "✕"}
+                </p>
               </div>
             ))}
           </div>
         ) : (
           <div className="empty-state compact">
-            This timetable is not in Milepost 1, so these subject-minute metrics are not shown yet.
+            This timetable is not in Milepost 1 Mainstream, so these allocation checks are not shown yet.
           </div>
         )}
       </section>

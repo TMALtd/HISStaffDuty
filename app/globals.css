@@ -288,6 +288,49 @@ input {
   font-size: 1.8rem;
 }
 
+.subject-check-row {
+  display: grid;
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.subject-check-card {
+  padding: 14px 10px 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 247, 242, 0.94));
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: center;
+  min-height: 110px;
+}
+
+.subject-check-label {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.15;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.subject-check-icon {
+  margin: 0;
+  font-size: 1.8rem;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.subject-check-icon.match {
+  color: #15803d;
+}
+
+.subject-check-icon.mismatch {
+  color: #dc2626;
+}
+
 .table-shell {
   overflow: hidden;
 }
@@ -1673,6 +1716,10 @@ tr:last-child td {
   .identity-grid,
   .pastoral-fields-grid {
     grid-template-columns: 1fr;
+  }
+
+  .subject-check-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar {
