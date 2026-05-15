@@ -1,6 +1,7 @@
 "use client";
 
 import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -766,6 +767,65 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     }
   }
 
+  async function exportParentPdfFile() {
+    if (!parentExportRef.current) {
+      return;
+    }
+
+    setIsExportingImage("parent");
+    setStatus("");
+    setError("");
+
+    try {
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined)));
+      const dataUrl = await toPng(parentExportRef.current, {
+        cacheBust: true,
+        backgroundColor: "#fffdf8",
+        pixelRatio: 2
+      });
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 6;
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
+
+      const image = new Image();
+      const imageLoaded = new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Could not prepare the parent timetable PDF image."));
+      });
+      image.src = dataUrl;
+      await imageLoaded;
+
+      const imageRatio = image.width / image.height;
+      let renderWidth = usableWidth;
+      let renderHeight = renderWidth / imageRatio;
+
+      if (renderHeight > usableHeight) {
+        renderHeight = usableHeight;
+        renderWidth = renderHeight * imageRatio;
+      }
+
+      const offsetX = (pageWidth - renderWidth) / 2;
+      const offsetY = (pageHeight - renderHeight) / 2;
+
+      pdf.addImage(dataUrl, "PNG", offsetX, offsetY, renderWidth, renderHeight, undefined, "FAST");
+      pdf.save(`${data.classSummary.className.replace(/\s+/g, "-").toLowerCase()}-parent-timetable.pdf`);
+      setStatus("Parent timetable PDF downloaded.");
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "Could not export parent PDF.");
+    } finally {
+      setIsExportingImage(null);
+    }
+  }
+
   async function exportStandardPng() {
     await exportSurfaceAsPng(
       "standard",
@@ -916,7 +976,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
               <button className="button secondary" type="button" onClick={() => void exportStandardPng()} disabled={isExportingImage !== null}>
                 {isExportingImage === "standard" ? "Exporting..." : "Export PNG"}
               </button>
-              <button className="button secondary" type="button" onClick={() => exportParentPdf()}>
+              <button className="button secondary" type="button" onClick={() => void exportParentPdfFile()} disabled={isExportingImage !== null}>
                 Parent PDF
               </button>
               <button className="button secondary" type="button" onClick={() => void exportParentPng()} disabled={isExportingImage !== null}>
