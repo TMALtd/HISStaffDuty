@@ -274,6 +274,19 @@ function buildParentRowSegments(
       continue;
     }
 
+    if (segment.startTime === "12:00:00") {
+      merged.push({
+        key: "12:00:00-12:20:00",
+        startTime: "12:00:00",
+        endTime: "12:20:00"
+      });
+
+      while (index < filtered.length && filtered[index].endTime <= "12:20:00") {
+        index += 1;
+      }
+      continue;
+    }
+
     merged.push(segment);
     index += 1;
   }
@@ -378,7 +391,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
       if (lunchSource) {
         const lunchRowStart = (parentRowLineByTime.get("11:40:00") ?? 1) + 1;
-        const lunchRowEnd = (parentRowLineByTime.get("12:20:00") ?? lunchRowStart) + 1;
+        const lunchRowEnd = (parentRowLineByTime.get("12:00:00") ?? lunchRowStart) + 1;
 
         if (lunchRowEnd > lunchRowStart) {
           sharedBars.push({
@@ -390,6 +403,20 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
             gridColumn: "2 / 6"
           });
         }
+      }
+
+      const playtimeRowStart = (parentRowLineByTime.get("12:00:00") ?? 1) + 1;
+      const playtimeRowEnd = (parentRowLineByTime.get("12:20:00") ?? playtimeRowStart) + 1;
+
+      if (playtimeRowEnd > playtimeRowStart) {
+        sharedBars.push({
+          id: "shared-playtime-mon-thu",
+          title: "Playtime",
+          color: "#9ca3af",
+          rowStart: playtimeRowStart,
+          rowEnd: playtimeRowEnd,
+          gridColumn: "2 / 6"
+        });
       }
     }
 
