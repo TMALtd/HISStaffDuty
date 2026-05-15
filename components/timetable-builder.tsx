@@ -50,6 +50,7 @@ type ParentSharedBar = {
   color: string | null;
   rowStart: number;
   rowEnd: number;
+  gridColumn: string;
 };
 
 type TimetableClassesResponse = {
@@ -240,6 +241,46 @@ function daySpecificParentEndTime(dayKey: string, templateName: string | undefin
   return PARENT_EXPORT_END_TIME;
 }
 
+function buildParentRowSegments(
+  rowSegments: TimetableRowSegment[],
+  isYearOneTwoTemplate: boolean
+) {
+  if (!isYearOneTwoTemplate) {
+    return rowSegments.filter(
+      (segment) => segment.startTime < PARENT_EXPORT_END_TIME && segment.endTime <= PARENT_EXPORT_END_TIME
+    );
+  }
+
+  const filtered = rowSegments.filter(
+    (segment) => segment.startTime < PARENT_EXPORT_END_TIME && segment.endTime <= PARENT_EXPORT_END_TIME
+  );
+
+  const merged: TimetableRowSegment[] = [];
+  let index = 0;
+
+  while (index < filtered.length) {
+    const segment = filtered[index];
+
+    if (segment.startTime === "14:20:00") {
+      merged.push({
+        key: "14:20:00-15:00:00",
+        startTime: "14:20:00",
+        endTime: "15:00:00"
+      });
+
+      while (index < filtered.length && filtered[index].endTime <= "15:00:00") {
+        index += 1;
+      }
+      continue;
+    }
+
+    merged.push(segment);
+    index += 1;
+  }
+
+  return merged;
+}
+
 export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const router = useRouter();
   const standardExportRef = useRef<HTMLDivElement | null>(null);
@@ -276,13 +317,18 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     })();
   }, []);
 
+  const normalizedTemplateName = useMemo(
+    () => normalizeLabelForCompare(data.timetable?.template_name ?? ""),
+    [data.timetable?.template_name]
+  );
+  const isYearOneTwoTemplate = useMemo(
+    () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
+    [normalizedTemplateName]
+  );
   const rowSegments = useMemo(() => buildTimetableRowSegments(data.blocks), [data.blocks]);
   const parentRowSegments = useMemo(
-    () =>
-      rowSegments.filter(
-        (segment) => segment.startTime < PARENT_EXPORT_END_TIME && segment.endTime <= PARENT_EXPORT_END_TIME
-      ),
-    [rowSegments]
+    () => buildParentRowSegments(rowSegments, isYearOneTwoTemplate),
+    [isYearOneTwoTemplate, rowSegments]
   );
   const rowLineByTime = useMemo(
     () => new Map(rowSegments.flatMap((segment, index) => [[segment.startTime, index + 1], [segment.endTime, index + 2]])),
@@ -318,6 +364,34 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
+
+    if (isYearOneTwoTemplate) {
+      const lunchSource = dayColumns
+        .filter((day) => day.key !== "friday")
+        .flatMap((day) => day.blocks)
+        .find(
+          (block) =>
+            block.block_type === "lunch" &&
+            block.start_time <= "11:40:00" &&
+            block.end_time >= "12:20:00"
+        );
+
+      if (lunchSource) {
+        const lunchRowStart = (parentRowLineByTime.get("11:40:00") ?? 1) + 1;
+        const lunchRowEnd = (parentRowLineByTime.get("12:20:00") ?? lunchRowStart) + 1;
+
+        if (lunchRowEnd > lunchRowStart) {
+          sharedBars.push({
+            id: "shared-lunch-mon-thu",
+            title: "Lunchtime",
+            color: lunchSource.color,
+            rowStart: lunchRowStart,
+            rowEnd: lunchRowEnd,
+            gridColumn: "2 / 6"
+          });
+        }
+      }
+    }
 
     const sharedSegments = parentRowSegments.map((segment) => {
       const coveringBlocks = dayColumns.map((day) =>
@@ -376,7 +450,8 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         title: segment.title,
         color: segment.color,
         rowStart: sharedIndex + 2,
-        rowEnd: endIndex + 2
+        rowEnd: endIndex + 2,
+        gridColumn: "2 / 7"
       });
 
       sharedIndex = endIndex;
@@ -399,10 +474,6 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           end_time: clippedEndTime
         });
       });
-
-      const normalizedTemplateName = normalizeLabelForCompare(data.timetable?.template_name ?? "");
-      const isYearOneTwoTemplate =
-        normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2");
 
       if (isYearOneTwoTemplate && day.key !== "tuesday" && day.key !== "friday") {
         const rowStartsAt1420 = clippedBlocks.filter((block) => block.start_time >= "14:20:00");
@@ -463,7 +534,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     });
 
     return { blocks, sharedBars };
-  }, [data.timetable?.template_name, dayColumns, parentRowLineByTime, parentRowSegments]);
+  }, [dayColumns, isYearOneTwoTemplate, parentRowLineByTime, parentRowSegments]);
 
   const selectedBlock = selectedBlockId
     ? visibleBlocks.find((block) => block.id === selectedBlockId) ?? null
@@ -1004,7 +1075,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                       className="timetable-parent-shared-bar"
                       key={bar.id}
                       style={{
-                        gridColumn: "2 / 7",
+                        gridColumn: bar.gridColumn,
                         gridRow: `${bar.rowStart} / ${bar.rowEnd}`,
                         background: bar.color ?? "#7c8596"
                       }}
