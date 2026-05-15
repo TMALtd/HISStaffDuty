@@ -1758,6 +1758,11 @@ tr:last-child td {
   }
 }
 
+@page {
+  size: landscape;
+  margin: 6mm;
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -1795,8 +1800,55 @@ tr:last-child td {
     min-width: 0;
   }
 
+  body[data-print-variant="parent"] .timetable-parent-export-surface {
+    padding: 0;
+    width: 100%;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-header {
+    margin-bottom: 8px;
+    gap: 12px;
+  }
+
   body[data-print-variant="parent"] .timetable-parent-logo {
-    width: 180px;
+    width: 120px;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-title {
+    font-size: 1.2rem;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-grid {
+    grid-template-columns: 78px repeat(5, minmax(0, 1fr));
+    grid-auto-rows: minmax(34px, auto);
+    gap: 4px;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-corner,
+  body[data-print-variant="parent"] .timetable-parent-day,
+  body[data-print-variant="parent"] .timetable-parent-time,
+  body[data-print-variant="parent"] .timetable-parent-slot,
+  body[data-print-variant="parent"] .timetable-parent-block,
+  body[data-print-variant="parent"] .timetable-parent-shared-bar {
+    border-radius: 8px;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-day {
+    padding: 6px 4px;
+    font-size: 0.72rem;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-time {
+    padding: 4px;
+    font-size: 0.58rem;
+    line-height: 1.1;
+  }
+
+  body[data-print-variant="parent"] .timetable-parent-block,
+  body[data-print-variant="parent"] .timetable-parent-shared-bar {
+    padding: 6px 7px;
+    font-size: 0.62rem;
+    line-height: 1.05;
   }
 
   body[data-print-variant="standard"] .timetable-block-card {
