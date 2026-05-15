@@ -354,6 +354,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   const [data, setData] = useState(initialData);
   const [classOptions, setClassOptions] = useState<TimetableClassSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialData.timetable?.template_id ?? initialData.templates[0]?.id ?? "");
+  const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditableBlockDraft | null>(null);
   const [status, setStatus] = useState("");
@@ -365,6 +366,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   useEffect(() => {
     setData(initialData);
     setSelectedTemplateId(initialData.timetable?.template_id ?? initialData.templates[0]?.id ?? "");
+    setSelectedTeacherId("");
     setSelectedBlockId(null);
     setDraft(null);
     setStatus("");
@@ -435,6 +437,20 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => dayColumns.flatMap((day) => day.blocks),
     [dayColumns]
   );
+  const assignedTeacherOptions = useMemo(() => {
+    const teacherMap = new Map<string, TimetableStaffOption>();
+
+    data.blocks.forEach((block) => {
+      block.teachers.forEach((teacher) => {
+        const matchingOption = data.staffOptions.find((option) => option.id === teacher.staff_id);
+        if (matchingOption) {
+          teacherMap.set(matchingOption.id, matchingOption);
+        }
+      });
+    });
+
+    return Array.from(teacherMap.values()).sort((left, right) => left.label.localeCompare(right.label));
+  }, [data.blocks, data.staffOptions]);
   const curriculumChecks = useMemo(() => {
     if (!isMilepostOneTimetable || !isMainstreamTimetable) {
       return [];
@@ -1040,52 +1056,67 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                 ))}
             </select>
           </div>
-          <div className="field">
-            <label htmlFor="builderTemplateSelect">Template</label>
-            <select
-              id="builderTemplateSelect"
-              value={selectedTemplateId}
-              onChange={(event) => setSelectedTemplateId(event.target.value)}
-              disabled={Boolean(data.timetable)}
-            >
-              <option value="">Select template</option>
-              {data.templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                  {template.year_group ? ` | ${template.year_group}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field timetable-toolbar-summary">
-            <label>Status</label>
-            <div className="timetable-toolbar-value">
-              {data.timetable ? `Live builder using ${data.timetable.template_name}` : "No timetable created yet"}
-            </div>
-          </div>
           {data.timetable ? (
-            <div className="actions timetable-toolbar-actions">
-              <button className="button secondary" type="button" onClick={() => exportStandardPdf()}>
-                Export PDF
-              </button>
-              <button className="button secondary" type="button" onClick={() => void exportStandardPng()} disabled={isExportingImage !== null}>
-                {isExportingImage === "standard" ? "Exporting..." : "Export PNG"}
-              </button>
-              <button className="button secondary" type="button" onClick={() => void exportParentPdfFile()} disabled={isExportingImage !== null}>
-                Parent PDF
-              </button>
-              <button className="button secondary" type="button" onClick={() => void exportParentPng()} disabled={isExportingImage !== null}>
-                {isExportingImage === "parent" ? "Exporting..." : "Parent PNG"}
-              </button>
-            </div>
-          ) : null}
-          {!data.timetable ? (
-            <div className="actions timetable-toolbar-actions">
-              <button className="button" type="button" onClick={() => void createTimetable()} disabled={isBusy}>
-                {isBusy ? "Creating..." : "Create Timetable"}
-              </button>
-            </div>
-          ) : null}
+            <>
+              <div className="field">
+                <label htmlFor="teacherFilter">Teacher</label>
+                <select
+                  id="teacherFilter"
+                  value={selectedTeacherId}
+                  onChange={(event) => setSelectedTeacherId(event.target.value)}
+                >
+                  <option value="">All assigned teachers</option>
+                  {assignedTeacherOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="actions timetable-toolbar-actions">
+                <button className="button secondary" type="button" onClick={() => exportStandardPdf()}>
+                  Export PDF
+                </button>
+                <button className="button secondary" type="button" onClick={() => void exportStandardPng()} disabled={isExportingImage !== null}>
+                  {isExportingImage === "standard" ? "Exporting..." : "Export PNG"}
+                </button>
+                <button className="button secondary" type="button" onClick={() => void exportParentPdfFile()} disabled={isExportingImage !== null}>
+                  Parent PDF
+                </button>
+                <button className="button secondary" type="button" onClick={() => void exportParentPng()} disabled={isExportingImage !== null}>
+                  {isExportingImage === "parent" ? "Exporting..." : "Parent PNG"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="field">
+                <label htmlFor="builderTemplateSelect">Template</label>
+                <select
+                  id="builderTemplateSelect"
+                  value={selectedTemplateId}
+                  onChange={(event) => setSelectedTemplateId(event.target.value)}
+                >
+                  <option value="">Select template</option>
+                  {data.templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                      {template.year_group ? ` | ${template.year_group}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field timetable-toolbar-summary">
+                <label>Status</label>
+                <div className="timetable-toolbar-value">No timetable created yet</div>
+              </div>
+              <div className="actions timetable-toolbar-actions">
+                <button className="button" type="button" onClick={() => void createTimetable()} disabled={isBusy}>
+                  {isBusy ? "Creating..." : "Create Timetable"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {status ? <div className="banner">{status}</div> : null}
@@ -1182,11 +1213,17 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                     const foreground = textColorForBackground(background);
                     const rowStart = (rowLineByTime.get(block.start_time) ?? 1) + 1;
                     const rowEnd = (rowLineByTime.get(block.end_time) ?? rowStart) + 1;
+                    const isTeacherMatch =
+                      !selectedTeacherId ||
+                      block.teachers.some((teacher) => teacher.staff_id === selectedTeacherId);
+                    const visibleTeachers = selectedTeacherId
+                      ? block.teachers.filter((teacher) => teacher.staff_id === selectedTeacherId)
+                      : block.teachers;
 
                     return (
                       <button
                         key={block.id}
-                        className={`timetable-block-card timetable-grid-block ${blockDensityClass(block)}`.trim()}
+                        className={`timetable-block-card timetable-grid-block ${blockDensityClass(block)}${!isTeacherMatch ? " is-muted" : ""}`.trim()}
                         type="button"
                         style={{
                           gridColumn: dayIndex + 2,
@@ -1206,9 +1243,9 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                         <div className="timetable-block-meta muted-block-meta">
                           {BLOCK_TYPE_LABELS[block.block_type]}
                         </div>
-                        {block.teachers.length ? (
+                        {visibleTeachers.length ? (
                           <div className="timetable-teacher-strip">
-                            {block.teachers.map((teacher) => (
+                            {visibleTeachers.map((teacher) => (
                               <span className="timetable-teacher-badge" key={`${block.id}-${teacher.staff_id}`}>
                                 {initialsForTeacher(teacher)}
                               </span>
