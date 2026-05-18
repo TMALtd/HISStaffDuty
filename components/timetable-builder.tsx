@@ -216,6 +216,40 @@ function buildTimetableRowSegments(blocks: TimetableBlock[]) {
   return segments;
 }
 
+function buildStandardRowSegments(
+  rowSegments: TimetableRowSegment[],
+  isYearOneTwoTemplate: boolean
+) {
+  if (!isYearOneTwoTemplate) {
+    return rowSegments;
+  }
+
+  const merged: TimetableRowSegment[] = [];
+  let index = 0;
+
+  while (index < rowSegments.length) {
+    const segment = rowSegments[index];
+
+    if (segment.startTime === "12:00:00") {
+      merged.push({
+        key: "12:00:00-12:20:00",
+        startTime: "12:00:00",
+        endTime: "12:20:00"
+      });
+
+      while (index < rowSegments.length && rowSegments[index].endTime <= "12:20:00") {
+        index += 1;
+      }
+      continue;
+    }
+
+    merged.push(segment);
+    index += 1;
+  }
+
+  return merged;
+}
+
 function textColorForBackground(color: string | null) {
   const hex = (color ?? "").replace("#", "");
   if (hex.length !== 6) {
@@ -292,6 +326,29 @@ function daySpecificParentEndTime(dayKey: string, templateName: string | undefin
   }
 
   return PARENT_EXPORT_END_TIME;
+}
+
+function standardDisplayBlockTimes(
+  block: MergedTimetableBlock,
+  isYearOneTwoTemplate: boolean
+) {
+  if (
+    isYearOneTwoTemplate &&
+    block.weekday === "friday" &&
+    block.block_type === "dismissal" &&
+    block.start_time === "12:00:00" &&
+    block.end_time === "12:15:00"
+  ) {
+    return {
+      startTime: "12:00:00",
+      endTime: "12:20:00"
+    };
+  }
+
+  return {
+    startTime: block.start_time,
+    endTime: block.end_time
+  };
 }
 
 function buildParentRowSegments(
@@ -401,7 +458,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
   );
-  const rowSegments = useMemo(() => buildTimetableRowSegments(data.blocks), [data.blocks]);
+  const rowSegments = useMemo(
+    () => buildStandardRowSegments(buildTimetableRowSegments(data.blocks), isYearOneTwoTemplate),
+    [data.blocks, isYearOneTwoTemplate]
+  );
   const parentRowSegments = useMemo(
     () => buildParentRowSegments(rowSegments, isYearOneTwoTemplate),
     [isYearOneTwoTemplate, rowSegments]
@@ -1211,8 +1271,9 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                   day.blocks.map((block) => {
                     const background = block.color ?? "#8be6a8";
                     const foreground = textColorForBackground(background);
-                    const rowStart = (rowLineByTime.get(block.start_time) ?? 1) + 1;
-                    const rowEnd = (rowLineByTime.get(block.end_time) ?? rowStart) + 1;
+                    const displayTimes = standardDisplayBlockTimes(block, isYearOneTwoTemplate);
+                    const rowStart = (rowLineByTime.get(displayTimes.startTime) ?? 1) + 1;
+                    const rowEnd = (rowLineByTime.get(displayTimes.endTime) ?? rowStart) + 1;
                     const isTeacherMatch =
                       !selectedTeacherId ||
                       block.teachers.some((teacher) => teacher.staff_id === selectedTeacherId);
@@ -1238,7 +1299,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                           <span className="timetable-block-edit">✎</span>
                         </div>
                         <div className="timetable-block-meta">
-                          {timeRangeLabel(block.start_time, block.end_time)}
+                          {timeRangeLabel(displayTimes.startTime, displayTimes.endTime)}
                         </div>
                         <div className="timetable-block-meta muted-block-meta">
                           {BLOCK_TYPE_LABELS[block.block_type]}
