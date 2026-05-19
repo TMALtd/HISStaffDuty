@@ -249,16 +249,32 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
 
       const json = (await response.json()) as {
         error?: string;
-        result?: { className: string; updatedCount: number };
+        result?: {
+          className: string;
+          updatedCount: number;
+          processedRowCount: number;
+          skippedCount: number;
+          issues: Array<{ rowNumber: number; slot: string; reason: string }>;
+        };
       };
 
       if (!response.ok) {
         throw new Error(json.error ?? "Could not import class timetable CSV.");
       }
 
+      await refreshClasses();
       setSelectedClassTimetableCsvFile(null);
+      const result = json.result;
+      const classLabel = result?.className ?? selectedClassCsvSummary?.className ?? selectedClassCsvCode;
+      const issuePreview =
+        result?.issues?.length
+          ? ` Issues: ${result.issues
+              .slice(0, 3)
+              .map((issue) => `row ${issue.rowNumber} (${issue.slot}) - ${issue.reason}`)
+              .join("; ")}${result.issues.length > 3 ? `; plus ${result.issues.length - 3} more` : ""}`
+          : "";
       setStatus(
-        `Imported ${json.result?.updatedCount ?? 0} timetable rows for ${json.result?.className ?? selectedClassCsvSummary?.className ?? selectedClassCsvCode}.`
+        `Imported ${result?.updatedCount ?? 0} of ${result?.processedRowCount ?? 0} timetable rows for ${classLabel}. Skipped ${result?.skippedCount ?? 0}.${issuePreview}`
       );
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "Could not import class timetable CSV.");

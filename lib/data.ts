@@ -1777,10 +1777,21 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     });
   });
 
+  const normalizeTeacherAlias = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  type ImportIssue = {
+    rowNumber: number;
+    slot: string;
+    reason: string;
+  };
+
+  const issues: ImportIssue[] = [];
   let updatedCount = 0;
+  let skippedCount = 0;
+  let processedRowCount = 0;
   const seenSlots = new Set<string>();
 
-  for (const row of rows.slice(1)) {
+  for (const [rowOffset, row] of rows.slice(1).entries()) {
+    const rowNumber = rowOffset + 2;
     const classCode = String(row[headerLookup.get("class code") ?? -1] ?? "").trim();
     const className = String(row[headerLookup.get("class name") ?? -1] ?? "").trim();
     const weekdayLabel = String(row[headerLookup.get("weekday") ?? -1] ?? "").trim().toLowerCase();
@@ -1792,84 +1803,164 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     const teacherIdsRaw = String(row[headerLookup.get("teacher ids") ?? -1] ?? "").trim();
     const color = String(row[headerLookup.get("color") ?? -1] ?? "").trim();
     const notes = String(row[headerLookup.get("notes") ?? -1] ?? "").trim();
+    const slotLabel = `${csvWeekdayLabel(weekdayLabel)} ${startTimeRaw}-${endTimeRaw}`.trim();
 
     if (!classCode && !className && !weekdayLabel && !startTimeRaw && !endTimeRaw) {
       continue;
     }
 
+    processedRowCount += 1;
+
     if (classCode && classCode !== builderData.classSummary.classCode) {
-      throw new Error(
-        `This CSV is for class code ${classCode}, but you selected ${builderData.classSummary.classCode}.`
-      );
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: `CSV class code ${classCode} does not match selected class ${builderData.classSummary.classCode}.`
+      });
+      continue;
     }
 
     if (className && className !== builderData.classSummary.className) {
-      throw new Error(
-        `This CSV is for class ${className}, but you selected ${builderData.classSummary.className}.`
-      );
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: `CSV class name ${className} does not match selected class ${builderData.classSummary.className}.`
+      });
+      continue;
     }
 
     const startTime = normalizeCsvTimeValue(startTimeRaw);
     const endTime = normalizeCsvTimeValue(endTimeRaw);
     if (!startTime || !endTime) {
-      throw new Error(`Could not read the timetable slot time ${startTimeRaw}-${endTimeRaw}.`);
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: `Could not read timetable times ${startTimeRaw}-${endTimeRaw}.`
+      });
+      continue;
     }
 
     const slotKey = `${weekdayLabel}|${normalizeTimeKey(startTime)}|${normalizeTimeKey(endTime)}`;
     if (seenSlots.has(slotKey)) {
-      throw new Error(`The CSV contains duplicate rows for ${weekdayLabel} ${startTimeRaw}-${endTimeRaw}.`);
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: "The CSV contains a duplicate row for this timetable slot."
+      });
+      continue;
     }
     seenSlots.add(slotKey);
 
     const block = blockBySlot.get(slotKey);
     if (!block) {
-      throw new Error(`The slot ${csvWeekdayLabel(weekdayLabel)} ${startTimeRaw}-${endTimeRaw} does not exist in this timetable.`);
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: "This timetable slot does not exist for the selected class."
+      });
+      continue;
     }
 
-    const normalizedBlockType = normalizeTimetableBlockType(blockTypeRaw || block.block_type);
-    const teacherIdsFromCsv = splitTeacherCsvValue(teacherIdsRaw);
-    const teacherNamesFromCsv = splitTeacherCsvValue(teacherNamesRaw);
-    const resolvedTeacherIds = new Set<string>();
+    try {
+      const normalizedBlockType = normalizeTimetableBlockType(blockTypeRaw || block.block_type);
+      const teacherIdsFromCsv = splitTeacherCsvValue(teacherIdsRaw);
+      const teacherNamesFromCsv = splitTeacherCsvValue(teacherNamesRaw);
+      const resolvedTeacherIds: string[] = [];
 
-    teacherIdsFromCsv.forEach((teacherId) => {
-      if (!staffById.has(teacherId)) {
-        throw new Error(`Teacher ID ${teacherId} is not valid for ${builderData.classSummary.className}.`);
+      if (teacherIdsFromCsv.length > 0) {
+        teacherIdsFromCsv.forEach((teacherId) => {
+          if (!staffById.has(teacherId)) {
+            throw new Error(`Teacher ID ${teacherId} is not valid for ${builderData.classSummary.className}.`);
+          }
+          if (!resolvedTeacherIds.includes(teacherId)) {
+            resolvedTeacherIds.push(teacherId);
+          }
+        });
+      } else if (teacherNamesFromCsv.length > 0) {
+        teacherNamesFromCsv.forEach((teacherName) => {
+          const matches = staffByName.get(normalizeTeacherAlias(teacherName)) ?? [];
+          if (!matches.length) {
+            throw new Error(`Teacher name "${teacherName}" was not found in staff records.`);
+          }
+          if (matches.length > 1) {
+            throw new Error(`Teacher name "${teacherName}" matches multiple staff records. Use Teacher IDs instead.`);
+          }
+          if (!resolvedTeacherIds.includes(matches[0])) {
+            resolvedTeacherIds.push(matches[0]);
+          }
+        });
       }
-      resolvedTeacherIds.add(teacherId);
-    });
 
-    teacherNamesFromCsv.forEach((teacherName) => {
-      const matches = staffByName.get(teacherName.trim().toLowerCase()) ?? [];
-      if (!matches.length) {
-        throw new Error(`Teacher name "${teacherName}" was not found in staff records.`);
+      const nextTitle = lessonTitle ? lessonTitle : block.title;
+      const nextColor = color ? color : block.color;
+      const nextNotes = notes ? notes : block.notes;
+      const currentTeacherIds = block.teachers.map((teacher) => teacher.staff_id);
+      const nextTeacherIds =
+        teacherIdsFromCsv.length > 0 || teacherNamesFromCsv.length > 0 ? resolvedTeacherIds : currentTeacherIds;
+
+      const changedFields: string[] = [];
+      if ((nextTitle ?? block.period_label) !== (block.title ?? block.period_label)) {
+        changedFields.push("title");
       }
-      if (matches.length > 1) {
-        throw new Error(`Teacher name "${teacherName}" matches multiple staff records. Use Teacher IDs instead.`);
+      if (normalizedBlockType !== block.block_type) {
+        changedFields.push("block type");
       }
-      resolvedTeacherIds.add(matches[0]);
-    });
+      if ((nextColor ?? "") !== (block.color ?? "")) {
+        changedFields.push("color");
+      }
+      if ((nextNotes ?? "") !== (block.notes ?? "")) {
+        changedFields.push("notes");
+      }
+      if (JSON.stringify(nextTeacherIds) !== JSON.stringify(currentTeacherIds)) {
+        changedFields.push("teachers");
+      }
 
-    await upsertTimetableBlock({
-      classCode: builderData.classSummary.classCode,
-      blockId: block.id,
-      title: lessonTitle || null,
-      blockType: normalizedBlockType,
-      color: color || null,
-      notes: notes || null,
-      staffIds: Array.from(resolvedTeacherIds)
-    });
+      if (!changedFields.length) {
+        skippedCount += 1;
+        continue;
+      }
 
-    updatedCount += 1;
+      await upsertTimetableBlock({
+        classCode: builderData.classSummary.classCode,
+        blockId: block.id,
+        title: nextTitle,
+        blockType: normalizedBlockType,
+        color: nextColor,
+        notes: nextNotes,
+        staffIds: nextTeacherIds
+      });
+
+      updatedCount += 1;
+    } catch (error) {
+      issues.push({
+        rowNumber,
+        slot: slotLabel,
+        reason: error instanceof Error ? error.message : "This timetable row could not be imported."
+      });
+    }
   }
 
-  if (!updatedCount) {
+  if (!processedRowCount) {
+    throw new Error("The CSV was read, but no timetable rows were found.");
+  }
+
+  if (!updatedCount && issues.length) {
+    throw new Error(
+      `The CSV was read, but no timetable rows were updated. First issue: ${issues[0].slot} - ${issues[0].reason}`
+    );
+  }
+
+  if (!updatedCount && !issues.length) {
     throw new Error("The CSV was read, but no timetable rows were updated.");
   }
 
   return {
     classCode: builderData.classSummary.classCode,
     className: builderData.classSummary.className,
-    updatedCount
+    processedRowCount,
+    updatedCount,
+    skippedCount,
+    issues
   };
 }
 
