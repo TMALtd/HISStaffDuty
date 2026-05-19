@@ -65,7 +65,7 @@ const TIMETABLE_SETUP_MESSAGE =
   "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
 const SPECIALIST_SUBJECT_COLORS: Record<string, string> = {
   BM: "#d95c02",
-  Mandarin: "#d5b8ee",
+  Mandarin: "#f4a7ff",
   "P.E.": "#1d4ed8",
   Library: "#6b7280",
   Music: "#efbadf",

@@ -70,7 +70,7 @@ const COLOR_OPTIONS = [
   "#ffffff",
   "#8be6a8",
   "#a8c7f0",
-  "#d5b8ee",
+  "#f4a7ff",
   "#ffe97c",
   "#efbadf",
   "#ffd090",
