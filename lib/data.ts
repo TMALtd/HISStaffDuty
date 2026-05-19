@@ -491,7 +491,10 @@ function normalizeLegacyTimetableColor(title: string | null, color: string | nul
   const normalizedTitle = normalizeSpecialistSubjectLabel(title ?? "");
   const normalizedColor = color?.trim().toLowerCase() ?? null;
 
-  if (normalizedTitle === "Mandarin" && normalizedColor === "#d5b8ee") {
+  if (
+    normalizedTitle === "Mandarin" &&
+    (normalizedColor === "#d5b8ee" || normalizedColor === "#8be6a8")
+  ) {
     return SPECIALIST_SUBJECT_COLORS.Mandarin;
   }
 

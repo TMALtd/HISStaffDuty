@@ -124,6 +124,22 @@ const MILEPOST_ONE_MAINSTREAM_TARGETS: Record<(typeof MILEPOST_ONE_SUBJECTS)[num
   "Financial Literacy": 40
 };
 
+const MILEPOST_ONE_BILINGUAL_TARGETS: Record<(typeof MILEPOST_ONE_SUBJECTS)[number], number> = {
+  English: 240,
+  Maths: 240,
+  IPC: 240,
+  Mandarin: 240,
+  BM: 120,
+  "P.E.": 120,
+  Coding: 40,
+  Library: 40,
+  "Shared Reading": 160,
+  Phonics: 160,
+  "Guided Reading": 160,
+  Assembly: 40,
+  "Financial Literacy": 40
+};
+
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
   const [endHour, endMinute] = endTime.split(":").map(Number);
@@ -454,6 +470,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizeLabelForCompare(data.classSummary.designation) === "mainstream",
     [data.classSummary.designation]
   );
+  const isBilingualTimetable = useMemo(
+    () => normalizeLabelForCompare(data.classSummary.designation) === "bilingual",
+    [data.classSummary.designation]
+  );
   const isYearOneTwoTemplate = useMemo(
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
@@ -512,9 +532,13 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     return Array.from(teacherMap.values()).sort((left, right) => left.label.localeCompare(right.label));
   }, [data.blocks, data.staffOptions]);
   const curriculumChecks = useMemo(() => {
-    if (!isMilepostOneTimetable || !isMainstreamTimetable) {
+    if (!isMilepostOneTimetable || (!isMainstreamTimetable && !isBilingualTimetable)) {
       return [];
     }
+
+    const targetSet = isBilingualTimetable
+      ? MILEPOST_ONE_BILINGUAL_TARGETS
+      : MILEPOST_ONE_MAINSTREAM_TARGETS;
 
     const totals = new Map<string, number>(
       MILEPOST_ONE_SUBJECTS.map((subject) => [subject, 0])
@@ -536,7 +560,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
     return MILEPOST_ONE_SUBJECTS.map((subject) => {
       const actualMinutes = totals.get(subject) ?? 0;
-      const targetMinutes = MILEPOST_ONE_MAINSTREAM_TARGETS[subject];
+      const targetMinutes = targetSet[subject];
 
       return {
         subject,
@@ -545,7 +569,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         matches: actualMinutes === targetMinutes
       };
     });
-  }, [data.blocks, isMainstreamTimetable, isMilepostOneTimetable]);
+  }, [data.blocks, isBilingualTimetable, isMainstreamTimetable, isMilepostOneTimetable]);
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
@@ -1188,14 +1212,14 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           <div>
             <h2 className="panel-title">Subject Allocation</h2>
             <p className="meta">
-              {isMilepostOneTimetable && isMainstreamTimetable
-                ? "Milepost 1 Mainstream allocation check. Mixed labels count their full time toward each subject."
-                : "Allocation checks are currently configured for Milepost 1 Mainstream only."}
+              {isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable)
+                ? `Milepost 1 ${isBilingualTimetable ? "Bilingual" : "Mainstream"} allocation check. Mixed labels count their full time toward each subject.`
+                : "Allocation checks are currently configured for Milepost 1 Mainstream and Bilingual only."}
             </p>
           </div>
         </div>
 
-        {isMilepostOneTimetable && isMainstreamTimetable ? (
+        {isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable) ? (
           <div className="subject-check-row">
             {curriculumChecks.map((entry) => (
               <div className="subject-check-card" key={entry.subject}>
@@ -1212,7 +1236,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
           </div>
         ) : (
           <div className="empty-state compact">
-            This timetable is not in Milepost 1 Mainstream, so these allocation checks are not shown yet.
+            This timetable is not in Milepost 1 Mainstream or Bilingual, so these allocation checks are not shown yet.
           </div>
         )}
       </section>
