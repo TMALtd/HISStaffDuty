@@ -1302,19 +1302,24 @@ async function getTimetableBlocksForTimetable(
 }
 
 export async function getTimetableBuilderData(classCode: string): Promise<TimetableBuilderData> {
-  const normalizedClassCode = classCode.trim();
+  const normalizedIdentifier = classCode.trim();
   const [classSummaries, templates, staffOptions] = await Promise.all([
     getTimetableClassSummaries(),
     getTimetableTemplates(),
     getTimetableStaffOptions()
   ]);
 
-  const classSummary = classSummaries.find((entry) => entry.classCode === normalizedClassCode);
+  const classSummary =
+    classSummaries.find((entry) => entry.classCode === normalizedIdentifier) ??
+    classSummaries.find((entry) => entry.className === normalizedIdentifier);
   if (!classSummary) {
-    throw new Error(`Class code ${normalizedClassCode} was not found.`);
+    throw new Error(`Class identifier ${normalizedIdentifier} was not found.`);
   }
 
-  const classTimetableRow = await getClassTimetableRecordByClassCode(normalizedClassCode, classSummary.className);
+  const classTimetableRow = await getClassTimetableRecordByClassCode(
+    classSummary.classCode,
+    classSummary.className
+  );
   const templateLookup = new Map(templates.map((template) => [template.id, template]));
   const timetable = classTimetableRow ? normalizeClassTimetable(classTimetableRow, templateLookup) : null;
   const periods = timetable ? await getTimetablePeriodsByTemplate(timetable.template_id) : [];
