@@ -310,10 +310,12 @@ input {
 
 .subject-check-label {
   margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.15;
+  font-size: 0.76rem;
+  line-height: 1.1;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
 }
 
 .subject-check-icon {
