@@ -741,7 +741,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
   async function refreshBuilderData() {
     const response = await fetch(
-      `/api/timetables/${encodeURIComponent(data.classSummary.className)}`,
+      `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`,
       { cache: "no-store" }
     );
 
@@ -765,7 +765,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     setError("");
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.className)}`, {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -795,7 +795,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     setError("");
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.className)}`, {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`, {
         method: "DELETE"
       });
 
@@ -836,7 +836,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     try {
       for (const targetBlockId of draft.targetBlockIds) {
         const response = await fetch(
-          `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks`,
+          `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks`,
           {
             method: "POST",
             headers: {
@@ -881,7 +881,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     try {
       for (const targetBlockId of draft.targetBlockIds) {
         const response = await fetch(
-          `/api/timetables/${encodeURIComponent(data.classSummary.className)}/blocks/${encodeURIComponent(targetBlockId)}`,
+          `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks/${encodeURIComponent(targetBlockId)}`,
           {
             method: "DELETE"
           }
@@ -1103,14 +1103,14 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
             <label htmlFor="timetableClassSelect">Class</label>
             <select
               id="timetableClassSelect"
-              value={data.classSummary.className}
+              value={data.classSummary.classCode}
               onChange={(event) => router.push(`/timetables/${encodeURIComponent(event.target.value)}`)}
             >
-              <option value={data.classSummary.className}>{data.classSummary.className}</option>
+              <option value={data.classSummary.classCode}>{data.classSummary.className}</option>
               {classOptions
-                .filter((entry) => entry.className !== data.classSummary.className)
+                .filter((entry) => entry.classCode !== data.classSummary.classCode)
                 .map((entry) => (
-                  <option key={entry.className} value={entry.className}>
+                  <option key={entry.classCode} value={entry.classCode}>
                     {entry.className}
                   </option>
                 ))}

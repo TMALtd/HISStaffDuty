@@ -24,7 +24,8 @@ create table if not exists public.timetable_periods (
 
 create table if not exists public.class_timetables (
   id uuid primary key default gen_random_uuid(),
-  class_name text not null unique,
+  class_code text not null unique,
+  class_name text not null,
   template_id uuid not null references public.timetable_templates(id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

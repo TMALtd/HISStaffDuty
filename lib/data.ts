@@ -36,6 +36,7 @@ type ClassRecord = {
   "Year Group": string;
   Milepost: string;
   Level: string;
+  "Class Code": string;
   "Class Name": string;
 };
 
@@ -251,6 +252,7 @@ function normalizeClassTimetable(
   const templateId = String(row.template_id ?? "");
   return {
     id: String(row.id ?? ""),
+    class_code: row.class_code ? String(row.class_code) : null,
     class_name: String(row.class_name ?? ""),
     template_id: templateId,
     template_name: templateLookup.get(templateId)?.name ?? "Template",
@@ -278,6 +280,15 @@ function isMissingSupabaseRelationError(error: unknown, tableName: string) {
       message.includes("schema cache") ||
       message.includes("Could not find the table") ||
       message.includes("PGRST205"))
+  );
+}
+
+function isMissingSupabaseColumnError(error: unknown, tableName: string, columnName: string) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes(tableName) &&
+    message.includes(columnName) &&
+    (message.includes("does not exist") || message.includes("schema cache") || message.includes("PGRST204"))
   );
 }
 
@@ -583,6 +594,16 @@ export async function getClassRecords() {
         { numeric: true }
       )
   );
+}
+
+function findClassRecordByCode(classRecords: ClassRecord[], classCode: string) {
+  const normalizedCode = classCode.trim().toLowerCase();
+  return classRecords.find((row) => row["Class Code"].trim().toLowerCase() === normalizedCode) ?? null;
+}
+
+function findClassRecordByName(classRecords: ClassRecord[], className: string) {
+  const normalizedName = className.trim().toLowerCase();
+  return classRecords.find((row) => row["Class Name"].trim().toLowerCase() === normalizedName) ?? null;
 }
 
 export async function getFilterOptions(filters: Partial<FilterState>): Promise<FilterOptions> {
@@ -1013,26 +1034,56 @@ export async function getTimetableStaffOptions(): Promise<TimetableStaffOption[]
   }));
 }
 
+async function selectClassTimetableRows(): Promise<
+  Array<Record<string, unknown> & { class_code: string | null; class_name: string }>
+> {
+  const supabase = createSupabaseAdminClient();
+  const currentSchema = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .select("id,class_code,class_name,template_id,created_at,updated_at");
+
+  if (!currentSchema.error) {
+    return ((currentSchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ...row,
+      class_code: row.class_code ? String(row.class_code) : null,
+      class_name: row.class_name ? String(row.class_name) : ""
+    }));
+  }
+
+  if (!isMissingSupabaseColumnError(currentSchema.error, CLASS_TIMETABLES_TABLE, "class_code")) {
+    throw new Error(currentSchema.error.message);
+  }
+
+  const legacySchema = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .select("id,class_name,template_id,created_at,updated_at");
+
+  if (legacySchema.error) {
+    throw new Error(legacySchema.error.message);
+  }
+
+  return ((legacySchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    ...row,
+    class_code: null,
+    class_name: row.class_name ? String(row.class_name) : ""
+  }));
+}
+
 async function buildTimetableClassSummaries(params: {
   classRecords: ClassRecord[];
   templates: TimetableTemplate[];
 }): Promise<TimetableClassSummary[]> {
   const { classRecords, templates } = params;
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(CLASS_TIMETABLES_TABLE)
-    .select("id,class_name,template_id");
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const timetableRows = await selectClassTimetableRows();
 
   const templateLookup = new Map(templates.map((template) => [template.id, template]));
-  const timetableByClassName = new Map(
-    ((data ?? []) as Array<Record<string, unknown>>).map((row) => [
-      String(row.class_name ?? ""),
+  const timetableByClassKey = new Map(
+    timetableRows.map((row) => [
+      row.class_code || row.class_name,
       {
         id: String(row.id ?? ""),
+        classCode: row.class_code,
+        className: row.class_name,
         templateId: row.template_id ? String(row.template_id) : null
       }
     ])
@@ -1040,10 +1091,11 @@ async function buildTimetableClassSummaries(params: {
 
   return classRecords
     .map((row) => {
-      const timetable = timetableByClassName.get(row["Class Name"]);
+      const timetable = timetableByClassKey.get(row["Class Code"]) ?? timetableByClassKey.get(row["Class Name"]);
       const template = timetable?.templateId ? templateLookup.get(timetable.templateId) : null;
 
       return {
+        classCode: row["Class Code"],
         className: row["Class Name"],
         school: row.School,
         designation: row.Designation,
@@ -1086,6 +1138,7 @@ export async function getTimetableAdminData(): Promise<{
       return {
         classes: classRecords
           .map((row) => ({
+            classCode: row["Class Code"],
             className: row["Class Name"],
             school: row.School,
             designation: row.Designation,
@@ -1105,19 +1158,16 @@ export async function getTimetableAdminData(): Promise<{
   }
 }
 
-async function getClassTimetableRecordByClassName(className: string) {
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(CLASS_TIMETABLES_TABLE)
-    .select("id,class_name,template_id,created_at,updated_at")
-    .eq("class_name", className)
-    .maybeSingle();
+async function getClassTimetableRecordByClassCode(classCode: string, classNameFallback?: string | null) {
+  const normalizedCode = classCode.trim();
+  const normalizedName = classNameFallback?.trim() ?? "";
+  const timetableRows = await selectClassTimetableRows();
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data as Record<string, unknown> | null) ?? null;
+  return (
+    timetableRows.find((row) => row.class_code === normalizedCode) ??
+    timetableRows.find((row) => row.class_name === normalizedName) ??
+    null
+  );
 }
 
 async function getTimetablePeriodsByTemplate(templateId: string): Promise<TimetablePeriod[]> {
@@ -1251,20 +1301,20 @@ async function getTimetableBlocksForTimetable(
     });
 }
 
-export async function getTimetableBuilderData(className: string): Promise<TimetableBuilderData> {
-  const normalizedClassName = className.trim();
-  const [classSummaries, templates, staffOptions, classTimetableRow] = await Promise.all([
+export async function getTimetableBuilderData(classCode: string): Promise<TimetableBuilderData> {
+  const normalizedClassCode = classCode.trim();
+  const [classSummaries, templates, staffOptions] = await Promise.all([
     getTimetableClassSummaries(),
     getTimetableTemplates(),
-    getTimetableStaffOptions(),
-    getClassTimetableRecordByClassName(normalizedClassName)
+    getTimetableStaffOptions()
   ]);
 
-  const classSummary = classSummaries.find((entry) => entry.className === normalizedClassName);
+  const classSummary = classSummaries.find((entry) => entry.classCode === normalizedClassCode);
   if (!classSummary) {
-    throw new Error(`Class ${normalizedClassName} was not found.`);
+    throw new Error(`Class code ${normalizedClassCode} was not found.`);
   }
 
+  const classTimetableRow = await getClassTimetableRecordByClassCode(normalizedClassCode, classSummary.className);
   const templateLookup = new Map(templates.map((template) => [template.id, template]));
   const timetable = classTimetableRow ? normalizeClassTimetable(classTimetableRow, templateLookup) : null;
   const periods = timetable ? await getTimetablePeriodsByTemplate(timetable.template_id) : [];
@@ -1280,33 +1330,35 @@ export async function getTimetableBuilderData(className: string): Promise<Timeta
   };
 }
 
-export async function createClassTimetable(input: { className: string; templateId: string }) {
-  const className = input.className.trim();
-  if (!className) {
-    throw new Error("className is required.");
+export async function createClassTimetable(input: { classCode: string; templateId: string }) {
+  const classCode = input.classCode.trim();
+  if (!classCode) {
+    throw new Error("classCode is required.");
   }
 
   if (!input.templateId) {
     throw new Error("templateId is required.");
   }
 
-  const [classSummaries, templates, periods, existingTimetable] = await Promise.all([
+  const [classSummaries, templates, periods] = await Promise.all([
     getTimetableClassSummaries(),
     getTimetableTemplates(),
-    getTimetablePeriodsByTemplate(input.templateId),
-    getClassTimetableRecordByClassName(className)
+    getTimetablePeriodsByTemplate(input.templateId)
   ]);
 
-  if (!classSummaries.some((entry) => entry.className === className)) {
-    throw new Error(`Class ${className} was not found.`);
+  const classSummary = classSummaries.find((entry) => entry.classCode === classCode);
+  if (!classSummary) {
+    throw new Error(`Class code ${classCode} was not found.`);
   }
+
+  const existingTimetable = await getClassTimetableRecordByClassCode(classCode, classSummary.className);
 
   if (!templates.some((template) => template.id === input.templateId)) {
     throw new Error("Selected timetable template was not found.");
   }
 
   if (existingTimetable) {
-    throw new Error(`A timetable already exists for ${className}.`);
+    throw new Error(`A timetable already exists for ${classSummary.className}.`);
   }
 
   if (!periods.length) {
@@ -1314,17 +1366,40 @@ export async function createClassTimetable(input: { className: string; templateI
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  let data: Record<string, unknown> | null = null;
+  const currentSchemaInsert = await supabase
     .from(CLASS_TIMETABLES_TABLE)
     .insert({
-      class_name: className,
+      class_code: classCode,
+      class_name: classSummary.className,
       template_id: input.templateId
     })
-    .select("id,class_name,template_id,created_at,updated_at")
+    .select("id,class_code,class_name,template_id,created_at,updated_at")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (!currentSchemaInsert.error) {
+    data = (currentSchemaInsert.data as Record<string, unknown> | null) ?? null;
+  } else if (isMissingSupabaseColumnError(currentSchemaInsert.error, CLASS_TIMETABLES_TABLE, "class_code")) {
+    const legacyInsert = await supabase
+      .from(CLASS_TIMETABLES_TABLE)
+      .insert({
+        class_name: classSummary.className,
+        template_id: input.templateId
+      })
+      .select("id,class_name,template_id,created_at,updated_at")
+      .single();
+
+    if (legacyInsert.error) {
+      throw new Error(legacyInsert.error.message);
+    }
+
+    data = legacyInsert.data as Record<string, unknown>;
+  } else {
+    throw new Error(currentSchemaInsert.error.message);
+  }
+
+  if (!data) {
+    throw new Error("Timetable could not be created.");
   }
 
   const classTimetableId = String(data.id);
@@ -1350,26 +1425,42 @@ export async function createClassTimetable(input: { className: string; templateI
   return data;
 }
 
-export async function deleteClassTimetable(input: { className: string }) {
-  const className = input.className.trim();
-  if (!className) {
-    throw new Error("className is required.");
+export async function deleteClassTimetable(input: { classCode: string }) {
+  const classCode = input.classCode.trim();
+  if (!classCode) {
+    throw new Error("classCode is required.");
   }
 
-  const classTimetable = await getClassTimetableRecordByClassName(className);
+  const classSummaries = await getTimetableClassSummaries();
+  const classSummary = classSummaries.find((entry) => entry.classCode === classCode);
+  const classTimetable = await getClassTimetableRecordByClassCode(classCode, classSummary?.className ?? null);
   if (!classTimetable) {
-    throw new Error(`No timetable exists for ${className}.`);
+    throw new Error(`No timetable exists for ${classSummary?.className ?? classCode}.`);
   }
 
   const supabase = createSupabaseAdminClient();
-  const { error } = await supabase
+  const currentSchemaDelete = await supabase
     .from(CLASS_TIMETABLES_TABLE)
     .delete()
     .eq("id", String(classTimetable.id))
-    .eq("class_name", className);
+    .eq("class_code", classCode);
 
-  if (error) {
-    throw new Error(error.message);
+  if (!currentSchemaDelete.error) {
+    return;
+  }
+
+  if (!isMissingSupabaseColumnError(currentSchemaDelete.error, CLASS_TIMETABLES_TABLE, "class_code")) {
+    throw new Error(currentSchemaDelete.error.message);
+  }
+
+  const legacyDelete = await supabase
+    .from(CLASS_TIMETABLES_TABLE)
+    .delete()
+    .eq("id", String(classTimetable.id))
+    .eq("class_name", String(classTimetable.class_name ?? ""));
+
+  if (legacyDelete.error) {
+    throw new Error(legacyDelete.error.message);
   }
 }
 
@@ -1399,11 +1490,13 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
   }
 
   const timetableClasses = (await getTimetableClassSummaries()).filter((entry) => entry.hasTimetable);
+  const timetableClassByName = new Map(timetableClasses.map((entry) => [entry.className, entry]));
   const knownClassNames = timetableClasses
     .map((entry) => entry.className)
     .sort((left, right) => right.length - left.length);
 
   const assignments: Array<{
+    classCode: string;
     className: string;
     weekday: string;
     startTime: string;
@@ -1452,7 +1545,13 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
           );
 
           matchedClasses.forEach((className) => {
+            const classSummary = timetableClassByName.get(className);
+            if (!classSummary) {
+              return;
+            }
+
             assignments.push({
+              classCode: classSummary.classCode,
               className,
               weekday,
               startTime: timeRange.startTime,
@@ -1468,24 +1567,24 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
     throw new Error("No specialist lesson assignments were found in the CSV.");
   }
 
-  const classNames = Array.from(new Set(assignments.map((entry) => entry.className)));
+  const classCodes = Array.from(new Set(assignments.map((entry) => entry.classCode)));
   const summaryByClass = new Map(
-    classNames.map((className) => [
-      className,
+    classCodes.map((classCode) => [
+      classCode,
       {
-        className,
+        className: assignments.find((entry) => entry.classCode === classCode)?.className ?? classCode,
         updatedCount: 0
       }
     ])
   );
 
-  for (const className of classNames) {
-    const builderData = await getTimetableBuilderData(className);
+  for (const classCode of classCodes) {
+    const builderData = await getTimetableBuilderData(classCode);
     if (!builderData.timetable) {
       continue;
     }
 
-    const classAssignments = assignments.filter((entry) => entry.className === className);
+    const classAssignments = assignments.filter((entry) => entry.classCode === classCode);
     const assignmentBySlot = new Map(
       classAssignments.map((entry) => [
         `${entry.weekday}|${normalizeTimeKey(entry.startTime)}|${normalizeTimeKey(entry.endTime)}`,
@@ -1501,7 +1600,7 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
       }
 
       await upsertTimetableBlock({
-        className,
+        classCode,
         blockId: block.id,
         title: assignment.subject,
         blockType: "lesson",
@@ -1510,7 +1609,7 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
         staffIds: []
       });
 
-      const summary = summaryByClass.get(className);
+      const summary = summaryByClass.get(classCode);
       if (summary) {
         summary.updatedCount += 1;
       }
@@ -1529,7 +1628,7 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
   }
 
   return {
-    importedClassCount: classNames.length,
+    importedClassCount: classCodes.length,
     assignmentCount: assignments.length,
     updatedBlockCount,
     classes: Array.from(summaryByClass.values())
@@ -1537,7 +1636,7 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
 }
 
 export async function upsertTimetableBlock(input: {
-  className: string;
+  classCode: string;
   blockId: string;
   title: string | null;
   blockType: TimetableBlockType;
@@ -1545,10 +1644,12 @@ export async function upsertTimetableBlock(input: {
   notes?: string | null;
   staffIds: string[];
 }) {
-  const className = input.className.trim();
-  const classTimetable = await getClassTimetableRecordByClassName(className);
+  const classCode = input.classCode.trim();
+  const classSummaries = await getTimetableClassSummaries();
+  const classSummary = classSummaries.find((entry) => entry.classCode === classCode);
+  const classTimetable = await getClassTimetableRecordByClassCode(classCode, classSummary?.className ?? null);
   if (!classTimetable) {
-    throw new Error(`No timetable exists for ${className}.`);
+    throw new Error(`No timetable exists for ${classSummary?.className ?? classCode}.`);
   }
 
   const supabase = createSupabaseAdminClient();
@@ -1627,10 +1728,15 @@ export async function upsertTimetableBlock(input: {
   }
 }
 
-export async function resetTimetableBlock(input: { className: string; blockId: string }) {
-  const classTimetable = await getClassTimetableRecordByClassName(input.className.trim());
+export async function resetTimetableBlock(input: { classCode: string; blockId: string }) {
+  const classSummaries = await getTimetableClassSummaries();
+  const classSummary = classSummaries.find((entry) => entry.classCode === input.classCode.trim());
+  const classTimetable = await getClassTimetableRecordByClassCode(
+    input.classCode.trim(),
+    classSummary?.className ?? null
+  );
   if (!classTimetable) {
-    throw new Error(`No timetable exists for ${input.className}.`);
+    throw new Error(`No timetable exists for ${classSummary?.className ?? input.classCode}.`);
   }
 
   const supabase = createSupabaseAdminClient();

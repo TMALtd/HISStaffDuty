@@ -193,6 +193,7 @@ export type TimetablePeriod = {
 
 export type ClassTimetable = {
   id: string;
+  class_code: string | null;
   class_name: string;
   template_id: string;
   template_name: string;
@@ -235,6 +236,7 @@ export type TimetableStaffOption = {
 };
 
 export type TimetableClassSummary = {
+  classCode: string;
   className: string;
   school: string;
   designation: string;

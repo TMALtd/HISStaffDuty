@@ -14,13 +14,13 @@ type TimetableAdminProps = {
 export function TimetableAdmin({ initialClasses, templates, setupMessage }: TimetableAdminProps) {
   const router = useRouter();
   const [classes, setClasses] = useState(initialClasses);
-  const [selectedClassName, setSelectedClassName] = useState(initialClasses[0]?.className ?? "");
+  const [selectedClassCode, setSelectedClassCode] = useState(initialClasses[0]?.classCode ?? "");
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
   const [searchTerm, setSearchTerm] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState(setupMessage ?? "");
   const [isCreating, setIsCreating] = useState(false);
-  const [deletingClassName, setDeletingClassName] = useState("");
+  const [deletingClassCode, setDeletingClassCode] = useState("");
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -31,7 +31,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     }
 
     return classes.filter((entry) =>
-      [entry.className, entry.school, entry.designation, entry.yearGroup]
+      [entry.classCode, entry.className, entry.school, entry.designation, entry.yearGroup]
         .join(" ")
         .toLowerCase()
         .includes(search)
@@ -61,7 +61,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     setStatus("");
     setError("");
 
-    if (!selectedClassName || !selectedTemplateId) {
+    if (!selectedClassCode || !selectedTemplateId) {
       setError("Choose both a class and a timetable template.");
       return;
     }
@@ -69,7 +69,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     setIsCreating(true);
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(selectedClassName)}`, {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(selectedClassCode)}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -84,9 +84,10 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
         throw new Error(json.error ?? "Could not create timetable.");
       }
 
-      setStatus(`Timetable created for ${selectedClassName}.`);
+      const selectedClass = classes.find((entry) => entry.classCode === selectedClassCode);
+      setStatus(`Timetable created for ${selectedClass?.className ?? selectedClassCode}.`);
       await refreshClasses();
-      router.push(`/timetables/${encodeURIComponent(selectedClassName)}`);
+      router.push(`/timetables/${encodeURIComponent(selectedClassCode)}`);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Could not create timetable.");
     } finally {
@@ -94,13 +95,13 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     }
   }
 
-  async function deleteTimetable(className: string) {
+  async function deleteTimetable(classCode: string, className: string) {
     setStatus("");
     setError("");
-    setDeletingClassName(className);
+    setDeletingClassCode(classCode);
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(className)}`, {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(classCode)}`, {
         method: "DELETE"
       });
 
@@ -114,7 +115,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Could not delete timetable.");
     } finally {
-      setDeletingClassName("");
+      setDeletingClassCode("");
     }
   }
 
@@ -192,12 +193,12 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
               <label htmlFor="timetableClassName">Class</label>
               <select
                 id="timetableClassName"
-                value={selectedClassName}
-                onChange={(event) => setSelectedClassName(event.target.value)}
+                value={selectedClassCode}
+                onChange={(event) => setSelectedClassCode(event.target.value)}
               >
                 <option value="">Select class</option>
                 {classes.map((entry) => (
-                  <option key={entry.className} value={entry.className}>
+                  <option key={entry.classCode} value={entry.classCode}>
                     {entry.className} | {entry.yearGroup}
                   </option>
                 ))}
@@ -293,7 +294,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
 
         <div className="timetable-admin-grid">
           {filteredClasses.map((entry) => (
-            <article className="timetable-admin-card" key={entry.className}>
+            <article className="timetable-admin-card" key={entry.classCode}>
               <div className="timetable-admin-card-copy">
                 <p className="eyebrow compact-eyebrow">{entry.school}</p>
                 <h3 className="timetable-admin-card-title">{entry.className}</h3>
@@ -307,16 +308,16 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
               <div className="timetable-admin-card-actions">
                 {entry.hasTimetable ? (
                   <>
-                    <Link className="button" href={`/timetables/${encodeURIComponent(entry.className)}`}>
+                    <Link className="button" href={`/timetables/${encodeURIComponent(entry.classCode)}`}>
                       Open Builder
                     </Link>
                     <button
                       className="button secondary"
                       type="button"
-                      disabled={deletingClassName === entry.className}
-                      onClick={() => void deleteTimetable(entry.className)}
+                      disabled={deletingClassCode === entry.classCode}
+                      onClick={() => void deleteTimetable(entry.classCode, entry.className)}
                     >
-                      {deletingClassName === entry.className ? "Deleting..." : "Delete"}
+                      {deletingClassCode === entry.classCode ? "Deleting..." : "Delete"}
                     </button>
                   </>
                 ) : (
@@ -324,7 +325,7 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
                     className="button secondary"
                     type="button"
                     onClick={() => {
-                      setSelectedClassName(entry.className);
+                      setSelectedClassCode(entry.classCode);
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
                   >
