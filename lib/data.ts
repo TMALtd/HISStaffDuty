@@ -497,6 +497,39 @@ function normalizeTimeKey(value: string) {
   return `${match[1]}:${match[2]}:00`;
 }
 
+function csvEscape(value: string | null | undefined) {
+  const normalized = value ?? "";
+  if (/[",\n\r]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+
+  return normalized;
+}
+
+function csvWeekdayLabel(weekday: string) {
+  return weekday ? `${weekday.charAt(0).toUpperCase()}${weekday.slice(1).toLowerCase()}` : "";
+}
+
+function csvTimeLabel(value: string) {
+  const normalized = normalizeTimeKey(value);
+  return normalized.slice(0, 5);
+}
+
+function classCsvFilename(className: string) {
+  return `${className.replace(/\s+/g, "-").toLowerCase()}-timetable-template.csv`;
+}
+
+function normalizeClassCsvHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, " ");
+}
+
+function splitTeacherCsvValue(value: string) {
+  return value
+    .split(/[|;,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
   return {
     id: String(row.id ?? ""),
@@ -1637,6 +1670,206 @@ export async function bulkImportSpecialistCsv(input: { csvText: string }) {
     assignmentCount: assignments.length,
     updatedBlockCount,
     classes: Array.from(summaryByClass.values())
+  };
+}
+
+export async function exportClassTimetableCsv(input: { classCode: string }) {
+  const builderData = await getTimetableBuilderData(input.classCode);
+  if (!builderData.timetable) {
+    throw new Error(`No timetable exists for ${builderData.classSummary.className}.`);
+  }
+
+  const rows = [
+    [
+      "Class Code",
+      "Class Name",
+      "Weekday",
+      "Start Time",
+      "End Time",
+      "Lesson Title",
+      "Block Type",
+      "Teacher Names",
+      "Teacher IDs",
+      "Color",
+      "Notes"
+    ].join(",")
+  ];
+
+  builderData.blocks.forEach((block) => {
+    rows.push(
+      [
+        csvEscape(builderData.classSummary.classCode),
+        csvEscape(builderData.classSummary.className),
+        csvEscape(csvWeekdayLabel(block.weekday)),
+        csvEscape(csvTimeLabel(block.start_time)),
+        csvEscape(csvTimeLabel(block.end_time)),
+        csvEscape(block.title ?? ""),
+        csvEscape(block.block_type),
+        csvEscape(block.teachers.map((teacher) => teacher.staff_name).join(" | ")),
+        csvEscape(block.teachers.map((teacher) => teacher.staff_id).join(" | ")),
+        csvEscape(block.color ?? ""),
+        csvEscape(block.notes ?? "")
+      ].join(",")
+    );
+  });
+
+  return {
+    classCode: builderData.classSummary.classCode,
+    className: builderData.classSummary.className,
+    filename: classCsvFilename(builderData.classSummary.className),
+    csvText: rows.join("\n")
+  };
+}
+
+export async function importClassTimetableCsv(input: { classCode: string; csvText: string }) {
+  const rows = parseCsvRows(input.csvText);
+  if (rows.length < 2) {
+    throw new Error("The CSV file is empty or could not be read.");
+  }
+
+  const builderData = await getTimetableBuilderData(input.classCode);
+  if (!builderData.timetable) {
+    throw new Error(`No timetable exists for ${builderData.classSummary.className}.`);
+  }
+
+  const headerLookup = new Map(
+    rows[0].map((cell, index) => [normalizeClassCsvHeader(cell), index] as const)
+  );
+  const requiredHeaders = [
+    "class code",
+    "class name",
+    "weekday",
+    "start time",
+    "end time",
+    "lesson title",
+    "block type",
+    "teacher names",
+    "teacher ids",
+    "color",
+    "notes"
+  ];
+
+  const missingHeader = requiredHeaders.find((header) => !headerLookup.has(header));
+  if (missingHeader) {
+    throw new Error(`The CSV is missing the "${missingHeader}" column.`);
+  }
+
+  const blockBySlot = new Map(
+    builderData.blocks.map((block) => [
+      `${block.weekday}|${normalizeTimeKey(block.start_time)}|${normalizeTimeKey(block.end_time)}`,
+      block
+    ])
+  );
+  const staffById = new Map(builderData.staffOptions.map((option) => [option.id, option]));
+  const staffByName = new Map<string, string[]>();
+
+  builderData.staffOptions.forEach((option) => {
+    const rawName = option.label.replace(/\s+\([^)]*\)$/, "").trim().toLowerCase();
+    const aliases = new Set<string>([rawName]);
+    if (option.firstName) {
+      aliases.add(option.firstName.trim().toLowerCase());
+    }
+
+    aliases.forEach((alias) => {
+      const current = staffByName.get(alias) ?? [];
+      current.push(option.id);
+      staffByName.set(alias, current);
+    });
+  });
+
+  let updatedCount = 0;
+  const seenSlots = new Set<string>();
+
+  for (const row of rows.slice(1)) {
+    const classCode = String(row[headerLookup.get("class code") ?? -1] ?? "").trim();
+    const className = String(row[headerLookup.get("class name") ?? -1] ?? "").trim();
+    const weekdayLabel = String(row[headerLookup.get("weekday") ?? -1] ?? "").trim().toLowerCase();
+    const startTimeRaw = String(row[headerLookup.get("start time") ?? -1] ?? "").trim();
+    const endTimeRaw = String(row[headerLookup.get("end time") ?? -1] ?? "").trim();
+    const lessonTitle = String(row[headerLookup.get("lesson title") ?? -1] ?? "").trim();
+    const blockTypeRaw = String(row[headerLookup.get("block type") ?? -1] ?? "").trim();
+    const teacherNamesRaw = String(row[headerLookup.get("teacher names") ?? -1] ?? "").trim();
+    const teacherIdsRaw = String(row[headerLookup.get("teacher ids") ?? -1] ?? "").trim();
+    const color = String(row[headerLookup.get("color") ?? -1] ?? "").trim();
+    const notes = String(row[headerLookup.get("notes") ?? -1] ?? "").trim();
+
+    if (!classCode && !className && !weekdayLabel && !startTimeRaw && !endTimeRaw) {
+      continue;
+    }
+
+    if (classCode && classCode !== builderData.classSummary.classCode) {
+      throw new Error(
+        `This CSV is for class code ${classCode}, but you selected ${builderData.classSummary.classCode}.`
+      );
+    }
+
+    if (className && className !== builderData.classSummary.className) {
+      throw new Error(
+        `This CSV is for class ${className}, but you selected ${builderData.classSummary.className}.`
+      );
+    }
+
+    const startTime = normalizeCsvTimeValue(startTimeRaw);
+    const endTime = normalizeCsvTimeValue(endTimeRaw);
+    if (!startTime || !endTime) {
+      throw new Error(`Could not read the timetable slot time ${startTimeRaw}-${endTimeRaw}.`);
+    }
+
+    const slotKey = `${weekdayLabel}|${normalizeTimeKey(startTime)}|${normalizeTimeKey(endTime)}`;
+    if (seenSlots.has(slotKey)) {
+      throw new Error(`The CSV contains duplicate rows for ${weekdayLabel} ${startTimeRaw}-${endTimeRaw}.`);
+    }
+    seenSlots.add(slotKey);
+
+    const block = blockBySlot.get(slotKey);
+    if (!block) {
+      throw new Error(`The slot ${csvWeekdayLabel(weekdayLabel)} ${startTimeRaw}-${endTimeRaw} does not exist in this timetable.`);
+    }
+
+    const normalizedBlockType = normalizeTimetableBlockType(blockTypeRaw || block.block_type);
+    const teacherIdsFromCsv = splitTeacherCsvValue(teacherIdsRaw);
+    const teacherNamesFromCsv = splitTeacherCsvValue(teacherNamesRaw);
+    const resolvedTeacherIds = new Set<string>();
+
+    teacherIdsFromCsv.forEach((teacherId) => {
+      if (!staffById.has(teacherId)) {
+        throw new Error(`Teacher ID ${teacherId} is not valid for ${builderData.classSummary.className}.`);
+      }
+      resolvedTeacherIds.add(teacherId);
+    });
+
+    teacherNamesFromCsv.forEach((teacherName) => {
+      const matches = staffByName.get(teacherName.trim().toLowerCase()) ?? [];
+      if (!matches.length) {
+        throw new Error(`Teacher name "${teacherName}" was not found in staff records.`);
+      }
+      if (matches.length > 1) {
+        throw new Error(`Teacher name "${teacherName}" matches multiple staff records. Use Teacher IDs instead.`);
+      }
+      resolvedTeacherIds.add(matches[0]);
+    });
+
+    await upsertTimetableBlock({
+      classCode: builderData.classSummary.classCode,
+      blockId: block.id,
+      title: lessonTitle || null,
+      blockType: normalizedBlockType,
+      color: color || null,
+      notes: notes || null,
+      staffIds: Array.from(resolvedTeacherIds)
+    });
+
+    updatedCount += 1;
+  }
+
+  if (!updatedCount) {
+    throw new Error("The CSV was read, but no timetable rows were updated.");
+  }
+
+  return {
+    classCode: builderData.classSummary.classCode,
+    className: builderData.classSummary.className,
+    updatedCount
   };
 }
 

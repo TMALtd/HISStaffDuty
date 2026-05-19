@@ -23,6 +23,12 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
   const [deletingClassCode, setDeletingClassCode] = useState("");
   const [selectedCsvFile, setSelectedCsvFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedClassCsvCode, setSelectedClassCsvCode] = useState(
+    initialClasses.find((entry) => entry.hasTimetable)?.classCode ?? initialClasses[0]?.classCode ?? ""
+  );
+  const [selectedClassTimetableCsvFile, setSelectedClassTimetableCsvFile] = useState<File | null>(null);
+  const [isDownloadingClassCsv, setIsDownloadingClassCsv] = useState(false);
+  const [isImportingClassCsv, setIsImportingClassCsv] = useState(false);
 
   const filteredClasses = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -37,6 +43,13 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
         .includes(search)
     );
   }, [classes, searchTerm]);
+
+  const classCsvOptions = useMemo(
+    () => classes.filter((entry) => entry.hasTimetable),
+    [classes]
+  );
+
+  const selectedClassCsvSummary = classCsvOptions.find((entry) => entry.classCode === selectedClassCsvCode) ?? null;
 
   async function refreshClasses() {
     const response = await fetch("/api/timetables/classes", { cache: "no-store" });
@@ -167,6 +180,93 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
     }
   }
 
+  async function downloadClassCsvTemplate() {
+    setStatus("");
+    setError("");
+
+    if (!selectedClassCsvCode) {
+      setError("Choose a class timetable before downloading the CSV template.");
+      return;
+    }
+
+    setIsDownloadingClassCsv(true);
+
+    try {
+      const response = await fetch(`/api/timetables/${encodeURIComponent(selectedClassCsvCode)}/class-csv`, {
+        method: "GET"
+      });
+
+      if (!response.ok) {
+        const json = (await response.json()) as { error?: string };
+        throw new Error(json.error ?? "Could not download class timetable CSV.");
+      }
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("Content-Disposition") ?? "";
+      const filenameMatch = contentDisposition.match(/filename="([^"]+)"/i);
+      const filename = filenameMatch?.[1] ?? "class-timetable-template.csv";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      setStatus(`Downloaded class CSV template for ${selectedClassCsvSummary?.className ?? selectedClassCsvCode}.`);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Could not download class timetable CSV.");
+    } finally {
+      setIsDownloadingClassCsv(false);
+    }
+  }
+
+  async function importClassTimetableCsv(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("");
+    setError("");
+
+    if (!selectedClassCsvCode) {
+      setError("Choose a class timetable before uploading a class CSV.");
+      return;
+    }
+
+    if (!selectedClassTimetableCsvFile) {
+      setError("Choose a class timetable CSV before importing.");
+      return;
+    }
+
+    setIsImportingClassCsv(true);
+
+    try {
+      const csvText = await selectedClassTimetableCsvFile.text();
+      const response = await fetch(`/api/timetables/${encodeURIComponent(selectedClassCsvCode)}/class-csv`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ csvText })
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        result?: { className: string; updatedCount: number };
+      };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not import class timetable CSV.");
+      }
+
+      setSelectedClassTimetableCsvFile(null);
+      setStatus(
+        `Imported ${json.result?.updatedCount ?? 0} timetable rows for ${json.result?.className ?? selectedClassCsvSummary?.className ?? selectedClassCsvCode}.`
+      );
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Could not import class timetable CSV.");
+    } finally {
+      setIsImportingClassCsv(false);
+    }
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -245,6 +345,54 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
             <div className="actions">
               <button className="button" type="submit" disabled={isImporting}>
                 {isImporting ? "Importing..." : "Import Specialist Lessons"}
+              </button>
+            </div>
+          </form>
+
+          <form className="mi-card" onSubmit={importClassTimetableCsv}>
+            <h2 className="mi-title">Class timetable CSV</h2>
+            <div className="field">
+              <label htmlFor="classTimetableCsvClass">Class timetable</label>
+              <select
+                id="classTimetableCsvClass"
+                value={selectedClassCsvCode}
+                onChange={(event) => setSelectedClassCsvCode(event.target.value)}
+              >
+                <option value="">Select class timetable</option>
+                {classCsvOptions.map((entry) => (
+                  <option key={entry.classCode} value={entry.classCode}>
+                    {entry.className} | {entry.yearGroup}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => void downloadClassCsvTemplate()}
+                disabled={!selectedClassCsvCode || isDownloadingClassCsv}
+              >
+                {isDownloadingClassCsv ? "Downloading..." : "Download Class CSV Template"}
+              </button>
+            </div>
+            <div className="field">
+              <label htmlFor="classTimetableCsvUpload">Updated class CSV</label>
+              <input
+                id="classTimetableCsvUpload"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setSelectedClassTimetableCsvFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <p className="hint">
+              Download the current class timetable first, update the lesson rows offline, then upload
+              the same CSV back for that class. Specialist lessons already in the timetable are
+              included in the template.
+            </p>
+            <div className="actions">
+              <button className="button" type="submit" disabled={isImportingClassCsv}>
+                {isImportingClassCsv ? "Importing..." : "Import Class Timetable CSV"}
               </button>
             </div>
           </form>
