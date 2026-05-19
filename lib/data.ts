@@ -487,6 +487,17 @@ function specialistSubjectColor(subject: string) {
   return SPECIALIST_SUBJECT_COLORS[subject] ?? "#8be6a8";
 }
 
+function normalizeLegacyTimetableColor(title: string | null, color: string | null) {
+  const normalizedTitle = normalizeSpecialistSubjectLabel(title ?? "");
+  const normalizedColor = color?.trim().toLowerCase() ?? null;
+
+  if (normalizedTitle === "Mandarin" && normalizedColor === "#d5b8ee") {
+    return SPECIALIST_SUBJECT_COLORS.Mandarin;
+  }
+
+  return color;
+}
+
 function normalizeTimeKey(value: string) {
   const trimmed = value.trim();
   const match = trimmed.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
@@ -1315,7 +1326,10 @@ async function getTimetableBlocksForTimetable(
         end_time: period.end_time,
         block_type: normalizeTimetableBlockType(row.block_type ?? period.block_type),
         title: row.title ? String(row.title) : null,
-        color: row.color ? String(row.color) : null,
+        color: normalizeLegacyTimetableColor(
+          row.title ? String(row.title) : null,
+          row.color ? String(row.color) : null
+        ),
         notes: row.notes ? String(row.notes) : null,
         start_time_override: row.start_time_override ? String(row.start_time_override) : null,
         end_time_override: row.end_time_override ? String(row.end_time_override) : null,
