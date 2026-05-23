@@ -403,8 +403,9 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
             </div>
             <p className="hint">
               Download the current class timetable first, update the lesson rows offline, then upload
-              the same CSV back for that class. Specialist lessons already in the timetable are
-              included in the template.
+              the same CSV back for that class. Teacher assignment is controlled by the
+              <strong> Teacher IDs </strong>
+              column, and specialist lessons already in the timetable are included in the template.
             </p>
             <div className="actions">
               <button className="button" type="submit" disabled={isImportingClassCsv}>

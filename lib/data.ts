@@ -1746,7 +1746,6 @@ export async function exportClassTimetableCsv(input: { classCode: string }) {
       "End Time",
       "Lesson Title",
       "Block Type",
-      "Teacher Names",
       "Teacher IDs",
       "Color",
       "Notes"
@@ -1763,7 +1762,6 @@ export async function exportClassTimetableCsv(input: { classCode: string }) {
         csvEscape(csvTimeLabel(block.end_time)),
         csvEscape(block.title ?? ""),
         csvEscape(block.block_type),
-        csvEscape(block.teachers.map((teacher) => teacher.staff_name).join(" | ")),
         csvEscape(block.teachers.map((teacher) => teacher.staff_id).join(" | ")),
         csvEscape(block.color ?? ""),
         csvEscape(block.notes ?? "")
@@ -1801,7 +1799,6 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     "end time",
     "lesson title",
     "block type",
-    "teacher names",
     "teacher ids",
     "color",
     "notes"
@@ -1819,23 +1816,6 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     ])
   );
   const staffById = new Map(builderData.staffOptions.map((option) => [option.id, option]));
-  const staffByName = new Map<string, string[]>();
-
-  builderData.staffOptions.forEach((option) => {
-    const rawName = option.label.replace(/\s+\([^)]*\)$/, "").trim().toLowerCase();
-    const aliases = new Set<string>([rawName]);
-    if (option.firstName) {
-      aliases.add(option.firstName.trim().toLowerCase());
-    }
-
-    aliases.forEach((alias) => {
-      const current = staffByName.get(alias) ?? [];
-      current.push(option.id);
-      staffByName.set(alias, current);
-    });
-  });
-
-  const normalizeTeacherAlias = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
   type ImportIssue = {
     rowNumber: number;
     slot: string;
@@ -1857,7 +1837,6 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     const endTimeRaw = String(row[headerLookup.get("end time") ?? -1] ?? "").trim();
     const lessonTitle = String(row[headerLookup.get("lesson title") ?? -1] ?? "").trim();
     const blockTypeRaw = String(row[headerLookup.get("block type") ?? -1] ?? "").trim();
-    const teacherNamesRaw = String(row[headerLookup.get("teacher names") ?? -1] ?? "").trim();
     const teacherIdsRaw = String(row[headerLookup.get("teacher ids") ?? -1] ?? "").trim();
     const color = String(row[headerLookup.get("color") ?? -1] ?? "").trim();
     const notes = String(row[headerLookup.get("notes") ?? -1] ?? "").trim();
@@ -1922,7 +1901,6 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
     try {
       const normalizedBlockType = normalizeTimetableBlockType(blockTypeRaw || block.block_type);
       const teacherIdsFromCsv = splitTeacherCsvValue(teacherIdsRaw);
-      const teacherNamesFromCsv = splitTeacherCsvValue(teacherNamesRaw);
       const resolvedTeacherIds: string[] = [];
 
       if (teacherIdsFromCsv.length > 0) {
@@ -1934,27 +1912,13 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
             resolvedTeacherIds.push(teacherId);
           }
         });
-      } else if (teacherNamesFromCsv.length > 0) {
-        teacherNamesFromCsv.forEach((teacherName) => {
-          const matches = staffByName.get(normalizeTeacherAlias(teacherName)) ?? [];
-          if (!matches.length) {
-            throw new Error(`Teacher name "${teacherName}" was not found in staff records.`);
-          }
-          if (matches.length > 1) {
-            throw new Error(`Teacher name "${teacherName}" matches multiple staff records. Use Teacher IDs instead.`);
-          }
-          if (!resolvedTeacherIds.includes(matches[0])) {
-            resolvedTeacherIds.push(matches[0]);
-          }
-        });
       }
 
       const nextTitle = lessonTitle ? lessonTitle : block.title;
       const nextColor = resolveTimetableColor(nextTitle, color ? color : block.color, normalizedBlockType);
       const nextNotes = notes ? notes : block.notes;
       const currentTeacherIds = block.teachers.map((teacher) => teacher.staff_id);
-      const nextTeacherIds =
-        teacherIdsFromCsv.length > 0 || teacherNamesFromCsv.length > 0 ? resolvedTeacherIds : currentTeacherIds;
+      const nextTeacherIds = teacherIdsFromCsv.length > 0 ? resolvedTeacherIds : currentTeacherIds;
 
       const changedFields: string[] = [];
       if ((nextTitle ?? block.period_label) !== (block.title ?? block.period_label)) {
