@@ -72,6 +72,22 @@ const SPECIALIST_SUBJECT_COLORS: Record<string, string> = {
   Coding: "#76ddd1",
   Assembly: "#f59e0b"
 };
+const TIMETABLE_SUBJECT_COLORS: Record<string, string> = {
+  English: "#8be6a8",
+  Maths: "#d5b8ee",
+  IPC: "#a8c7f0",
+  Mandarin: "#f4a7ff",
+  BM: "#d95c02",
+  "P.E.": "#1d4ed8",
+  Coding: "#76ddd1",
+  Library: "#ffd090",
+  Music: "#efbadf",
+  "Guided Reading": "#76ddd1",
+  "Shared Reading": "#ffe97c",
+  Phonics: "#ffe97c",
+  Assembly: "#f79ca1",
+  "Financial Literacy": "#f79ca1"
+};
 const TIMETABLE_YEAR_GROUP_ORDER = [
   "Preschool 1",
   "Preschool 2",
@@ -487,18 +503,40 @@ function specialistSubjectColor(subject: string) {
   return SPECIALIST_SUBJECT_COLORS[subject] ?? "#8be6a8";
 }
 
-function normalizeLegacyTimetableColor(title: string | null, color: string | null) {
+function timetableSubjectColor(title: string | null) {
   const normalizedTitle = normalizeSpecialistSubjectLabel(title ?? "");
-  const normalizedColor = color?.trim().toLowerCase() ?? null;
 
-  if (
-    normalizedTitle === "Mandarin" &&
-    (normalizedColor === "#d5b8ee" || normalizedColor === "#8be6a8")
-  ) {
-    return SPECIALIST_SUBJECT_COLORS.Mandarin;
+  if (normalizedTitle.includes("/")) {
+    const segments = normalizedTitle
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const matchedSegment = segments.find((segment) => TIMETABLE_SUBJECT_COLORS[segment]);
+    if (matchedSegment) {
+      return TIMETABLE_SUBJECT_COLORS[matchedSegment];
+    }
   }
 
-  return color;
+  if (TIMETABLE_SUBJECT_COLORS[normalizedTitle]) {
+    return TIMETABLE_SUBJECT_COLORS[normalizedTitle];
+  }
+
+  return null;
+}
+
+function normalizeLegacyTimetableColor(title: string | null, color: string | null) {
+  const normalizedColor = color?.trim().toLowerCase() ?? null;
+  const subjectColor = timetableSubjectColor(title);
+
+  if (!subjectColor) {
+    return color;
+  }
+
+  if (normalizedColor === "#8be6a8" || normalizedColor === "#d5b8ee") {
+    return subjectColor;
+  }
+
+  return color ?? subjectColor;
 }
 
 function normalizeTimeKey(value: string) {
