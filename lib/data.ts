@@ -73,20 +73,23 @@ const SPECIALIST_SUBJECT_COLORS: Record<string, string> = {
   Assembly: "#f59e0b"
 };
 const TIMETABLE_SUBJECT_COLORS: Record<string, string> = {
+  "Pastoral Time": "#111827",
   English: "#8be6a8",
   Maths: "#d5b8ee",
   IPC: "#a8c7f0",
   Mandarin: "#f4a7ff",
   BM: "#d95c02",
   "P.E.": "#1d4ed8",
-  Coding: "#76ddd1",
+  Coding: "#ffffff",
   Library: "#ffd090",
   Music: "#efbadf",
   "Guided Reading": "#76ddd1",
   "Shared Reading": "#ffe97c",
   Phonics: "#ffe97c",
   Assembly: "#f79ca1",
-  "Financial Literacy": "#f79ca1"
+  "Financial Literacy": "#f79ca1",
+  PSHE: "#7c3aed",
+  CCA: "#c4b5fd"
 };
 const TIMETABLE_YEAR_GROUP_ORDER = [
   "Preschool 1",
@@ -524,19 +527,18 @@ function timetableSubjectColor(title: string | null) {
   return null;
 }
 
-function normalizeLegacyTimetableColor(title: string | null, color: string | null) {
-  const normalizedColor = color?.trim().toLowerCase() ?? null;
+function resolveTimetableColor(title: string | null, color: string | null, blockType?: TimetableBlockType) {
   const subjectColor = timetableSubjectColor(title);
 
-  if (!subjectColor) {
-    return color;
-  }
-
-  if (normalizedColor === "#8be6a8" || normalizedColor === "#d5b8ee") {
+  if (subjectColor) {
     return subjectColor;
   }
 
-  return color ?? subjectColor;
+  if (color?.trim()) {
+    return color.trim();
+  }
+
+  return blockType ? defaultColorForTimetableType(blockType) : color;
 }
 
 function normalizeTimeKey(value: string) {
@@ -1367,9 +1369,10 @@ async function getTimetableBlocksForTimetable(
         end_time: period.end_time,
         block_type: normalizeTimetableBlockType(row.block_type ?? period.block_type),
         title: row.title ? String(row.title) : null,
-        color: normalizeLegacyTimetableColor(
+        color: resolveTimetableColor(
           row.title ? String(row.title) : null,
-          row.color ? String(row.color) : null
+          row.color ? String(row.color) : null,
+          normalizeTimetableBlockType(row.block_type ?? period.block_type)
         ),
         notes: row.notes ? String(row.notes) : null,
         start_time_override: row.start_time_override ? String(row.start_time_override) : null,
@@ -1947,7 +1950,7 @@ export async function importClassTimetableCsv(input: { classCode: string; csvTex
       }
 
       const nextTitle = lessonTitle ? lessonTitle : block.title;
-      const nextColor = color ? color : block.color;
+      const nextColor = resolveTimetableColor(nextTitle, color ? color : block.color, normalizedBlockType);
       const nextNotes = notes ? notes : block.notes;
       const currentTeacherIds = block.teachers.map((teacher) => teacher.staff_id);
       const nextTeacherIds =
@@ -2071,15 +2074,18 @@ export async function upsertTimetableBlock(input: {
   }
 
   const normalizedBlockType = normalizeTimetableBlockType(input.blockType);
+  const normalizedTitle = input.title?.trim()
+    ? input.title.trim()
+    : defaultTitleForTimetableType({
+        blockType: normalizedBlockType,
+        periodLabel: ""
+      });
   const { error: updateError } = await supabase
     .from(TIMETABLE_BLOCKS_TABLE)
     .update({
-      title: input.title?.trim() ? input.title.trim() : defaultTitleForTimetableType({
-        blockType: normalizedBlockType,
-        periodLabel: ""
-      }),
+      title: normalizedTitle,
       block_type: normalizedBlockType,
-      color: input.color?.trim() ? input.color.trim() : defaultColorForTimetableType(normalizedBlockType),
+      color: resolveTimetableColor(normalizedTitle, input.color ?? null, normalizedBlockType),
       notes: input.notes?.trim() ? input.notes.trim() : null
     })
     .eq("id", input.blockId)
