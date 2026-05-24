@@ -4,6 +4,9 @@ import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableAdmin } from "@/components/timetable-admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function TimetablesPage() {
   const user = await requireUser();
   const { classes, templates, setupMessage } = await getTimetableAdminData();

@@ -4,6 +4,9 @@ import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableBuilder } from "@/components/timetable-builder";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type TimetableBuilderPageProps = {
   params: {
     classCode: string;
