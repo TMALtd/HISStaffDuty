@@ -1169,82 +1169,82 @@ export async function getDutyRosterViewData(): Promise<DutyRosterViewData> {
 
 async function getTimetableTemplatesStrict(): Promise<TimetableTemplate[]> {
   const supabase = createSupabaseAdminClient();
-  const currentSchema = await supabase
-    .from(TIMETABLE_TEMPLATES_TABLE)
-    .select("id,name,school,designation,year_group,is_active")
-    .eq("is_active", true)
-    .order("year_group", { ascending: true })
-    .order("name");
+  const attempts: Array<{
+    select: string;
+    useIsActiveFilter?: boolean;
+    useYearGroupSort?: boolean;
+    defaults?: Record<string, unknown>;
+  }> = [
+    {
+      select: "id,name,school,designation,year_group,is_active",
+      useIsActiveFilter: true,
+      useYearGroupSort: true
+    },
+    {
+      select: "id,name,school,designation,year_group",
+      useYearGroupSort: true,
+      defaults: { is_active: true }
+    },
+    {
+      select: "id,name,school,designation,is_active",
+      useIsActiveFilter: true,
+      defaults: { year_group: null }
+    },
+    {
+      select: "id,name,school,designation",
+      defaults: { year_group: null, is_active: true }
+    },
+    {
+      select: "id,name,year_group,is_active",
+      useIsActiveFilter: true,
+      useYearGroupSort: true,
+      defaults: { school: null, designation: null }
+    },
+    {
+      select: "id,name,year_group",
+      useYearGroupSort: true,
+      defaults: { school: null, designation: null, is_active: true }
+    },
+    {
+      select: "id,name,is_active",
+      useIsActiveFilter: true,
+      defaults: { school: null, designation: null, year_group: null }
+    },
+    {
+      select: "id,name",
+      defaults: { school: null, designation: null, year_group: null, is_active: true }
+    }
+  ];
 
-  if (!currentSchema.error) {
-    return ((currentSchema.data ?? []) as Record<string, unknown>[]).map(normalizeTimetableTemplate);
-  }
+  let lastError: Error | null = null;
 
-  const missingYearGroup = isMissingSupabaseColumnError(
-    currentSchema.error,
-    TIMETABLE_TEMPLATES_TABLE,
-    "year_group"
-  );
-  const missingIsActive = isMissingSupabaseColumnError(
-    currentSchema.error,
-    TIMETABLE_TEMPLATES_TABLE,
-    "is_active"
-  );
+  for (const attempt of attempts) {
+    let query = supabase.from(TIMETABLE_TEMPLATES_TABLE).select(attempt.select);
 
-  if (!missingYearGroup && !missingIsActive) {
-    throw new Error(currentSchema.error.message);
-  }
-
-  if (missingYearGroup && !missingIsActive) {
-    const withoutYearGroup = await supabase
-      .from(TIMETABLE_TEMPLATES_TABLE)
-      .select("id,name,school,designation,is_active")
-      .eq("is_active", true)
-      .order("name");
-
-    if (withoutYearGroup.error) {
-      throw new Error(withoutYearGroup.error.message);
+    if (attempt.useIsActiveFilter) {
+      query = query.eq("is_active", true);
     }
 
-    return ((withoutYearGroup.data ?? []) as Record<string, unknown>[]).map((row) =>
+    if (attempt.useYearGroupSort) {
+      query = query.order("year_group", { ascending: true });
+    }
+
+    const result = await query.order("name");
+
+    if (result.error) {
+      lastError = new Error(result.error.message);
+      continue;
+    }
+
+    return ((result.data ?? []) as unknown as Record<string, unknown>[]).map((row) =>
       normalizeTimetableTemplate({
-        ...row,
-        year_group: null
+        ...attempt.defaults,
+        ...row
       })
     );
   }
 
-  const legacySchema = await supabase
-    .from(TIMETABLE_TEMPLATES_TABLE)
-    .select("id,name,school,designation,year_group")
-    .order("year_group", { ascending: true })
-    .order("name");
-
-  if (legacySchema.error) {
-    const fallbackLegacySchema = await supabase
-      .from(TIMETABLE_TEMPLATES_TABLE)
-      .select("id,name,school,designation")
-      .order("name");
-
-    if (fallbackLegacySchema.error) {
-      throw new Error(fallbackLegacySchema.error.message);
-    }
-
-    return ((fallbackLegacySchema.data ?? []) as Record<string, unknown>[]).map((row) =>
-      normalizeTimetableTemplate({
-        ...row,
-        year_group: null,
-        is_active: true
-      })
-    );
-  }
-
-  return ((legacySchema.data ?? []) as Record<string, unknown>[]).map((row) =>
-    normalizeTimetableTemplate({
-      ...row,
-      is_active: true
-    })
-  );
+  throw lastError ?? new Error("Unable to load timetable templates.");
 }
 
 export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
@@ -1409,21 +1409,29 @@ export async function getTimetableAdminData(): Promise<{
   setupMessage: string | null;
 }> {
   const classRecords = await getClassRecords();
+  let setupMessage: string | null = null;
+  let templates: TimetableTemplate[] = [];
 
   try {
-    const templates = await getTimetableTemplatesStrict();
+    templates = await getTimetableTemplatesStrict();
+  } catch (error) {
+    if (isMissingSupabaseRelationError(error, TIMETABLE_TEMPLATES_TABLE)) {
+      setupMessage = TIMETABLE_SETUP_MESSAGE;
+    } else {
+      throw error;
+    }
+  }
+
+  try {
     const classes = await buildTimetableClassSummaries({ classRecords, templates });
 
     return {
       classes,
       templates,
-      setupMessage: null
+      setupMessage
     };
   } catch (error) {
-    if (
-      isMissingSupabaseRelationError(error, TIMETABLE_TEMPLATES_TABLE) ||
-      isMissingSupabaseRelationError(error, CLASS_TIMETABLES_TABLE)
-    ) {
+    if (isMissingSupabaseRelationError(error, CLASS_TIMETABLES_TABLE)) {
       return {
         classes: classRecords
           .map((row) => ({
@@ -1441,8 +1449,8 @@ export async function getTimetableAdminData(): Promise<{
             templateName: null
           }))
           .sort(compareTimetableClassSummaries),
-        templates: [],
-        setupMessage: TIMETABLE_SETUP_MESSAGE
+        templates,
+        setupMessage: setupMessage ?? TIMETABLE_SETUP_MESSAGE
       };
     }
 
