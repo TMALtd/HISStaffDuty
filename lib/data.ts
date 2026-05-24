@@ -131,6 +131,42 @@ function normalizeTimetableLookupKey(value: string | null | undefined) {
     .trim()
     .toLowerCase();
 }
+
+function buildTimetableLookupKeys(value: string | null | undefined) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const normalized = normalizeTimetableLookupKey(trimmed);
+  const compact = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const keys = new Set<string>();
+
+  if (normalized) {
+    keys.add(normalized);
+  }
+
+  if (compact) {
+    keys.add(compact);
+  }
+
+  const numberedClassMatch = trimmed.match(/^(preschool\s*\d+|\d+)\s+(.+)$/i);
+  if (numberedClassMatch) {
+    const shortLabel = numberedClassMatch[2].trim();
+    const shortNormalized = normalizeTimetableLookupKey(shortLabel);
+    const shortCompact = shortLabel.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+    if (shortNormalized) {
+      keys.add(shortNormalized);
+    }
+
+    if (shortCompact) {
+      keys.add(shortCompact);
+    }
+  }
+
+  return Array.from(keys);
+}
 const TIMETABLE_YEAR_GROUP_ORDER = [
   "Preschool 1",
   "Preschool 2",
@@ -1361,23 +1397,25 @@ async function buildTimetableClassSummaries(params: {
       streamType: normalizeTimetableStreamType(row.stream_type)
     };
 
-    const classCodeKey = normalizeTimetableLookupKey(row.class_code);
-    const classNameKey = normalizeTimetableLookupKey(row.class_name);
+    const rowKeys = new Set([
+      ...buildTimetableLookupKeys(row.class_code),
+      ...buildTimetableLookupKeys(row.class_name)
+    ]);
 
-    if (classCodeKey) {
-      timetableByClassKey.set(classCodeKey, entry);
-    }
-
-    if (classNameKey) {
-      timetableByClassKey.set(classNameKey, entry);
-    }
+    rowKeys.forEach((key) => {
+      timetableByClassKey.set(key, entry);
+    });
   });
 
   return classRecords
     .map((row) => {
-      const timetable =
-        timetableByClassKey.get(normalizeTimetableLookupKey(row["Class Code"])) ??
-        timetableByClassKey.get(normalizeTimetableLookupKey(row["Class Name"]));
+      const classKeys = [
+        ...buildTimetableLookupKeys(row["Class Code"]),
+        ...buildTimetableLookupKeys(row["Class Name"])
+      ];
+      const timetable = classKeys
+        .map((key) => timetableByClassKey.get(key) ?? null)
+        .find((entry) => entry !== null) ?? null;
       const template = timetable?.templateId ? templateLookup.get(timetable.templateId) : null;
 
       return {
@@ -1459,13 +1497,18 @@ export async function getTimetableAdminData(): Promise<{
 }
 
 async function getClassTimetableRecordByClassCode(classCode: string, classNameFallback?: string | null) {
-  const normalizedCode = normalizeTimetableLookupKey(classCode);
-  const normalizedName = normalizeTimetableLookupKey(classNameFallback);
+  const lookupKeys = new Set([
+    ...buildTimetableLookupKeys(classCode),
+    ...buildTimetableLookupKeys(classNameFallback)
+  ]);
   const timetableRows = await selectClassTimetableRows();
 
   return (
-    timetableRows.find((row) => normalizeTimetableLookupKey(row.class_code) === normalizedCode) ??
-    timetableRows.find((row) => normalizeTimetableLookupKey(row.class_name) === normalizedName) ??
+    timetableRows.find((row) =>
+      [...buildTimetableLookupKeys(row.class_code), ...buildTimetableLookupKeys(row.class_name)].some((key) =>
+        lookupKeys.has(key)
+      )
+    ) ??
     null
   );
 }
