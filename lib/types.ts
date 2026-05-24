@@ -180,6 +180,8 @@ export type TimetableTemplate = {
   is_active: boolean;
 };
 
+export type TimetableStreamType = "mainstream" | "bilingual";
+
 export type TimetablePeriod = {
   id: string;
   template_id: string;
@@ -197,6 +199,7 @@ export type ClassTimetable = {
   class_name: string;
   template_id: string;
   template_name: string;
+  stream_type: TimetableStreamType | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -241,10 +244,30 @@ export type TimetableClassSummary = {
   school: string;
   designation: string;
   yearGroup: string;
+  milepost: string;
+  level: string;
+  streamType: TimetableStreamType | null;
   hasTimetable: boolean;
   timetableId: string | null;
   templateId: string | null;
   templateName: string | null;
+};
+
+export type TimetableSubjectTarget = {
+  id: string;
+  milepost: string;
+  streamType: TimetableStreamType;
+  subjectName: string;
+  requiredMinutes: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type TimetableAdminOptions = {
+  schools: string[];
+  yearGroups: string[];
+  mileposts: string[];
+  levels: string[];
 };
 
 export type TimetableBuilderData = {
@@ -254,6 +277,7 @@ export type TimetableBuilderData = {
   periods: TimetablePeriod[];
   blocks: TimetableBlock[];
   staffOptions: TimetableStaffOption[];
+  subjectTargets: TimetableSubjectTarget[];
 };
 
 export const EMPTY_FILTERS: FilterState = {

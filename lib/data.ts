@@ -5,9 +5,12 @@ import {
   type TimetableBlockStaffAssignment,
   type TimetableBlockType,
   type TimetableBuilderData,
+  type TimetableAdminOptions,
   type TimetableClassSummary,
   type TimetablePeriod,
   type TimetableStaffOption,
+  type TimetableStreamType,
+  type TimetableSubjectTarget,
   type TimetableTemplate,
   type DutyDashboardData,
   type DutyRosterAssignment,
@@ -52,6 +55,8 @@ const TIMETABLE_PERIODS_TABLE = "timetable_periods";
 const CLASS_TIMETABLES_TABLE = "class_timetables";
 const TIMETABLE_BLOCKS_TABLE = "timetable_blocks";
 const TIMETABLE_BLOCK_STAFF_TABLE = "timetable_block_staff";
+const TIMETABLE_CLASSES_TABLE = "timetable_classes";
+const TIMETABLE_SUBJECT_TARGETS_TABLE = "timetable_subject_targets";
 const WEEKDAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const;
 const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
   lesson: "#8be6a8",
@@ -63,6 +68,35 @@ const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
 };
 const TIMETABLE_SETUP_MESSAGE =
   "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
+const TIMETABLE_STREAM_TYPES = ["mainstream", "bilingual"] as const;
+const DEFAULT_TIMETABLE_SUBJECT_TARGETS: TimetableSubjectTarget[] = [
+  { id: "default-mp1-mainstream-english", milepost: "Milepost 1", streamType: "mainstream", subjectName: "English", requiredMinutes: 160, sortOrder: 1, isActive: true },
+  { id: "default-mp1-mainstream-maths", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Maths", requiredMinutes: 240, sortOrder: 2, isActive: true },
+  { id: "default-mp1-mainstream-ipc", milepost: "Milepost 1", streamType: "mainstream", subjectName: "IPC", requiredMinutes: 240, sortOrder: 3, isActive: true },
+  { id: "default-mp1-mainstream-guided-reading", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Guided Reading", requiredMinutes: 160, sortOrder: 4, isActive: true },
+  { id: "default-mp1-mainstream-shared-reading", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Shared Reading", requiredMinutes: 160, sortOrder: 5, isActive: true },
+  { id: "default-mp1-mainstream-phonics", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Phonics", requiredMinutes: 160, sortOrder: 6, isActive: true },
+  { id: "default-mp1-mainstream-library", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Library", requiredMinutes: 40, sortOrder: 7, isActive: true },
+  { id: "default-mp1-mainstream-coding", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Coding", requiredMinutes: 40, sortOrder: 8, isActive: true },
+  { id: "default-mp1-mainstream-pe", milepost: "Milepost 1", streamType: "mainstream", subjectName: "P.E.", requiredMinutes: 120, sortOrder: 9, isActive: true },
+  { id: "default-mp1-mainstream-mandarin", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Mandarin", requiredMinutes: 120, sortOrder: 10, isActive: true },
+  { id: "default-mp1-mainstream-bm", milepost: "Milepost 1", streamType: "mainstream", subjectName: "BM", requiredMinutes: 120, sortOrder: 11, isActive: true },
+  { id: "default-mp1-mainstream-assembly", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Assembly", requiredMinutes: 40, sortOrder: 12, isActive: true },
+  { id: "default-mp1-mainstream-financial-literacy", milepost: "Milepost 1", streamType: "mainstream", subjectName: "Financial Literacy", requiredMinutes: 40, sortOrder: 13, isActive: true },
+  { id: "default-mp1-bilingual-english", milepost: "Milepost 1", streamType: "bilingual", subjectName: "English", requiredMinutes: 240, sortOrder: 1, isActive: true },
+  { id: "default-mp1-bilingual-maths", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Maths", requiredMinutes: 240, sortOrder: 2, isActive: true },
+  { id: "default-mp1-bilingual-ipc", milepost: "Milepost 1", streamType: "bilingual", subjectName: "IPC", requiredMinutes: 240, sortOrder: 3, isActive: true },
+  { id: "default-mp1-bilingual-guided-reading", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Guided Reading", requiredMinutes: 160, sortOrder: 4, isActive: true },
+  { id: "default-mp1-bilingual-shared-reading", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Shared Reading", requiredMinutes: 160, sortOrder: 5, isActive: true },
+  { id: "default-mp1-bilingual-phonics", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Phonics", requiredMinutes: 160, sortOrder: 6, isActive: true },
+  { id: "default-mp1-bilingual-library", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Library", requiredMinutes: 40, sortOrder: 7, isActive: true },
+  { id: "default-mp1-bilingual-coding", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Coding", requiredMinutes: 40, sortOrder: 8, isActive: true },
+  { id: "default-mp1-bilingual-pe", milepost: "Milepost 1", streamType: "bilingual", subjectName: "P.E.", requiredMinutes: 120, sortOrder: 9, isActive: true },
+  { id: "default-mp1-bilingual-mandarin", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Mandarin", requiredMinutes: 240, sortOrder: 10, isActive: true },
+  { id: "default-mp1-bilingual-bm", milepost: "Milepost 1", streamType: "bilingual", subjectName: "BM", requiredMinutes: 120, sortOrder: 11, isActive: true },
+  { id: "default-mp1-bilingual-assembly", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Assembly", requiredMinutes: 40, sortOrder: 12, isActive: true },
+  { id: "default-mp1-bilingual-financial-literacy", milepost: "Milepost 1", streamType: "bilingual", subjectName: "Financial Literacy", requiredMinutes: 40, sortOrder: 13, isActive: true }
+];
 const SPECIALIST_SUBJECT_COLORS: Record<string, string> = {
   BM: "#d95c02",
   Mandarin: "#f4a7ff",
@@ -264,6 +298,51 @@ function normalizeTimetablePeriod(row: Record<string, unknown>): TimetablePeriod
   };
 }
 
+function normalizeTimetableStreamType(value: unknown): TimetableStreamType | null {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  if ((TIMETABLE_STREAM_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as TimetableStreamType;
+  }
+
+  return null;
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizeCustomClassRow(row: Record<string, unknown>): ClassRecord {
+  return {
+    School: String(row.school ?? "Primary"),
+    Designation: String(row.designation ?? "Mainstream"),
+    "Year Group": String(row.year_group ?? ""),
+    Milepost: String(row.milepost ?? ""),
+    Level: String(row.level ?? "Primary"),
+    "Class Code": String(row.class_code ?? ""),
+    "Class Name": String(row.class_name ?? "")
+  };
+}
+
+function normalizeTimetableSubjectTarget(row: Record<string, unknown>): TimetableSubjectTarget {
+  return {
+    id: String(row.id ?? ""),
+    milepost: String(row.milepost ?? ""),
+    streamType: normalizeTimetableStreamType(row.stream_type) ?? "mainstream",
+    subjectName: String(row.subject_name ?? ""),
+    requiredMinutes: Number(row.required_minutes ?? 0),
+    sortOrder: Number(row.sort_order ?? 0),
+    isActive: Boolean(row.is_active ?? true)
+  };
+}
+
 function normalizeClassTimetable(
   row: Record<string, unknown>,
   templateLookup: Map<string, TimetableTemplate>
@@ -275,6 +354,7 @@ function normalizeClassTimetable(
     class_name: String(row.class_name ?? ""),
     template_id: templateId,
     template_name: templateLookup.get(templateId)?.name ?? "Template",
+    stream_type: normalizeTimetableStreamType(row.stream_type),
     created_at: row.created_at ? String(row.created_at) : null,
     updated_at: row.updated_at ? String(row.updated_at) : null
   };

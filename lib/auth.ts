@@ -4,6 +4,8 @@ import { getStaffProfileByEmail } from "@/lib/data";
 import { hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const TIMETABLE_ADMIN_EMAIL = "benjamin.allen@kl.his.edu.my";
+
 export async function getCurrentUserOrNull() {
   if (!hasSupabaseBrowserEnv()) {
     return null;
@@ -36,4 +38,8 @@ export async function requireStaffProfile(): Promise<{
   const staffProfile = email ? await getStaffProfileByEmail(email) : null;
 
   return { user, staffProfile };
+}
+
+export function isTimetableAdminEmail(email: string | null | undefined) {
+  return (email ?? "").trim().toLowerCase() === TIMETABLE_ADMIN_EMAIL;
 }
