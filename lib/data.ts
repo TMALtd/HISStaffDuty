@@ -1169,18 +1169,82 @@ export async function getDutyRosterViewData(): Promise<DutyRosterViewData> {
 
 async function getTimetableTemplatesStrict(): Promise<TimetableTemplate[]> {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  const currentSchema = await supabase
     .from(TIMETABLE_TEMPLATES_TABLE)
     .select("id,name,school,designation,year_group,is_active")
     .eq("is_active", true)
     .order("year_group", { ascending: true })
     .order("name");
 
-  if (error) {
-    throw new Error(error.message);
+  if (!currentSchema.error) {
+    return ((currentSchema.data ?? []) as Record<string, unknown>[]).map(normalizeTimetableTemplate);
   }
 
-  return ((data ?? []) as Record<string, unknown>[]).map(normalizeTimetableTemplate);
+  const missingYearGroup = isMissingSupabaseColumnError(
+    currentSchema.error,
+    TIMETABLE_TEMPLATES_TABLE,
+    "year_group"
+  );
+  const missingIsActive = isMissingSupabaseColumnError(
+    currentSchema.error,
+    TIMETABLE_TEMPLATES_TABLE,
+    "is_active"
+  );
+
+  if (!missingYearGroup && !missingIsActive) {
+    throw new Error(currentSchema.error.message);
+  }
+
+  if (missingYearGroup && !missingIsActive) {
+    const withoutYearGroup = await supabase
+      .from(TIMETABLE_TEMPLATES_TABLE)
+      .select("id,name,school,designation,is_active")
+      .eq("is_active", true)
+      .order("name");
+
+    if (withoutYearGroup.error) {
+      throw new Error(withoutYearGroup.error.message);
+    }
+
+    return ((withoutYearGroup.data ?? []) as Record<string, unknown>[]).map((row) =>
+      normalizeTimetableTemplate({
+        ...row,
+        year_group: null
+      })
+    );
+  }
+
+  const legacySchema = await supabase
+    .from(TIMETABLE_TEMPLATES_TABLE)
+    .select("id,name,school,designation,year_group")
+    .order("year_group", { ascending: true })
+    .order("name");
+
+  if (legacySchema.error) {
+    const fallbackLegacySchema = await supabase
+      .from(TIMETABLE_TEMPLATES_TABLE)
+      .select("id,name,school,designation")
+      .order("name");
+
+    if (fallbackLegacySchema.error) {
+      throw new Error(fallbackLegacySchema.error.message);
+    }
+
+    return ((fallbackLegacySchema.data ?? []) as Record<string, unknown>[]).map((row) =>
+      normalizeTimetableTemplate({
+        ...row,
+        year_group: null,
+        is_active: true
+      })
+    );
+  }
+
+  return ((legacySchema.data ?? []) as Record<string, unknown>[]).map((row) =>
+    normalizeTimetableTemplate({
+      ...row,
+      is_active: true
+    })
+  );
 }
 
 export async function getTimetableTemplates(): Promise<TimetableTemplate[]> {
