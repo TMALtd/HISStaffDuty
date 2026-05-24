@@ -1207,7 +1207,7 @@ async function selectClassTimetableRows(): Promise<
   const supabase = createSupabaseAdminClient();
   const currentSchema = await supabase
     .from(CLASS_TIMETABLES_TABLE)
-    .select("id,class_code,class_name,template_id,created_at,updated_at");
+    .select("id,class_code,class_name,template_id,stream_type,created_at,updated_at");
 
   if (!currentSchema.error) {
     return ((currentSchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
@@ -1251,7 +1251,8 @@ async function buildTimetableClassSummaries(params: {
         id: String(row.id ?? ""),
         classCode: row.class_code,
         className: row.class_name,
-        templateId: row.template_id ? String(row.template_id) : null
+        templateId: row.template_id ? String(row.template_id) : null,
+        streamType: normalizeTimetableStreamType(row.stream_type)
       }
     ])
   );
@@ -1265,8 +1266,11 @@ async function buildTimetableClassSummaries(params: {
         classCode: row["Class Code"],
         className: row["Class Name"],
         school: row.School,
-        designation: row.Designation,
+        designation: titleCaseWords(timetable?.streamType ?? row.Designation),
         yearGroup: row["Year Group"],
+        milepost: row.Milepost,
+        level: row.Level,
+        streamType: timetable?.streamType ?? normalizeTimetableStreamType(row.Designation),
         hasTimetable: Boolean(timetable),
         timetableId: timetable?.id ?? null,
         templateId: timetable?.templateId ?? null,
@@ -1310,6 +1314,9 @@ export async function getTimetableAdminData(): Promise<{
             school: row.School,
             designation: row.Designation,
             yearGroup: row["Year Group"],
+            milepost: row.Milepost,
+            level: row.Level,
+            streamType: normalizeTimetableStreamType(row.Designation),
             hasTimetable: false,
             timetableId: null,
             templateId: null,
@@ -1502,7 +1509,8 @@ export async function getTimetableBuilderData(classCode: string): Promise<Timeta
     timetable,
     periods,
     blocks,
-    staffOptions
+    staffOptions,
+    subjectTargets: DEFAULT_TIMETABLE_SUBJECT_TARGETS
   };
 }
 
