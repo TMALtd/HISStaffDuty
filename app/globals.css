@@ -631,6 +631,13 @@ tr:last-child td {
   height: 100%;
 }
 
+.timetable-grid-block-composite {
+  display: grid;
+  grid-template-rows: minmax(48px, 0.7fr) minmax(64px, 1.3fr);
+  gap: 6px;
+  min-height: 100%;
+}
+
 .timetable-block-card {
   width: 100%;
   border: 0;
@@ -894,6 +901,11 @@ tr:last-child td {
 
 .timetable-block-card.is-muted {
   opacity: 0.32;
+}
+
+.timetable-grid-composite-segment {
+  align-self: stretch;
+  min-height: 0;
 }
 
 .timetable-editor-grid {

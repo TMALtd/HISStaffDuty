@@ -234,19 +234,16 @@ function buildTimetableRowSegments(blocks: TimetableBlock[]) {
 
 function buildStandardRowSegments(
   rowSegments: TimetableRowSegment[],
-  isYearOneTwoTemplate: boolean
+  isYearOneTwoTemplate: boolean,
+  isYearThreeFourTemplate: boolean
 ) {
-  if (!isYearOneTwoTemplate) {
-    return rowSegments;
-  }
-
   const merged: TimetableRowSegment[] = [];
   let index = 0;
 
   while (index < rowSegments.length) {
     const segment = rowSegments[index];
 
-    if (segment.startTime === "12:00:00") {
+    if (isYearOneTwoTemplate && segment.startTime === "12:00:00") {
       merged.push({
         key: "12:00:00-12:20:00",
         startTime: "12:00:00",
@@ -254,6 +251,19 @@ function buildStandardRowSegments(
       });
 
       while (index < rowSegments.length && rowSegments[index].endTime <= "12:20:00") {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (isYearThreeFourTemplate && segment.startTime === "12:20:00") {
+      merged.push({
+        key: "12:20:00-13:00:00",
+        startTime: "12:20:00",
+        endTime: "13:00:00"
+      });
+
+      while (index < rowSegments.length && rowSegments[index].endTime <= "13:00:00") {
         index += 1;
       }
       continue;
@@ -367,6 +377,15 @@ function standardDisplayBlockTimes(
   };
 }
 
+function isYearThreeFourFridayMiddayBlock(block: MergedTimetableBlock, isYearThreeFourTemplate: boolean) {
+  return (
+    isYearThreeFourTemplate &&
+    block.weekday === "friday" &&
+    block.start_time >= "12:20:00" &&
+    block.start_time < "13:00:00"
+  );
+}
+
 function buildParentRowSegments(
   rowSegments: TimetableRowSegment[],
   isYearOneTwoTemplate: boolean
@@ -478,9 +497,18 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
   );
+  const isYearThreeFourTemplate = useMemo(
+    () => normalizedTemplateName.includes("year 3") && normalizedTemplateName.includes("year 4"),
+    [normalizedTemplateName]
+  );
   const rowSegments = useMemo(
-    () => buildStandardRowSegments(buildTimetableRowSegments(data.blocks), isYearOneTwoTemplate),
-    [data.blocks, isYearOneTwoTemplate]
+    () =>
+      buildStandardRowSegments(
+        buildTimetableRowSegments(data.blocks),
+        isYearOneTwoTemplate,
+        isYearThreeFourTemplate
+      ),
+    [data.blocks, isYearOneTwoTemplate, isYearThreeFourTemplate]
   );
   const parentRowSegments = useMemo(
     () => buildParentRowSegments(rowSegments, isYearOneTwoTemplate),
@@ -1291,8 +1319,19 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                   ))
                 )}
 
-                {dayColumns.flatMap((day, dayIndex) =>
-                  day.blocks.map((block) => {
+                {dayColumns.flatMap((day, dayIndex) => {
+                  const specialFridayMiddayBlocks =
+                    isYearThreeFourTemplate && day.key === "friday"
+                      ? day.blocks.filter((block) =>
+                          isYearThreeFourFridayMiddayBlock(block, isYearThreeFourTemplate)
+                        )
+                      : [];
+
+                  const standardDayBlocks = day.blocks.filter(
+                    (block) => !isYearThreeFourFridayMiddayBlock(block, isYearThreeFourTemplate)
+                  );
+
+                  const renderedBlocks = standardDayBlocks.map((block) => {
                     const background = block.color ?? "#8be6a8";
                     const foreground = textColorForBackground(background);
                     const displayTimes = standardDisplayBlockTimes(block, isYearOneTwoTemplate);
@@ -1339,8 +1378,70 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                         ) : null}
                       </button>
                     );
-                  })
-                )}
+                  });
+
+                  if (!specialFridayMiddayBlocks.length) {
+                    return renderedBlocks;
+                  }
+
+                  const compositeRowStart = (rowLineByTime.get("12:20:00") ?? 1) + 1;
+                  const compositeRowEnd = (rowLineByTime.get("13:00:00") ?? compositeRowStart) + 1;
+                  const pastoralBlock =
+                    specialFridayMiddayBlocks.find((block) =>
+                      /pastoral/i.test(labelForBlock(block))
+                    ) ?? null;
+                  const dismissalBlock =
+                    specialFridayMiddayBlocks.find((block) => block.block_type === "dismissal") ?? null;
+
+                  const compositeBlock = (
+                    <div
+                      className="timetable-grid-block timetable-grid-block-composite"
+                      key={`${day.key}-year34-friday-midday`}
+                      style={{
+                        gridColumn: dayIndex + 2,
+                        gridRow: `${compositeRowStart} / ${compositeRowEnd}`
+                      }}
+                    >
+                      {pastoralBlock ? (
+                        <button
+                          className="timetable-block-card timetable-grid-composite-segment is-compact"
+                          type="button"
+                          style={{
+                            background: pastoralBlock.color ?? "#111827",
+                            color: textColorForBackground(pastoralBlock.color ?? "#111827")
+                          }}
+                          onClick={() => openEditor(pastoralBlock)}
+                        >
+                          <div className="timetable-block-topline">
+                            <strong>{labelForBlock(pastoralBlock)}</strong>
+                            <span className="timetable-block-edit">✎</span>
+                          </div>
+                          <div className="timetable-block-meta">12:20-12:30</div>
+                        </button>
+                      ) : null}
+
+                      {dismissalBlock ? (
+                        <button
+                          className="timetable-block-card timetable-grid-composite-segment"
+                          type="button"
+                          style={{
+                            background: dismissalBlock.color ?? "#9ca3af",
+                            color: textColorForBackground(dismissalBlock.color ?? "#9ca3af")
+                          }}
+                          onClick={() => openEditor(dismissalBlock)}
+                        >
+                          <div className="timetable-block-topline">
+                            <strong>{labelForBlock(dismissalBlock)}</strong>
+                            <span className="timetable-block-edit">✎</span>
+                          </div>
+                          <div className="timetable-block-meta">12:30-13:00</div>
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+
+                  return [...renderedBlocks, compositeBlock];
+                })}
               </div>
             </div>
             <div className="timetable-parent-export-shell" aria-hidden="true">
