@@ -1,3 +1,19 @@
+function decodeSupabaseJwtRole(token: string) {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
+      role?: unknown;
+    };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getSupabaseConfig() {
   return {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "",
@@ -13,7 +29,7 @@ export function hasSupabaseBrowserEnv() {
 
 export function hasSupabaseAdminEnv() {
   const config = getSupabaseConfig();
-  return Boolean(config.url && config.serviceRoleKey);
+  return Boolean(config.url && config.serviceRoleKey && decodeSupabaseJwtRole(config.serviceRoleKey) === "service_role");
 }
 
 export function getSupabaseBrowserEnvError() {
@@ -21,5 +37,5 @@ export function getSupabaseBrowserEnvError() {
 }
 
 export function getSupabaseAdminEnvError() {
-  return "Supabase environment variables are missing. Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to the runtime environment.";
+  return "Supabase admin configuration is missing or invalid. Add NEXT_PUBLIC_SUPABASE_URL and a valid SUPABASE_SERVICE_ROLE_KEY (role: service_role) to the runtime environment.";
 }
