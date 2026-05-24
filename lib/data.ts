@@ -1217,13 +1217,39 @@ async function selectClassTimetableRows(): Promise<
     }));
   }
 
-  if (!isMissingSupabaseColumnError(currentSchema.error, CLASS_TIMETABLES_TABLE, "class_code")) {
+  const missingClassCode = isMissingSupabaseColumnError(
+    currentSchema.error,
+    CLASS_TIMETABLES_TABLE,
+    "class_code"
+  );
+  const missingStreamType = isMissingSupabaseColumnError(
+    currentSchema.error,
+    CLASS_TIMETABLES_TABLE,
+    "stream_type"
+  );
+
+  if (!missingClassCode && !missingStreamType) {
     throw new Error(currentSchema.error.message);
   }
 
-  const legacySchema = await supabase
-    .from(CLASS_TIMETABLES_TABLE)
-    .select("id,class_name,template_id,created_at,updated_at");
+  if (missingStreamType && !missingClassCode) {
+    const classCodeOnlySchema = await supabase
+      .from(CLASS_TIMETABLES_TABLE)
+      .select("id,class_code,class_name,template_id,created_at,updated_at");
+
+    if (classCodeOnlySchema.error) {
+      throw new Error(classCodeOnlySchema.error.message);
+    }
+
+    return ((classCodeOnlySchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      ...row,
+      class_code: row.class_code ? String(row.class_code) : null,
+      class_name: row.class_name ? String(row.class_name) : "",
+      stream_type: null
+    }));
+  }
+
+  const legacySchema = await supabase.from(CLASS_TIMETABLES_TABLE).select("id,class_name,template_id,created_at,updated_at");
 
   if (legacySchema.error) {
     throw new Error(legacySchema.error.message);
@@ -1232,7 +1258,8 @@ async function selectClassTimetableRows(): Promise<
   return ((legacySchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     ...row,
     class_code: null,
-    class_name: row.class_name ? String(row.class_name) : ""
+    class_name: row.class_name ? String(row.class_name) : "",
+    stream_type: null
   }));
 }
 
