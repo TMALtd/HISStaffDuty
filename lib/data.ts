@@ -415,21 +415,27 @@ function defaultTitleForTimetableType(params: {
 
 function isMissingSupabaseRelationError(error: unknown, tableName: string) {
   const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
   return (
-    message.includes(tableName) &&
-    (message.includes("does not exist") ||
-      message.includes("schema cache") ||
-      message.includes("Could not find the table") ||
-      message.includes("PGRST205"))
+    normalized.includes(tableName.toLowerCase()) &&
+    !normalized.includes("column") &&
+    !normalized.includes("pgrst204") &&
+    (normalized.includes("does not exist") ||
+      normalized.includes("could not find the table") ||
+      normalized.includes("pgrst205"))
   );
 }
 
 function isMissingSupabaseColumnError(error: unknown, tableName: string, columnName: string) {
   const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
   return (
-    message.includes(tableName) &&
-    message.includes(columnName) &&
-    (message.includes("does not exist") || message.includes("schema cache") || message.includes("PGRST204"))
+    normalized.includes(tableName.toLowerCase()) &&
+    normalized.includes(columnName.toLowerCase()) &&
+    (normalized.includes("does not exist") ||
+      normalized.includes("schema cache") ||
+      normalized.includes("could not find the") ||
+      normalized.includes("pgrst204"))
   );
 }
 
