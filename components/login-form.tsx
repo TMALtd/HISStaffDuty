@@ -8,6 +8,20 @@ type LoginFormProps = {
   message?: string;
 };
 
+function getAuthCallbackUrl() {
+  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+  if (configuredSiteUrl) {
+    try {
+      return new URL("/auth/callback", configuredSiteUrl).toString();
+    } catch {
+      // Fall through to the runtime origin if the configured site URL is malformed.
+    }
+  }
+
+  return `${window.location.origin}/auth/callback`;
+}
+
 export function LoginForm({ message }: LoginFormProps) {
   const [status, setStatus] = useState(message ?? "");
   const [error, setError] = useState("");
@@ -31,7 +45,7 @@ export function LoginForm({ message }: LoginFormProps) {
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`
+        redirectTo: getAuthCallbackUrl()
       }
     });
 
@@ -57,7 +71,7 @@ export function LoginForm({ message }: LoginFormProps) {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`
+        emailRedirectTo: getAuthCallbackUrl()
       }
     });
 
