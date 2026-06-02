@@ -235,7 +235,7 @@ function buildTimetableRowSegments(blocks: TimetableBlock[]) {
 function buildStandardRowSegments(
   rowSegments: TimetableRowSegment[],
   isYearOneTwoTemplate: boolean,
-  isYearThreeFourTemplate: boolean
+  isMiddayCompactTemplate: boolean
 ) {
   const merged: TimetableRowSegment[] = [];
   let index = 0;
@@ -256,7 +256,7 @@ function buildStandardRowSegments(
       continue;
     }
 
-    if (isYearThreeFourTemplate && segment.startTime === "12:20:00") {
+    if (isMiddayCompactTemplate && segment.startTime === "12:20:00") {
       merged.push({
         key: "12:20:00-13:00:00",
         startTime: "12:20:00",
@@ -377,9 +377,9 @@ function standardDisplayBlockTimes(
   };
 }
 
-function isYearThreeFourFridayMiddayBlock(block: MergedTimetableBlock, isYearThreeFourTemplate: boolean) {
+function isCompactFridayMiddayBlock(block: MergedTimetableBlock, isMiddayCompactTemplate: boolean) {
   return (
-    isYearThreeFourTemplate &&
+    isMiddayCompactTemplate &&
     block.weekday === "friday" &&
     block.start_time >= "12:20:00" &&
     block.start_time < "13:00:00"
@@ -501,14 +501,19 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizedTemplateName.includes("year 3") && normalizedTemplateName.includes("year 4"),
     [normalizedTemplateName]
   );
+  const isYearFiveSixTemplate = useMemo(
+    () => normalizedTemplateName.includes("year 5") && normalizedTemplateName.includes("year 6"),
+    [normalizedTemplateName]
+  );
+  const isMiddayCompactTemplate = isYearThreeFourTemplate || isYearFiveSixTemplate;
   const rowSegments = useMemo(
     () =>
       buildStandardRowSegments(
         buildTimetableRowSegments(data.blocks),
         isYearOneTwoTemplate,
-        isYearThreeFourTemplate
+        isMiddayCompactTemplate
       ),
-    [data.blocks, isYearOneTwoTemplate, isYearThreeFourTemplate]
+    [data.blocks, isYearOneTwoTemplate, isMiddayCompactTemplate]
   );
   const parentRowSegments = useMemo(
     () => buildParentRowSegments(rowSegments, isYearOneTwoTemplate),
@@ -1321,14 +1326,14 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
                 {dayColumns.flatMap((day, dayIndex) => {
                   const specialFridayMiddayBlocks =
-                    isYearThreeFourTemplate && day.key === "friday"
+                    isMiddayCompactTemplate && day.key === "friday"
                       ? day.blocks.filter((block) =>
-                          isYearThreeFourFridayMiddayBlock(block, isYearThreeFourTemplate)
+                          isCompactFridayMiddayBlock(block, isMiddayCompactTemplate)
                         )
                       : [];
 
                   const standardDayBlocks = day.blocks.filter(
-                    (block) => !isYearThreeFourFridayMiddayBlock(block, isYearThreeFourTemplate)
+                    (block) => !isCompactFridayMiddayBlock(block, isMiddayCompactTemplate)
                   );
 
                   const renderedBlocks = standardDayBlocks.map((block) => {
@@ -1396,7 +1401,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                   const compositeBlock = (
                     <div
                       className="timetable-grid-block timetable-grid-block-composite"
-                      key={`${day.key}-year34-friday-midday`}
+                      key={`${day.key}-compact-friday-midday`}
                       style={{
                         gridColumn: dayIndex + 2,
                         gridRow: `${compositeRowStart} / ${compositeRowEnd}`
