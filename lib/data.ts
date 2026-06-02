@@ -1317,62 +1317,43 @@ async function selectClassTimetableRows(): Promise<
   Array<Record<string, unknown> & { class_code: string | null; class_name: string }>
 > {
   const supabase = createSupabaseAdminClient();
-  const currentSchema = await supabase
-    .from(CLASS_TIMETABLES_TABLE)
-    .select("id,class_code,class_name,template_id,stream_type,created_at,updated_at");
+  const attempts: Array<{
+    select: string;
+    defaults?: Record<string, unknown>;
+  }> = [
+    {
+      select: "id,class_code,class_name,template_id,stream_type,created_at,updated_at"
+    },
+    {
+      select: "id,class_code,class_name,template_id,created_at,updated_at",
+      defaults: { stream_type: null }
+    },
+    {
+      select: "id,class_name,template_id,created_at,updated_at",
+      defaults: { class_code: null, stream_type: null }
+    }
+  ];
 
-  if (!currentSchema.error) {
-    return ((currentSchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-      ...row,
-      class_code: row.class_code ? String(row.class_code) : null,
-      class_name: row.class_name ? String(row.class_name) : ""
-    }));
-  }
+  let lastError: Error | null = null;
 
-  const missingClassCode = isMissingSupabaseColumnError(
-    currentSchema.error,
-    CLASS_TIMETABLES_TABLE,
-    "class_code"
-  );
-  const missingStreamType = isMissingSupabaseColumnError(
-    currentSchema.error,
-    CLASS_TIMETABLES_TABLE,
-    "stream_type"
-  );
+  for (const attempt of attempts) {
+    const result = await supabase.from(CLASS_TIMETABLES_TABLE).select(attempt.select);
 
-  if (!missingClassCode && !missingStreamType) {
-    throw new Error(currentSchema.error.message);
-  }
-
-  if (missingStreamType && !missingClassCode) {
-    const classCodeOnlySchema = await supabase
-      .from(CLASS_TIMETABLES_TABLE)
-      .select("id,class_code,class_name,template_id,created_at,updated_at");
-
-    if (classCodeOnlySchema.error) {
-      throw new Error(classCodeOnlySchema.error.message);
+    if (result.error) {
+      lastError = new Error(result.error.message);
+      continue;
     }
 
-    return ((classCodeOnlySchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    return ((result.data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({
+      ...attempt.defaults,
       ...row,
-      class_code: row.class_code ? String(row.class_code) : null,
+      class_code: row.class_code ? String(row.class_code) : attempt.defaults?.class_code ? String(attempt.defaults.class_code) : null,
       class_name: row.class_name ? String(row.class_name) : "",
-      stream_type: null
+      stream_type: row.stream_type ?? attempt.defaults?.stream_type ?? null
     }));
   }
 
-  const legacySchema = await supabase.from(CLASS_TIMETABLES_TABLE).select("id,class_name,template_id,created_at,updated_at");
-
-  if (legacySchema.error) {
-    throw new Error(legacySchema.error.message);
-  }
-
-  return ((legacySchema.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    ...row,
-    class_code: null,
-    class_name: row.class_name ? String(row.class_name) : "",
-    stream_type: null
-  }));
+  throw lastError ?? new Error("Unable to load class timetables.");
 }
 
 async function buildTimetableClassSummaries(params: {
