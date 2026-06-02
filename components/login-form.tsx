@@ -53,7 +53,10 @@ export function LoginForm({ message }: LoginFormProps) {
           {isSubmittingGoogle ? "Redirecting..." : "Sign In With Google"}
         </button>
       </div>
-      <p className="hint">Use your staff Google account for the smoothest sign-in flow.</p>
+      <p className="hint">
+        Use your staff Google account for the fastest sign-in. The magic-link option below is
+        available if you would rather sign in by email.
+      </p>
       <form action="/auth/magic-link" method="post" onSubmit={handleMagicLinkSubmit}>
         <div className="field">
           <label htmlFor="email">Staff Email</label>
@@ -78,13 +81,6 @@ export function LoginForm({ message }: LoginFormProps) {
           </button>
         </div>
       </form>
-      <div className="field">
-        <label>Important Supabase setup</label>
-        <div className="hint">
-          In Supabase Auth, set the Site URL to your Render domain and add
-          `https://hisstaffduty.onrender.com/auth/callback` to the redirect URLs.
-        </div>
-      </div>
       {status ? <div className="banner">{status}</div> : null}
       {error ? <div className="banner error-banner">{error}</div> : null}
     </div>

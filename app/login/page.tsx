@@ -16,9 +16,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   let message = searchParams.message;
 
   if (!message && (searchParams.error || searchParams.error_description)) {
-    message =
-      [searchParams.error, searchParams.error_description].filter(Boolean).join(": ") ||
-      "Authentication could not be completed. Please try again.";
+    if (searchParams.error_code === "bad_oauth_state") {
+      message =
+        "Sign-in was interrupted before it finished. Please return to the login page and try again.";
+    } else {
+      message =
+        [searchParams.error, searchParams.error_description].filter(Boolean).join(": ") ||
+        "Authentication could not be completed. Please try again.";
+    }
   }
 
   if (hasSupabaseBrowserEnv()) {
@@ -40,9 +45,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p className="eyebrow">Private staff access</p>
         <h1 className="hero-title">Sign in to the roster portal</h1>
         <p className="hero-copy">
-          Sign in with your staff Google account. A magic-link fallback is also available if
-          you need it. Once signed in, you can filter by school, designation, year group,
-          milepost, level, and class.
+          Sign in with your staff Google account. If you need a backup option, you can also
+          request a magic link by email. Once signed in, you can filter by school,
+          designation, year group, milepost, level, and class.
         </p>
         <LoginForm message={message} />
       </section>
