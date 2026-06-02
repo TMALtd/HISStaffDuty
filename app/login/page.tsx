@@ -6,11 +6,20 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 type LoginPageProps = {
   searchParams: {
     message?: string;
+    error?: string;
+    error_code?: string;
+    error_description?: string;
   };
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   let message = searchParams.message;
+
+  if (!message && (searchParams.error || searchParams.error_description)) {
+    message =
+      [searchParams.error, searchParams.error_description].filter(Boolean).join(": ") ||
+      "Authentication could not be completed. Please try again.";
+  }
 
   if (hasSupabaseBrowserEnv()) {
     const supabase = createSupabaseServerClient();

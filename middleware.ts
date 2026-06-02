@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getSupabaseBrowserEnvError, getSupabaseConfig, hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/google", "/auth/magic-link"];
 
 function isPublicPath(pathname: string) {
   return pathname.startsWith("/api/") || PUBLIC_PATHS.some((path) => pathname.startsWith(path));

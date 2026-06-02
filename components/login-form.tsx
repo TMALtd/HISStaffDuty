@@ -2,33 +2,10 @@
 
 import { useState } from "react";
 import { getSupabaseBrowserEnvError, hasSupabaseBrowserEnv } from "@/lib/supabase/config";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type LoginFormProps = {
   message?: string;
 };
-
-function getAuthCallbackUrl() {
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  const runtimeOrigin = typeof window !== "undefined" ? window.location.origin : "";
-  const isRuntimeLocalhost = /:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(runtimeOrigin);
-
-  if (configuredSiteUrl) {
-    try {
-      const configuredUrl = new URL(configuredSiteUrl);
-      const isConfiguredLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(configuredUrl.hostname);
-
-      // In production, ignore any stale localhost site URL and trust the live origin instead.
-      if (!(isConfiguredLocalhost && runtimeOrigin && !isRuntimeLocalhost)) {
-        return new URL("/auth/callback", configuredUrl).toString();
-      }
-    } catch {
-      // Fall through to the runtime origin if the configured site URL is malformed.
-    }
-  }
-
-  return `${runtimeOrigin}/auth/callback`;
-}
 
 export function LoginForm({ message }: LoginFormProps) {
   const [status, setStatus] = useState(message ?? "");
@@ -38,60 +15,30 @@ export function LoginForm({ message }: LoginFormProps) {
   const [email, setEmail] = useState("");
   const isSupabaseConfigured = hasSupabaseBrowserEnv();
 
-  async function handleGoogleSignIn() {
+  function handleGoogleSignIn() {
     setError("");
     setStatus("");
-    setIsSubmittingGoogle(true);
 
     if (!isSupabaseConfigured) {
       setError(getSupabaseBrowserEnvError());
-      setIsSubmittingGoogle(false);
       return;
     }
 
-    const supabase = createSupabaseBrowserClient();
-    const { error: authError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: getAuthCallbackUrl()
-      }
-    });
-
-    if (authError) {
-      setError(authError.message);
-      setIsSubmittingGoogle(false);
-    }
+    setIsSubmittingGoogle(true);
+    window.location.href = "/auth/google";
   }
 
-  async function handleMagicLinkSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleMagicLinkSubmit(event: React.FormEvent<HTMLFormElement>) {
     setError("");
     setStatus("");
-    setIsSubmittingMagicLink(true);
 
     if (!isSupabaseConfigured) {
+      event.preventDefault();
       setError(getSupabaseBrowserEnvError());
-      setIsSubmittingMagicLink(false);
       return;
     }
 
-    const supabase = createSupabaseBrowserClient();
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: getAuthCallbackUrl()
-      }
-    });
-
-    if (authError) {
-      setError(authError.message);
-      setIsSubmittingMagicLink(false);
-      return;
-    }
-
-    setStatus("Magic link sent. Check your email to continue.");
-    setEmail("");
-    setIsSubmittingMagicLink(false);
+    setIsSubmittingMagicLink(true);
   }
 
   return (
@@ -107,7 +54,7 @@ export function LoginForm({ message }: LoginFormProps) {
         </button>
       </div>
       <p className="hint">Use your staff Google account for the smoothest sign-in flow.</p>
-      <form onSubmit={handleMagicLinkSubmit}>
+      <form action="/auth/magic-link" method="post" onSubmit={handleMagicLinkSubmit}>
         <div className="field">
           <label htmlFor="email">Staff Email</label>
           <input
