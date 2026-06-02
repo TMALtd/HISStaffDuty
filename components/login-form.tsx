@@ -10,16 +10,24 @@ type LoginFormProps = {
 
 function getAuthCallbackUrl() {
   const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const runtimeOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const isRuntimeLocalhost = /:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(runtimeOrigin);
 
   if (configuredSiteUrl) {
     try {
-      return new URL("/auth/callback", configuredSiteUrl).toString();
+      const configuredUrl = new URL(configuredSiteUrl);
+      const isConfiguredLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(configuredUrl.hostname);
+
+      // In production, ignore any stale localhost site URL and trust the live origin instead.
+      if (!(isConfiguredLocalhost && runtimeOrigin && !isRuntimeLocalhost)) {
+        return new URL("/auth/callback", configuredUrl).toString();
+      }
     } catch {
       // Fall through to the runtime origin if the configured site URL is malformed.
     }
   }
 
-  return `${window.location.origin}/auth/callback`;
+  return `${runtimeOrigin}/auth/callback`;
 }
 
 export function LoginForm({ message }: LoginFormProps) {
