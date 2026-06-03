@@ -253,6 +253,17 @@ export type TimetableClassSummary = {
   templateName: string | null;
 };
 
+export type CreateTimetableClassInput = {
+  classCode: string;
+  className: string;
+  school: string;
+  designation: string;
+  yearGroup: string;
+  milepost: string;
+  level: string;
+  streamType: TimetableStreamType;
+};
+
 export type TimetableSubjectTarget = {
   id: string;
   milepost: string;
