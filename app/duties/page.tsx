@@ -1,11 +1,11 @@
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DutyDashboard } from "@/components/duty-dashboard";
-import { requireStaffProfile } from "@/lib/auth";
+import { requirePortalAccess } from "@/lib/auth";
 import { getDutyDashboardData } from "@/lib/data";
 
 export default async function DutiesPage() {
-  const { user, staffProfile } = await requireStaffProfile();
+  const { user, staffProfile, access } = await requirePortalAccess("duty");
   const data = await getDutyDashboardData(user.email ?? "");
 
   return (
@@ -19,7 +19,7 @@ export default async function DutiesPage() {
         </div>
         <SignOutButton />
       </section>
-      <PortalNav />
+      <PortalNav allowedViews={access.allowedViews} />
       <DutyDashboard data={data} />
     </main>
   );

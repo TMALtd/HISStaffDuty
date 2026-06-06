@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
+  type CreateTimetableClassInput,
   type ClassTimetable,
   type TimetableBlock,
   type TimetableBlockStaffAssignment,
@@ -364,7 +365,7 @@ function titleCaseWords(value: string) {
 function normalizeCustomClassRow(row: Record<string, unknown>): ClassRecord {
   return {
     School: String(row.school ?? "Primary"),
-    Designation: String(row.designation ?? "Mainstream"),
+    Designation: titleCaseWords(String(row.designation ?? row.stream_type ?? "Mainstream")),
     "Year Group": String(row.year_group ?? ""),
     Milepost: String(row.milepost ?? ""),
     Level: String(row.level ?? "Primary"),
@@ -780,13 +781,26 @@ async function getActiveDutyRows() {
 
 export async function getClassRecords() {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase.from(TABLE_NAME).select("*");
+  const [{ data, error }, customClassRecords] = await Promise.all([
+    supabase.from(TABLE_NAME).select("*"),
+    getCustomTimetableClassRecords()
+  ]);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as ClassRecord[]).sort((left, right) =>
+  const merged = new Map<string, ClassRecord>();
+
+  ((data ?? []) as ClassRecord[]).forEach((row) => {
+    merged.set(normalizeTimetableLookupKey(row["Class Code"] || row["Class Name"]), row);
+  });
+
+  customClassRecords.forEach((row) => {
+    merged.set(normalizeTimetableLookupKey(row["Class Code"] || row["Class Name"]), row);
+  });
+
+  return Array.from(merged.values()).sort((left, right) =>
     [
       left.School,
       left.Designation,
@@ -809,6 +823,151 @@ export async function getClassRecords() {
         { numeric: true }
       )
   );
+}
+
+async function getCustomTimetableClassRecords(): Promise<ClassRecord[]> {
+  const supabase = createSupabaseAdminClient();
+  const attempts: Array<{
+    select: string;
+    defaults?: Record<string, unknown>;
+  }> = [
+    {
+      select: "class_code,class_name,school,designation,year_group,milepost,level,stream_type"
+    },
+    {
+      select: "class_code,class_name,school,designation,year_group,milepost,level",
+      defaults: { stream_type: null }
+    }
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const attempt of attempts) {
+    const result = await supabase.from(TIMETABLE_CLASSES_TABLE).select(attempt.select);
+
+    if (result.error) {
+      if (isMissingSupabaseRelationError(new Error(result.error.message), TIMETABLE_CLASSES_TABLE)) {
+        return [];
+      }
+
+      lastError = new Error(result.error.message);
+      continue;
+    }
+
+      return ((result.data ?? []) as unknown as Record<string, unknown>[]).map((row) =>
+        normalizeCustomClassRow({
+          ...attempt.defaults,
+          ...row
+        })
+      );
+  }
+
+  throw lastError ?? new Error("Unable to load timetable classes.");
+}
+
+function inferMilepostFromYearGroup(yearGroup: string) {
+  switch (yearGroup.trim().toLowerCase()) {
+    case "year 1":
+    case "year 2":
+      return "Milepost 1";
+    case "year 3":
+    case "year 4":
+      return "Milepost 2";
+    case "year 5":
+    case "year 6":
+      return "Milepost 3";
+    case "preschool":
+      return "Preschool";
+    default:
+      return yearGroup;
+  }
+}
+
+function buildSuggestedClassCode(className: string, yearGroup: string) {
+  const tokens = className
+    .trim()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const yearMatch = yearGroup.match(/(\d+)/);
+  const classYear = tokens[0]?.match(/^\d+$/)?.[0] ?? yearMatch?.[1] ?? "C";
+  const nameToken =
+    tokens.find((token, index) => index > 0 && !/^\d+$/.test(token)) ??
+    tokens.find((token) => !/^\d+$/.test(token)) ??
+    "Class";
+
+  return `${classYear}${nameToken.slice(0, 2)}`.replace(/[^a-z0-9]/gi, "");
+}
+
+export async function createTimetableClass(input: CreateTimetableClassInput): Promise<ClassRecord> {
+  const className = input.className.trim();
+  const yearGroup = input.yearGroup.trim();
+  const school = input.school.trim() || "Primary";
+  const level = input.level.trim() || "Primary";
+  const streamType = normalizeTimetableStreamType(input.streamType) ?? "mainstream";
+  const designation = titleCaseWords(input.designation || streamType);
+  const milepost = input.milepost.trim() || inferMilepostFromYearGroup(yearGroup);
+  const classCode = (input.classCode.trim() || buildSuggestedClassCode(className, yearGroup)).replace(/\s+/g, "");
+
+  if (!className || !yearGroup || !classCode) {
+    throw new Error("Class name, year group, and class code are required.");
+  }
+
+  const existingClasses = await getClassRecords();
+  const duplicate = existingClasses.find(
+    (row) =>
+      normalizeTimetableLookupKey(row["Class Code"]) === normalizeTimetableLookupKey(classCode) ||
+      normalizeTimetableLookupKey(row["Class Name"]) === normalizeTimetableLookupKey(className)
+  );
+
+  if (duplicate) {
+    throw new Error(`${className} already exists in the timetable class list.`);
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const payload = {
+    class_code: classCode,
+    class_name: className,
+    school,
+    designation,
+    year_group: yearGroup,
+    milepost,
+    level,
+    stream_type: streamType
+  };
+
+  const attempts: Array<{
+    payload: Record<string, unknown>;
+  }> = [
+    { payload },
+    {
+      payload: {
+        class_code: classCode,
+        class_name: className,
+        school,
+        designation,
+        year_group: yearGroup,
+        milepost,
+        level
+      }
+    }
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const attempt of attempts) {
+    const result = await supabase.from(TIMETABLE_CLASSES_TABLE).insert(attempt.payload).select("*").single();
+
+    if (result.error) {
+      lastError = new Error(result.error.message);
+      continue;
+    }
+
+    return normalizeCustomClassRow(result.data as Record<string, unknown>);
+  }
+
+  throw lastError ?? new Error("Could not create timetable class.");
 }
 
 function findClassRecordByCode(classRecords: ClassRecord[], classCode: string) {

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { bulkImportSpecialistCsv } from "@/lib/data";
 
 export async function POST(request: Request) {
-  const user = await getCurrentUserOrNull();
-  if (!user) {
+  const session = await getCurrentStaffAccessOrNull();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!session.access.isFullAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

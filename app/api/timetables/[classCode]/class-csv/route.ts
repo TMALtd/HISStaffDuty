@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { exportClassTimetableCsv, importClassTimetableCsv } from "@/lib/data";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getCurrentStaffAccessOrNull } from "@/lib/auth";
+import { canAccessTimetableClass } from "@/lib/access";
+import { getTimetableBuilderData } from "@/lib/data";
 
 type TimetableRouteContext = {
   params: {
@@ -9,13 +11,19 @@ type TimetableRouteContext = {
 };
 
 export async function GET(_request: Request, context: TimetableRouteContext) {
-  const user = await getCurrentUserOrNull();
-  if (!user) {
+  const session = await getCurrentStaffAccessOrNull();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const classCode = decodeURIComponent(context.params.classCode);
+    const data = await getTimetableBuilderData(classCode);
+
+    if (!canAccessTimetableClass(session.access, data.classSummary)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const result = await exportClassTimetableCsv({ classCode });
 
     return new NextResponse(result.csvText, {
@@ -34,9 +42,13 @@ export async function GET(_request: Request, context: TimetableRouteContext) {
 }
 
 export async function POST(request: Request, context: TimetableRouteContext) {
-  const user = await getCurrentUserOrNull();
-  if (!user) {
+  const session = await getCurrentStaffAccessOrNull();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!session.access.isFullAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

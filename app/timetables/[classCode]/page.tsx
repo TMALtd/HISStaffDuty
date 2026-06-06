@@ -1,5 +1,7 @@
-import { requireUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requirePortalAccess } from "@/lib/auth";
 import { getTimetableBuilderData } from "@/lib/data";
+import { canAccessTimetableClass } from "@/lib/access";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableBuilder } from "@/components/timetable-builder";
@@ -14,8 +16,12 @@ type TimetableBuilderPageProps = {
 };
 
 export default async function TimetableBuilderPage({ params }: TimetableBuilderPageProps) {
-  const user = await requireUser();
+  const { user, access } = await requirePortalAccess("timetables");
   const data = await getTimetableBuilderData(decodeURIComponent(params.classCode));
+
+  if (!canAccessTimetableClass(access, data.classSummary)) {
+    redirect("/timetables");
+  }
 
   return (
     <main className="page-shell">
@@ -26,7 +32,7 @@ export default async function TimetableBuilderPage({ params }: TimetableBuilderP
         </div>
         <SignOutButton />
       </section>
-      <PortalNav />
+      <PortalNav allowedViews={access.allowedViews} />
       <TimetableBuilder initialData={data} />
     </main>
   );

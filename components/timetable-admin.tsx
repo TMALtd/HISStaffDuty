@@ -9,9 +9,15 @@ type TimetableAdminProps = {
   initialClasses: TimetableClassSummary[];
   templates: TimetableTemplate[];
   setupMessage?: string | null;
+  canManageClasses?: boolean;
 };
 
-export function TimetableAdmin({ initialClasses, templates, setupMessage }: TimetableAdminProps) {
+export function TimetableAdmin({
+  initialClasses,
+  templates,
+  setupMessage,
+  canManageClasses = false
+}: TimetableAdminProps) {
   const router = useRouter();
   const [classes, setClasses] = useState(initialClasses);
   const [selectedClassCode, setSelectedClassCode] = useState(initialClasses[0]?.classCode ?? "");
@@ -29,6 +35,11 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
   const [selectedClassTimetableCsvFile, setSelectedClassTimetableCsvFile] = useState<File | null>(null);
   const [isDownloadingClassCsv, setIsDownloadingClassCsv] = useState(false);
   const [isImportingClassCsv, setIsImportingClassCsv] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const [newClassYearGroup, setNewClassYearGroup] = useState("Year 3");
+  const [newClassCode, setNewClassCode] = useState("");
+  const [newClassStreamType, setNewClassStreamType] = useState<"mainstream" | "bilingual">("mainstream");
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
 
   const filteredClasses = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -46,6 +57,11 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
 
   const classCsvOptions = useMemo(
     () => classes.filter((entry) => entry.hasTimetable),
+    [classes]
+  );
+
+  const yearGroupOptions = useMemo(
+    () => Array.from(new Set(classes.map((entry) => entry.yearGroup))).sort((left, right) => left.localeCompare(right, undefined, { numeric: true })),
     [classes]
   );
 
@@ -105,6 +121,54 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
       setError(createError instanceof Error ? createError.message : "Could not create timetable.");
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function createClass(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("");
+    setError("");
+
+    if (!newClassName.trim() || !newClassYearGroup.trim()) {
+      setError("Add a class name and choose a year group.");
+      return;
+    }
+
+    setIsCreatingClass(true);
+
+    try {
+      const response = await fetch("/api/timetables/classes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          classCode: newClassCode,
+          className: newClassName,
+          yearGroup: newClassYearGroup,
+          streamType: newClassStreamType
+        })
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        classRecord?: { ["Class Code"]?: string; ["Class Name"]?: string };
+      };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not add timetable class.");
+      }
+
+      await refreshClasses();
+      const createdClassCode = json.classRecord?.["Class Code"] ?? "";
+      setSelectedClassCode(createdClassCode);
+      setNewClassName("");
+      setNewClassCode("");
+      setStatus(`Added ${json.classRecord?.["Class Name"] ?? "new class"} to the timetable class list.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Could not add timetable class.");
+    } finally {
+      setIsCreatingClass(false);
     }
   }
 
@@ -303,6 +367,64 @@ export function TimetableAdmin({ initialClasses, templates, setupMessage }: Time
 
       <section className="panel">
         <div className="admin-grid">
+          {canManageClasses ? (
+            <form className="mi-card" onSubmit={createClass}>
+              <h2 className="mi-title">Add timetable class</h2>
+              <div className="field">
+                <label htmlFor="newTimetableClassName">Class name</label>
+                <input
+                  id="newTimetableClassName"
+                  type="text"
+                  placeholder="e.g. 3 Teresa"
+                  value={newClassName}
+                  onChange={(event) => setNewClassName(event.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="newTimetableYearGroup">Year group</label>
+                <select
+                  id="newTimetableYearGroup"
+                  value={newClassYearGroup}
+                  onChange={(event) => setNewClassYearGroup(event.target.value)}
+                >
+                  {yearGroupOptions.map((yearGroup) => (
+                    <option key={yearGroup} value={yearGroup}>
+                      {yearGroup}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="newTimetableStreamType">Stream type</label>
+                <select
+                  id="newTimetableStreamType"
+                  value={newClassStreamType}
+                  onChange={(event) =>
+                    setNewClassStreamType(event.target.value === "bilingual" ? "bilingual" : "mainstream")
+                  }
+                >
+                  <option value="mainstream">Mainstream</option>
+                  <option value="bilingual">Bilingual</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="newTimetableClassCode">Class code (optional)</label>
+                <input
+                  id="newTimetableClassCode"
+                  type="text"
+                  placeholder="Auto-generated if left blank"
+                  value={newClassCode}
+                  onChange={(event) => setNewClassCode(event.target.value)}
+                />
+              </div>
+              <div className="actions">
+                <button className="button" type="submit" disabled={isCreatingClass}>
+                  {isCreatingClass ? "Adding..." : "Add Class"}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
           <form className="mi-card" onSubmit={createTimetable}>
             <h2 className="mi-title">Create class timetable</h2>
             <div className="field">

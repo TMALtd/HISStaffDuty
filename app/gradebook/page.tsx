@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { GradebookWorkspace } from "@/components/gradebook-workspace";
@@ -12,7 +12,7 @@ function toStringValue(value: string | string[] | undefined) {
 }
 
 export default async function GradebookPage({ searchParams }: GradebookPageProps) {
-  const user = await requireUser();
+  const { user, access } = await requirePortalAccess("gradebook");
 
   return (
     <main className="page-shell">
@@ -23,7 +23,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         </div>
         <SignOutButton />
       </section>
-      <PortalNav />
+      <PortalNav allowedViews={access.allowedViews} />
       <GradebookWorkspace
         initialFilters={{
           school: toStringValue(searchParams.school),

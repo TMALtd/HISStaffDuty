@@ -1,5 +1,6 @@
-import { requireUser } from "@/lib/auth";
+import { requirePortalAccess } from "@/lib/auth";
 import { getTimetableAdminData } from "@/lib/data";
+import { filterTimetableClassesForAccess } from "@/lib/access";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableAdmin } from "@/components/timetable-admin";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function TimetablesPage() {
-  const user = await requireUser();
+  const { user, access } = await requirePortalAccess("timetables");
   let classes: TimetableClassSummary[] = [];
   let templates: TimetableTemplate[] = [];
   let setupMessage: string | null = null;
@@ -26,6 +27,8 @@ export default async function TimetablesPage() {
         : "Timetables could not be loaded right now.";
   }
 
+  classes = filterTimetableClassesForAccess(classes, access);
+
   return (
     <main className="page-shell">
       <section className="portal-toolbar">
@@ -35,8 +38,13 @@ export default async function TimetablesPage() {
         </div>
         <SignOutButton />
       </section>
-      <PortalNav />
-      <TimetableAdmin initialClasses={classes} templates={templates} setupMessage={setupMessage} />
+      <PortalNav allowedViews={access.allowedViews} />
+      <TimetableAdmin
+        initialClasses={classes}
+        templates={templates}
+        setupMessage={setupMessage}
+        canManageClasses={access.isFullAccess}
+      />
     </main>
   );
 }

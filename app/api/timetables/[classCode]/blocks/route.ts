@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { upsertTimetableBlock } from "@/lib/data";
 import type { TimetableBlockType } from "@/lib/types";
 
@@ -10,9 +10,13 @@ type TimetableRouteContext = {
 };
 
 export async function POST(request: Request, context: TimetableRouteContext) {
-  const user = await getCurrentUserOrNull();
-  if (!user) {
+  const session = await getCurrentStaffAccessOrNull();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!session.access.isFullAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
