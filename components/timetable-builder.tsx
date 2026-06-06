@@ -493,6 +493,8 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     () => normalizeLabelForCompare(data.classSummary.designation) === "bilingual",
     [data.classSummary.designation]
   );
+  const hasSubjectAllocationCheck =
+    isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable);
   const isYearOneTwoTemplate = useMemo(
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
@@ -565,7 +567,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
     return Array.from(teacherMap.values()).sort((left, right) => left.label.localeCompare(right.label));
   }, [data.blocks, data.staffOptions]);
   const curriculumChecks = useMemo(() => {
-    if (!isMilepostOneTimetable || (!isMainstreamTimetable && !isBilingualTimetable)) {
+    if (!hasSubjectAllocationCheck) {
       return [];
     }
 
@@ -602,7 +604,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         matches: actualMinutes === targetMinutes
       };
     });
-  }, [data.blocks, isBilingualTimetable, isMainstreamTimetable, isMilepostOneTimetable]);
+  }, [data.blocks, hasSubjectAllocationCheck, isBilingualTimetable]);
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
@@ -1240,19 +1242,18 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
         {error ? <div className="banner error-banner">{error}</div> : null}
       </section>
 
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <h2 className="panel-title">Subject Allocation</h2>
-            <p className="meta">
-              {isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable)
-                ? `Milepost 1 ${isBilingualTimetable ? "Bilingual" : "Mainstream"} allocation check. Mixed labels count their full time toward each subject.`
-                : "Allocation checks are currently configured for Milepost 1 Mainstream and Bilingual only."}
-            </p>
+      {hasSubjectAllocationCheck ? (
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2 className="panel-title">Subject Allocation</h2>
+              <p className="meta">
+                Milepost 1 {isBilingualTimetable ? "Bilingual" : "Mainstream"} allocation check. Mixed labels count
+                their full time toward each subject.
+              </p>
+            </div>
           </div>
-        </div>
 
-        {isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable) ? (
           <div className="subject-check-row">
             {curriculumChecks.map((entry) => (
               <div className="subject-check-card" key={entry.subject}>
@@ -1267,12 +1268,8 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="empty-state compact">
-            This timetable is not in Milepost 1 Mainstream or Bilingual, so these allocation checks are not shown yet.
-          </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       <section className="panel">
         {data.timetable ? (
