@@ -8,6 +8,7 @@ import {
   type TimetableBuilderData,
   type TimetableAdminOptions,
   type TimetableClassSummary,
+  type TimetablePreviewStaffOption,
   type TimetablePeriod,
   type TimetableStaffOption,
   type TimetableStreamType,
@@ -1070,6 +1071,36 @@ export async function getStaffProfileByEmail(email: string): Promise<StaffProfil
   }
 
   return data ? normalizeStaffProfile(data as Record<string, unknown>) : null;
+}
+
+export async function getTimetablePreviewStaffOptions(): Promise<TimetablePreviewStaffOption[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .select("name,email")
+    .not("email", "is", null)
+    .order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const seenEmails = new Set<string>();
+
+  return ((data ?? []) as Array<{ name?: string | null; email?: string | null }>)
+    .map((row) => ({
+      email: String(row.email ?? "").trim().toLowerCase(),
+      name: String(row.name ?? "").trim()
+    }))
+    .filter((row) => row.email && row.name)
+    .filter((row) => {
+      if (seenEmails.has(row.email)) {
+        return false;
+      }
+
+      seenEmails.add(row.email);
+      return true;
+    });
 }
 
 export async function getDutyDashboardData(email: string): Promise<DutyDashboardData> {

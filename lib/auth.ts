@@ -36,6 +36,13 @@ export type StaffAccessSession = {
   access: StaffAccess;
 };
 
+export type AccessPreviewSession = {
+  activeProfile: StaffProfile | null;
+  activeAccess: StaffAccess;
+  previewEmail: string | null;
+  isPreviewing: boolean;
+};
+
 async function buildStaffAccessSession(user: CurrentUser): Promise<StaffAccessSession> {
   const email = user.email ?? "";
   const staffProfile = email ? await getStaffProfileByEmail(email) : null;
@@ -70,6 +77,40 @@ export async function requirePortalAccess(view: PortalView): Promise<StaffAccess
   }
 
   return session;
+}
+
+export async function getAccessPreviewSession(
+  session: StaffAccessSession,
+  previewEmail: string | null | undefined
+): Promise<AccessPreviewSession> {
+  const normalizedPreviewEmail = (previewEmail ?? "").trim().toLowerCase();
+
+  if (!session.access.isFullAccess || !normalizedPreviewEmail) {
+    return {
+      activeProfile: session.staffProfile,
+      activeAccess: session.access,
+      previewEmail: null,
+      isPreviewing: false
+    };
+  }
+
+  const previewProfile = await getStaffProfileByEmail(normalizedPreviewEmail);
+
+  if (!previewProfile) {
+    return {
+      activeProfile: session.staffProfile,
+      activeAccess: session.access,
+      previewEmail: null,
+      isPreviewing: false
+    };
+  }
+
+  return {
+    activeProfile: previewProfile,
+    activeAccess: getStaffAccess(previewProfile, previewProfile.email),
+    previewEmail: normalizedPreviewEmail,
+    isPreviewing: true
+  };
 }
 
 export async function requireStaffProfile(): Promise<{

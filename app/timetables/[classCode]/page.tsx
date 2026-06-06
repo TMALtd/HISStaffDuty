@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { requirePortalAccess } from "@/lib/auth";
-import { getTimetableBuilderData } from "@/lib/data";
+import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getTimetableBuilderData, getTimetablePreviewStaffOptions } from "@/lib/data";
 import { canAccessTimetableClass } from "@/lib/access";
+import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableBuilder } from "@/components/timetable-builder";
@@ -13,14 +14,20 @@ type TimetableBuilderPageProps = {
   params: {
     classCode: string;
   };
+  searchParams?: {
+    viewAs?: string;
+  };
 };
 
-export default async function TimetableBuilderPage({ params }: TimetableBuilderPageProps) {
-  const { user, access } = await requirePortalAccess("timetables");
+export default async function TimetableBuilderPage({ params, searchParams }: TimetableBuilderPageProps) {
+  const session = await requirePortalAccess("timetables");
+  const { user, access } = session;
+  const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
   const data = await getTimetableBuilderData(decodeURIComponent(params.classCode));
+  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
 
-  if (!canAccessTimetableClass(access, data.classSummary)) {
-    redirect("/timetables");
+  if (!canAccessTimetableClass(preview.activeAccess, data.classSummary)) {
+    redirect(preview.previewEmail ? `/timetables?viewAs=${encodeURIComponent(preview.previewEmail)}` : "/timetables");
   }
 
   return (
@@ -29,11 +36,19 @@ export default async function TimetableBuilderPage({ params }: TimetableBuilderP
         <div>
           <p className="eyebrow">HELP staff workspace</p>
           <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+          {preview.isPreviewing ? (
+            <p className="meta">
+              Viewing as {preview.activeProfile?.name ?? preview.previewEmail} ({preview.activeAccess.roleLabel})
+            </p>
+          ) : null}
         </div>
+        {access.isFullAccess ? (
+          <AccessPreviewSwitcher options={previewOptions} selectedEmail={preview.previewEmail} />
+        ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={access.allowedViews} />
-      <TimetableBuilder initialData={data} />
+      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <TimetableBuilder initialData={data} isReadOnly={preview.isPreviewing} />
     </main>
   );
 }

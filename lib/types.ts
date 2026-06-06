@@ -281,6 +281,11 @@ export type TimetableAdminOptions = {
   levels: string[];
 };
 
+export type TimetablePreviewStaffOption = {
+  email: string;
+  name: string;
+};
+
 export type TimetableBuilderData = {
   classSummary: TimetableClassSummary;
   templates: TimetableTemplate[];

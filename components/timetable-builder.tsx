@@ -3,7 +3,7 @@
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   TimetableBlock,
@@ -15,6 +15,7 @@ import type {
 
 type TimetableBuilderProps = {
   initialData: TimetableBuilderData;
+  isReadOnly?: boolean;
 };
 
 type EditableBlockDraft = {
@@ -439,8 +440,9 @@ function buildParentRowSegments(
   return merged;
 }
 
-export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
+export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableBuilderProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const standardExportRef = useRef<HTMLDivElement | null>(null);
   const parentExportRef = useRef<HTMLDivElement | null>(null);
   const [data, setData] = useState(initialData);
@@ -467,7 +469,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
 
   useEffect(() => {
     void (async () => {
-      const response = await fetch("/api/timetables/classes", { cache: "no-store" });
+      const query = searchParams.toString();
+      const response = await fetch(query ? `/api/timetables/classes?${query}` : "/api/timetables/classes", {
+        cache: "no-store"
+      });
       if (!response.ok) {
         return;
       }
@@ -475,7 +480,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
       const json = (await response.json()) as TimetableClassesResponse;
       setClassOptions(json.classes);
     })();
-  }, []);
+  }, [searchParams]);
 
   const normalizedTemplateName = useMemo(
     () => normalizeLabelForCompare(data.timetable?.template_name ?? ""),
@@ -814,6 +819,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   async function createTimetable() {
+    if (isReadOnly) {
+      return;
+    }
+
     if (!selectedTemplateId) {
       setError("Choose a timetable template first.");
       return;
@@ -849,6 +858,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   async function deleteTimetable() {
+    if (isReadOnly) {
+      return;
+    }
+
     setIsDeletingTimetable(true);
     setStatus("");
     setError("");
@@ -872,6 +885,10 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   function openEditor(block: MergedTimetableBlock) {
+    if (isReadOnly) {
+      return;
+    }
+
     setSelectedBlockId(block.id);
     setDraft({
       blockId: block.id,
@@ -884,7 +901,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   async function saveBlock() {
-    if (!draft) {
+    if (!draft || isReadOnly) {
       return;
     }
 
@@ -929,7 +946,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   async function resetBlock() {
-    if (!selectedBlock || !draft) {
+    if (!selectedBlock || !draft || isReadOnly) {
       return;
     }
 
@@ -1099,7 +1116,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   function updateTeacher(index: number, staffId: string) {
-    if (!draft) {
+    if (!draft || isReadOnly) {
       return;
     }
 
@@ -1117,7 +1134,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
   }
 
   function addTeacher(staffId: string) {
-    if (!draft || !staffId) {
+    if (!draft || !staffId || isReadOnly) {
       return;
     }
 
@@ -1142,7 +1159,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
             <Link className="button secondary" href="/timetables">
               Back to Timetables
             </Link>
-            {data.timetable ? (
+            {data.timetable && !isReadOnly ? (
               <button
                 className="button secondary"
                 type="button"
@@ -1163,7 +1180,12 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
             <select
               id="timetableClassSelect"
               value={data.classSummary.classCode}
-              onChange={(event) => router.push(`/timetables/${encodeURIComponent(event.target.value)}`)}
+              onChange={(event) => {
+                const params = new URLSearchParams(searchParams.toString());
+                const nextClassCode = encodeURIComponent(event.target.value);
+                const query = params.toString();
+                router.push(query ? `/timetables/${nextClassCode}?${query}` : `/timetables/${nextClassCode}`);
+              }}
             >
               <option value={data.classSummary.classCode}>{data.classSummary.className}</option>
               {classOptions
@@ -1206,6 +1228,12 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                   {isExportingImage === "parent" ? "Exporting..." : "Parent PNG"}
                 </button>
               </div>
+              {isReadOnly ? (
+                <div className="field timetable-toolbar-summary">
+                  <label>Mode</label>
+                  <div className="timetable-toolbar-value">Preview only</div>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
@@ -1230,7 +1258,7 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                 <div className="timetable-toolbar-value">No timetable created yet</div>
               </div>
               <div className="actions timetable-toolbar-actions">
-                <button className="button" type="button" onClick={() => void createTimetable()} disabled={isBusy}>
+                <button className="button" type="button" onClick={() => void createTimetable()} disabled={isBusy || isReadOnly}>
                   {isBusy ? "Creating..." : "Create Timetable"}
                 </button>
               </div>
@@ -1358,10 +1386,11 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                           color: foreground
                         }}
                         onClick={() => openEditor(block)}
+                        disabled={isReadOnly}
                       >
                         <div className="timetable-block-topline">
                           <strong>{labelForBlock(block)}</strong>
-                          <span className="timetable-block-edit">✎</span>
+                          {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
                         </div>
                         <div className="timetable-block-meta">
                           {timeRangeLabel(displayTimes.startTime, displayTimes.endTime)}
@@ -1413,10 +1442,11 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                             color: textColorForBackground(pastoralBlock.color ?? "#111827")
                           }}
                           onClick={() => openEditor(pastoralBlock)}
+                          disabled={isReadOnly}
                         >
                           <div className="timetable-block-topline">
                             <strong>{labelForBlock(pastoralBlock)}</strong>
-                            <span className="timetable-block-edit">✎</span>
+                            {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
                           </div>
                           <div className="timetable-block-meta">12:20-12:30</div>
                         </button>
@@ -1431,10 +1461,11 @@ export function TimetableBuilder({ initialData }: TimetableBuilderProps) {
                             color: textColorForBackground(dismissalBlock.color ?? "#9ca3af")
                           }}
                           onClick={() => openEditor(dismissalBlock)}
+                          disabled={isReadOnly}
                         >
                           <div className="timetable-block-topline">
                             <strong>{labelForBlock(dismissalBlock)}</strong>
-                            <span className="timetable-block-edit">✎</span>
+                            {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
                           </div>
                           <div className="timetable-block-meta">12:30-13:00</div>
                         </button>

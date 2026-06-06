@@ -1,25 +1,43 @@
-import { requirePortalAccess } from "@/lib/auth";
-import { getTimetableAdminData } from "@/lib/data";
+import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getTimetableAdminData, getTimetablePreviewStaffOptions } from "@/lib/data";
 import { filterTimetableClassesForAccess } from "@/lib/access";
+import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableAdmin } from "@/components/timetable-admin";
-import type { TimetableClassSummary, TimetableTemplate } from "@/lib/types";
+import type {
+  TimetableClassSummary,
+  TimetablePreviewStaffOption,
+  TimetableTemplate
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function TimetablesPage() {
-  const { user, access } = await requirePortalAccess("timetables");
+type TimetablesPageProps = {
+  searchParams?: {
+    viewAs?: string;
+  };
+};
+
+export default async function TimetablesPage({ searchParams }: TimetablesPageProps) {
+  const session = await requirePortalAccess("timetables");
+  const { user, access } = session;
+  const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
   let classes: TimetableClassSummary[] = [];
   let templates: TimetableTemplate[] = [];
   let setupMessage: string | null = null;
+  let previewOptions: TimetablePreviewStaffOption[] = [];
 
   try {
-    const data = await getTimetableAdminData();
+    const [data, staffOptions] = await Promise.all([
+      getTimetableAdminData(),
+      access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([])
+    ]);
     classes = data.classes;
     templates = data.templates;
     setupMessage = data.setupMessage;
+    previewOptions = staffOptions;
   } catch (error) {
     setupMessage =
       error instanceof Error
@@ -27,7 +45,7 @@ export default async function TimetablesPage() {
         : "Timetables could not be loaded right now.";
   }
 
-  classes = filterTimetableClassesForAccess(classes, access);
+  classes = filterTimetableClassesForAccess(classes, preview.activeAccess);
 
   return (
     <main className="page-shell">
@@ -35,15 +53,23 @@ export default async function TimetablesPage() {
         <div>
           <p className="eyebrow">HELP staff workspace</p>
           <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+          {preview.isPreviewing ? (
+            <p className="meta">
+              Viewing as {preview.activeProfile?.name ?? preview.previewEmail} ({preview.activeAccess.roleLabel})
+            </p>
+          ) : null}
         </div>
+        {access.isFullAccess ? (
+          <AccessPreviewSwitcher options={previewOptions} selectedEmail={preview.previewEmail} />
+        ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={access.allowedViews} />
+      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
       <TimetableAdmin
         initialClasses={classes}
         templates={templates}
         setupMessage={setupMessage}
-        canManageClasses={access.isFullAccess}
+        canManageClasses={access.isFullAccess && !preview.isPreviewing}
       />
     </main>
   );

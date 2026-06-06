@@ -1,19 +1,21 @@
 import { NextResponse } from "next/server";
-import { getCurrentStaffAccessOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { filterTimetableClassesForAccess } from "@/lib/access";
 import { createTimetableClass, getTimetableAdminData } from "@/lib/data";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getCurrentStaffAccessOrNull();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const { searchParams } = new URL(request.url);
+    const preview = await getAccessPreviewSession(session, searchParams.get("viewAs"));
     const { classes, templates, setupMessage } = await getTimetableAdminData();
 
     return NextResponse.json({
-      classes: filterTimetableClassesForAccess(classes, session.access),
+      classes: filterTimetableClassesForAccess(classes, preview.activeAccess),
       templates,
       setupMessage
     });
