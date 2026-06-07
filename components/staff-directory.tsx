@@ -71,6 +71,54 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
   };
 }
 
+function normalizeLookupValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function buildKnownClassLookup(options: StaffDirectoryClassOption[]) {
+  const lookup = new Set<string>();
+
+  for (const option of options) {
+    const normalizedName = normalizeLookupValue(option.className);
+    const normalizedCode = normalizeLookupValue(option.classCode);
+
+    if (normalizedName) {
+      lookup.add(normalizedName);
+    }
+
+    if (normalizedCode) {
+      lookup.add(normalizedCode);
+    }
+  }
+
+  return lookup;
+}
+
+function getStaffCardAccentLine(
+  person: StaffDirectoryRecord,
+  knownClassLookup: Set<string>
+) {
+  const normalizedClass = normalizeLookupValue(person.class);
+
+  if (normalizedClass && knownClassLookup.has(normalizedClass)) {
+    return person.class ?? "Staff profile";
+  }
+
+  if (person.designation?.trim()) {
+    return person.designation;
+  }
+
+  if (person.timetable?.trim()) {
+    return person.timetable;
+  }
+
+  if (person.class?.trim()) {
+    return person.class;
+  }
+
+  return "Staff profile";
+}
+
 function classOptionLabel(option: StaffDirectoryClassOption) {
   const stream = option.streamType
     ? option.streamType.charAt(0).toUpperCase() + option.streamType.slice(1)
@@ -233,6 +281,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
   const departmentOptions = useMemo(
     () => uniqueValues(staff.map((person) => person.department)),
     [staff]
+  );
+  const knownClassLookup = useMemo(
+    () => buildKnownClassLookup(classOptions),
+    [classOptions]
   );
 
   const filteredStaff = useMemo(() => {
@@ -477,10 +529,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                 imageClassName="directory-avatar-image"
               />
               <div className="staff-management-copy">
-                <h2 className="directory-name">{person.first_name ?? person.name}</h2>
+                <h2 className="directory-name">{person.name}</h2>
                 <p className="staff-management-line primary">{person.department ?? "Department pending"}</p>
                 <p className="staff-management-line accent">
-                  {person.class || person.timetable || person.designation || "Staff profile"}
+                  {getStaffCardAccentLine(person, knownClassLookup)}
                 </p>
               </div>
             </div>
