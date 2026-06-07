@@ -2,11 +2,14 @@ import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StaffDirectory } from "@/components/staff-directory";
 import { requirePortalAccess } from "@/lib/auth";
-import { getStaffDirectoryData } from "@/lib/data";
+import { getStaffDirectoryClassOptions, getStaffDirectoryData } from "@/lib/data";
 
 export default async function DirectoryPage() {
   const { user, staffProfile, access } = await requirePortalAccess("directory");
-  const staff = await getStaffDirectoryData();
+  const [staff, classOptions] = await Promise.all([
+    getStaffDirectoryData(),
+    getStaffDirectoryClassOptions()
+  ]);
 
   return (
     <main className="page-shell">
@@ -20,7 +23,7 @@ export default async function DirectoryPage() {
         <SignOutButton />
       </section>
       <PortalNav allowedViews={access.allowedViews} />
-      <StaffDirectory staff={staff} />
+      <StaffDirectory staff={staff} classOptions={classOptions} />
     </main>
   );
 }

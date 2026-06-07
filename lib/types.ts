@@ -114,6 +114,32 @@ export type StaffDirectoryRecord = StaffProfile & {
   assigned_duties: DutySummary[];
 };
 
+export type StaffDirectoryClassOption = {
+  classCode: string;
+  className: string;
+  yearGroup: string;
+  streamType: TimetableStreamType | null;
+};
+
+export type StaffDirectoryUpsertInput = {
+  id?: string;
+  staff_id: string | null;
+  name: string;
+  first_name: string | null;
+  role: string | null;
+  email: string | null;
+  department: string | null;
+  class: string | null;
+  extension: string | null;
+  max_duties: number | null;
+  status: string | null;
+  unavailable_reason: string | null;
+  timetable: string | null;
+  photo_url: string | null;
+  designation: string | null;
+  system_role: string | null;
+};
+
 export type DutyRosterRecord = DutySummary & {
   assignedStaffName: string | null;
   assignedStaffFirstName: string | null;

@@ -1,10 +1,36 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { StaffDirectoryRecord } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import type {
+  StaffDirectoryClassOption,
+  StaffDirectoryRecord,
+  StaffDirectoryUpsertInput
+} from "@/lib/types";
 
 type StaffDirectoryProps = {
   staff: StaffDirectoryRecord[];
+  classOptions: StaffDirectoryClassOption[];
+};
+
+type ModalMode = "view" | "edit" | "create";
+
+const EMPTY_FORM: StaffDirectoryUpsertInput = {
+  staff_id: "",
+  name: "",
+  first_name: "",
+  role: "",
+  email: "",
+  department: "",
+  class: "",
+  extension: "",
+  max_duties: null,
+  status: "",
+  unavailable_reason: "",
+  timetable: "",
+  photo_url: "",
+  designation: "",
+  system_role: ""
 };
 
 function uniqueValues(items: Array<string | null | undefined>) {
@@ -17,10 +43,44 @@ function formatDutyLabel(duty: StaffDirectoryRecord["assigned_duties"][number]) 
   return `${duty.dayLabel} / ${duty.name} (${duty.timeLabel})`;
 }
 
-export function StaffDirectory({ staff }: StaffDirectoryProps) {
+function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
+  return {
+    id: record.id,
+    staff_id: record.staff_id ?? "",
+    name: record.name,
+    first_name: record.first_name ?? "",
+    role: record.role ?? "",
+    email: record.email ?? "",
+    department: record.department ?? "",
+    class: record.class ?? "",
+    extension: record.extension ?? "",
+    max_duties: record.max_duties,
+    status: record.status ?? "",
+    unavailable_reason: record.unavailable_reason ?? "",
+    timetable: record.timetable ?? "",
+    photo_url: record.photo_url ?? "",
+    designation: record.designation ?? "",
+    system_role: record.system_role ?? ""
+  };
+}
+
+function classOptionLabel(option: StaffDirectoryClassOption) {
+  const stream = option.streamType
+    ? option.streamType.charAt(0).toUpperCase() + option.streamType.slice(1)
+    : null;
+
+  return [option.className, option.yearGroup, stream].filter(Boolean).join(" | ");
+}
+
+export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [modalMode, setModalMode] = useState<ModalMode | null>(null);
+  const [formValues, setFormValues] = useState<StaffDirectoryUpsertInput>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const departmentOptions = useMemo(
     () => uniqueValues(staff.map((person) => person.department)),
@@ -56,6 +116,106 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
     staff.find((person) => person.id === selectedStaffId) ??
     null;
 
+  function closeModal() {
+    setSelectedStaffId(null);
+    setModalMode(null);
+    setFormValues(EMPTY_FORM);
+    setFormError(null);
+    setIsSaving(false);
+  }
+
+  function openCreateModal() {
+    setSelectedStaffId(null);
+    setModalMode("create");
+    setFormValues(EMPTY_FORM);
+    setFormError(null);
+  }
+
+  function openViewModal(staffMember: StaffDirectoryRecord) {
+    setSelectedStaffId(staffMember.id);
+    setModalMode("view");
+    setFormValues(toFormValues(staffMember));
+    setFormError(null);
+  }
+
+  function openEditModal(staffMember: StaffDirectoryRecord) {
+    setSelectedStaffId(staffMember.id);
+    setModalMode("edit");
+    setFormValues(toFormValues(staffMember));
+    setFormError(null);
+  }
+
+  async function handleSave() {
+    setFormError(null);
+
+    if (!String(formValues.name ?? "").trim()) {
+      setFormError("Staff name is required.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const payload = {
+        ...formValues,
+        max_duties:
+          formValues.max_duties === null || formValues.max_duties === undefined
+            ? null
+            : Number(formValues.max_duties)
+      };
+
+      const response = await fetch(
+        modalMode === "create" ? "/api/staff" : `/api/staff/${selectedStaffId}`,
+        {
+          method: modalMode === "create" ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      const result = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to save staff member.");
+      }
+
+      router.refresh();
+      closeModal();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Unable to save staff member.");
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete(staffMember: StaffDirectoryRecord) {
+    const confirmed = window.confirm(`Delete ${staffMember.name}? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setFormError(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch(`/api/staff/${staffMember.id}`, {
+        method: "DELETE"
+      });
+      const result = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Unable to delete staff member.");
+      }
+
+      router.refresh();
+      closeModal();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Unable to delete staff member.");
+      setIsSaving(false);
+    }
+  }
+
+  const activeStaff = modalMode === "create" ? null : selectedStaff;
+
   return (
     <div className="dashboard-grid">
       <section className="directory-hero">
@@ -63,7 +223,7 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
           <h1 className="directory-page-title">Staff Management</h1>
           <p className="directory-page-copy">Manage teaching staff profiles and information</p>
         </div>
-        <button className="directory-add-button" type="button" disabled>
+        <button className="directory-add-button" type="button" onClick={openCreateModal}>
           + Add Staff Member
         </button>
       </section>
@@ -122,18 +282,18 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
             </div>
 
             <div className="staff-card-actions">
-              <button className="directory-action edit" type="button" disabled>
+              <button className="directory-action edit" type="button" onClick={() => openEditModal(person)}>
                 Edit
               </button>
               <button
                 className="directory-action view"
                 type="button"
-                onClick={() => setSelectedStaffId(person.id)}
+                onClick={() => openViewModal(person)}
               >
                 View
               </button>
-              <button className="directory-action icon" type="button" disabled>
-                ⋮
+              <button className="directory-action icon" type="button" onClick={() => handleDelete(person)}>
+                Delete
               </button>
             </div>
           </article>
@@ -146,8 +306,8 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
         </section>
       ) : null}
 
-      {selectedStaff ? (
-        <div className="directory-modal-backdrop" role="presentation" onClick={() => setSelectedStaffId(null)}>
+      {modalMode ? (
+        <div className="directory-modal-backdrop" role="presentation" onClick={closeModal}>
           <section
             className="directory-modal"
             role="dialog"
@@ -155,114 +315,310 @@ export function StaffDirectory({ staff }: StaffDirectoryProps) {
             aria-labelledby="staff-directory-modal-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              className="directory-modal-close"
-              type="button"
-              onClick={() => setSelectedStaffId(null)}
-            >
+            <button className="directory-modal-close" type="button" onClick={closeModal}>
               ×
             </button>
 
             <div className="directory-modal-header">
               <div className="directory-avatar management-avatar large">
-                {selectedStaff.photo_url ? (
+                {activeStaff?.photo_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={selectedStaff.photo_url}
-                    alt={selectedStaff.name}
+                    src={activeStaff.photo_url}
+                    alt={activeStaff.name}
                     className="directory-avatar-image"
                   />
                 ) : (
-                  <span>{selectedStaff.first_name?.[0] ?? selectedStaff.name[0] ?? "?"}</span>
+                  <span>
+                    {String(formValues.first_name || formValues.name || "?").trim().charAt(0) || "?"}
+                  </span>
                 )}
               </div>
               <div>
                 <h2 id="staff-directory-modal-title" className="directory-modal-title">
-                  {selectedStaff.name}
+                  {modalMode === "create" ? "Add staff member" : activeStaff?.name ?? "Staff member"}
                 </h2>
-                <p className="staff-management-line primary">{selectedStaff.role ?? "Staff"}</p>
+                <p className="staff-management-line primary">
+                  {modalMode === "view" ? activeStaff?.role ?? "Staff" : "Edit staff details and class assignment"}
+                </p>
                 <p className="staff-management-line accent">
-                  {selectedStaff.department ?? "Department pending"}
+                  {modalMode === "view"
+                    ? activeStaff?.department ?? "Department pending"
+                    : "Class assignment can be updated here directly."}
                 </p>
               </div>
             </div>
 
-            <div className="directory-modal-grid">
-              <div className="directory-modal-section">
-                <h3 className="directory-modal-heading">Personal Information</h3>
-                <div className="directory-modal-list">
-                  <div className="directory-modal-row">
-                    <span>First Name</span>
-                    <strong>{selectedStaff.first_name ?? "—"}</strong>
-                  </div>
-                  <div className="directory-modal-row">
-                    <span>Email</span>
-                    <strong>{selectedStaff.email ?? "—"}</strong>
-                  </div>
-                  <div className="directory-modal-row">
-                    <span>Department</span>
-                    <strong>{selectedStaff.department ?? "—"}</strong>
-                  </div>
-                  <div className="directory-modal-row">
-                    <span>Team</span>
-                    <strong>{selectedStaff.class ?? selectedStaff.timetable ?? "—"}</strong>
-                  </div>
-                  <div className="directory-modal-row">
-                    <span>Role</span>
-                    <strong>{selectedStaff.role ?? "—"}</strong>
-                  </div>
-                  <div className="directory-modal-row">
-                    <span>Status</span>
-                    <strong>{selectedStaff.status ?? "—"}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="directory-modal-section">
-                <h3 className="directory-modal-heading">Work Details</h3>
-                <div className="directory-modal-summary">
-                  <span>Assigned Duties</span>
-                  <strong>{selectedStaff.assigned_duties.length}</strong>
-                </div>
-                <div className="directory-duty-stack">
-                  {selectedStaff.assigned_duties.length ? (
-                    selectedStaff.assigned_duties.map((duty) => (
-                      <div className="directory-duty-pill" key={duty.id}>
-                        {formatDutyLabel(duty)}
+            {modalMode === "view" && activeStaff ? (
+              <>
+                <div className="directory-modal-grid">
+                  <div className="directory-modal-section">
+                    <h3 className="directory-modal-heading">Personal Information</h3>
+                    <div className="directory-modal-list">
+                      <div className="directory-modal-row">
+                        <span>Staff ID</span>
+                        <strong>{activeStaff.staff_id ?? "—"}</strong>
                       </div>
-                    ))
-                  ) : (
-                    <div className="directory-duty-pill empty">No assigned duties</div>
-                  )}
+                      <div className="directory-modal-row">
+                        <span>First Name</span>
+                        <strong>{activeStaff.first_name ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Email</span>
+                        <strong>{activeStaff.email ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Department</span>
+                        <strong>{activeStaff.department ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Assigned Class</span>
+                        <strong>{activeStaff.class ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Role</span>
+                        <strong>{activeStaff.role ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Status</span>
+                        <strong>{activeStaff.status ?? "—"}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="directory-modal-section">
+                    <h3 className="directory-modal-heading">Work Details</h3>
+                    <div className="directory-modal-summary">
+                      <span>Assigned Duties</span>
+                      <strong>{activeStaff.assigned_duties.length}</strong>
+                    </div>
+                    <div className="directory-duty-stack">
+                      {activeStaff.assigned_duties.length ? (
+                        activeStaff.assigned_duties.map((duty) => (
+                          <div className="directory-duty-pill" key={duty.id}>
+                            {formatDutyLabel(duty)}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="directory-duty-pill empty">No assigned duties</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="directory-modal-footer-card">
-              <h3 className="directory-modal-heading">Timetable Visibility</h3>
-              <p className="directory-page-copy compact">
-                Control which timetables this staff member can view. This action will be added in
-                the next admin phase.
-              </p>
-              <button className="directory-add-button full-width" type="button" disabled>
-                + Grant Timetable Access
-              </button>
-            </div>
+                <div className="directory-modal-actions">
+                  <button className="directory-action edit" type="button" onClick={() => openEditModal(activeStaff)}>
+                    Edit
+                  </button>
+                  <button className="directory-action icon" type="button" onClick={() => handleDelete(activeStaff)}>
+                    Delete
+                  </button>
+                  <button className="directory-action close" type="button" onClick={closeModal}>
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="directory-modal-grid">
+                  <div className="directory-modal-section">
+                    <h3 className="directory-modal-heading">Personal Information</h3>
+                    <div className="directory-form-grid">
+                      <label className="field">
+                        <span>Staff ID</span>
+                        <input
+                          type="text"
+                          value={String(formValues.staff_id ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, staff_id: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Full Name</span>
+                        <input
+                          type="text"
+                          value={formValues.name}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, name: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>First Name</span>
+                        <input
+                          type="text"
+                          value={String(formValues.first_name ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, first_name: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Email</span>
+                        <input
+                          type="email"
+                          value={String(formValues.email ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, email: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Department</span>
+                        <input
+                          type="text"
+                          value={String(formValues.department ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, department: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Role</span>
+                        <input
+                          type="text"
+                          value={String(formValues.role ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, role: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Designation</span>
+                        <input
+                          type="text"
+                          value={String(formValues.designation ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, designation: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>System Role</span>
+                        <input
+                          type="text"
+                          value={String(formValues.system_role ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, system_role: event.target.value }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </div>
 
-            <div className="directory-modal-actions">
-              <button className="directory-action edit" type="button" disabled>
-                Edit
-              </button>
-              <button className="directory-action view" type="button" disabled>
-                Photo
-              </button>
-              <button className="directory-action view" type="button" disabled>
-                Password
-              </button>
-              <button className="directory-action close" type="button" onClick={() => setSelectedStaffId(null)}>
-                Close
-              </button>
-            </div>
+                  <div className="directory-modal-section">
+                    <h3 className="directory-modal-heading">Assignment and Status</h3>
+                    <div className="directory-form-grid">
+                      <label className="field">
+                        <span>Assigned Class</span>
+                        <select
+                          value={String(formValues.class ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, class: event.target.value }))
+                          }
+                        >
+                          <option value="">No class assigned</option>
+                          {classOptions.map((option) => (
+                            <option key={option.classCode} value={option.className}>
+                              {classOptionLabel(option)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Timetable Label</span>
+                        <input
+                          type="text"
+                          value={String(formValues.timetable ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, timetable: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Status</span>
+                        <input
+                          type="text"
+                          value={String(formValues.status ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, status: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Extension</span>
+                        <input
+                          type="text"
+                          value={String(formValues.extension ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, extension: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Max Duties</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formValues.max_duties ?? ""}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              max_duties: event.target.value ? Number(event.target.value) : null
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Photo URL</span>
+                        <input
+                          type="text"
+                          value={String(formValues.photo_url ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, photo_url: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field field-span-2">
+                        <span>Unavailable Reason</span>
+                        <textarea
+                          rows={3}
+                          value={String(formValues.unavailable_reason ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              unavailable_reason: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {formError ? <p className="directory-form-error">{formError}</p> : null}
+
+                <div className="directory-modal-actions">
+                  <button className="directory-action edit" type="button" onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? "Saving..." : modalMode === "create" ? "Add Staff Member" : "Save Changes"}
+                  </button>
+                  {activeStaff ? (
+                    <button
+                      className="directory-action icon"
+                      type="button"
+                      onClick={() => handleDelete(activeStaff)}
+                      disabled={isSaving}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                  <button className="directory-action close" type="button" onClick={closeModal} disabled={isSaving}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       ) : null}

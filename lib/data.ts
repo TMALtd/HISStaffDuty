@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { randomUUID } from "node:crypto";
 import {
   type CreateTimetableClassInput,
   type ClassTimetable,
@@ -30,7 +31,9 @@ import {
   type FilterField,
   type FilterOptions,
   type FilterState,
+  type StaffDirectoryClassOption,
   type StaffDirectoryRecord,
+  type StaffDirectoryUpsertInput,
   type StaffProfile,
   type StudentRow
 } from "@/lib/types";
@@ -1194,6 +1197,131 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
         numeric: true
       });
     });
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  const trimmed = String(value ?? "").trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeRequiredText(value: string | null | undefined, fieldLabel: string) {
+  const trimmed = String(value ?? "").trim();
+
+  if (!trimmed) {
+    throw new Error(`${fieldLabel} is required.`);
+  }
+
+  return trimmed;
+}
+
+function normalizeOptionalNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
+  return {
+    staff_id: normalizeOptionalText(input.staff_id),
+    name: normalizeRequiredText(input.name, "Staff name"),
+    first_name: normalizeOptionalText(input.first_name),
+    role: normalizeOptionalText(input.role),
+    email: normalizeOptionalText(input.email)?.toLowerCase() ?? null,
+    department: normalizeOptionalText(input.department),
+    class: normalizeOptionalText(input.class),
+    extension: normalizeOptionalText(input.extension),
+    max_duties: normalizeOptionalNumber(input.max_duties),
+    status: normalizeOptionalText(input.status),
+    unavailable_reason: normalizeOptionalText(input.unavailable_reason),
+    timetable: normalizeOptionalText(input.timetable),
+    photo_url: normalizeOptionalText(input.photo_url),
+    designation: normalizeOptionalText(input.designation),
+    system_role: normalizeOptionalText(input.system_role)
+  };
+}
+
+export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryClassOption[]> {
+  const classSummaries = await getTimetableClassSummaries();
+
+  return classSummaries.map((entry) => ({
+    classCode: entry.classCode,
+    className: entry.className,
+    yearGroup: entry.yearGroup,
+    streamType: entry.streamType
+  }));
+}
+
+export async function createStaffDirectoryRecord(
+  input: StaffDirectoryUpsertInput
+): Promise<StaffDirectoryRecord> {
+  const supabase = createSupabaseAdminClient();
+  const id = normalizeOptionalText(input.id) ?? `staff-${randomUUID()}`;
+  const payload = {
+    id,
+    ...buildStaffDirectoryPayload(input)
+  };
+
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .insert(payload)
+    .select(
+      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const profile = normalizeStaffProfile((data ?? {}) as Record<string, unknown>);
+
+  return {
+    ...profile,
+    assigned_duties: []
+  };
+}
+
+export async function updateStaffDirectoryRecord(
+  id: string,
+  input: StaffDirectoryUpsertInput
+): Promise<StaffDirectoryRecord> {
+  const supabase = createSupabaseAdminClient();
+  const normalizedId = normalizeRequiredText(id, "Staff ID");
+  const payload = buildStaffDirectoryPayload(input);
+
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .update(payload)
+    .eq("id", normalizedId)
+    .select(
+      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
+    )
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const profile = normalizeStaffProfile((data ?? {}) as Record<string, unknown>);
+
+  return {
+    ...profile,
+    assigned_duties: []
+  };
+}
+
+export async function deleteStaffDirectoryRecord(id: string): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const normalizedId = normalizeRequiredText(id, "Staff ID");
+
+  const { error } = await supabase.from(STAFF_TABLE).delete().eq("id", normalizedId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function getDutyRosterData(): Promise<DutyRosterRecord[]> {

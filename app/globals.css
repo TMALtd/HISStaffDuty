@@ -1183,8 +1183,22 @@ tr:last-child td {
   color: white;
   font: inherit;
   font-weight: 600;
+  cursor: pointer;
+  opacity: 1;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.directory-add-button:hover {
+  transform: translateY(-1px);
+  background: #34793f;
+  box-shadow: 0 10px 24px rgba(60, 139, 72, 0.18);
+}
+
+.directory-add-button:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+  transform: none;
+  box-shadow: none;
 }
 
 .directory-add-button.full-width {
@@ -1420,6 +1434,33 @@ tr:last-child td {
 
 .directory-modal-summary strong {
   font-size: 2rem;
+}
+
+.directory-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field-span-2 {
+  grid-column: 1 / -1;
+}
+
+.directory-form-grid textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+  resize: vertical;
+  min-height: 96px;
+}
+
+.directory-form-error {
+  margin: 0 0 6px;
+  color: #b42318;
+  font-weight: 600;
 }
 
 .directory-duty-stack {
@@ -1781,6 +1822,7 @@ tr:last-child td {
   .directory-card-grid,
   .directory-modal-grid,
   .directory-modal-actions,
+  .directory-form-grid,
   .legacy-filter-bar {
     grid-template-columns: 1fr;
   }
