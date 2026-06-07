@@ -1504,6 +1504,59 @@ tr:last-child td {
   font-weight: 600;
 }
 
+.directory-photo-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.directory-upload-button {
+  align-items: center;
+  background: rgba(84, 145, 76, 0.12);
+  border: 1px solid rgba(84, 145, 76, 0.28);
+  border-radius: 999px;
+  color: #3f7f39;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.98rem;
+  font-weight: 700;
+  justify-content: center;
+  padding: 12px 18px;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.directory-upload-button:hover {
+  background: rgba(84, 145, 76, 0.18);
+  border-color: rgba(84, 145, 76, 0.42);
+  transform: translateY(-1px);
+}
+
+.directory-upload-button input {
+  display: none;
+}
+
+.directory-upload-status {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.directory-upload-status.muted {
+  color: var(--muted);
+}
+
+.directory-upload-error {
+  margin: 6px 0 0;
+  color: #b42318;
+  font-size: 0.94rem;
+  font-weight: 600;
+}
+
 .directory-duty-stack {
   display: grid;
   gap: 10px;

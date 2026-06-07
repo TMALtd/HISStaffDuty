@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ImgHTMLAttributes } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ImgHTMLAttributes
+} from "react";
 import { useRouter } from "next/navigation";
 import type {
   StaffDirectoryClassOption,
@@ -219,6 +226,9 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
   const [formValues, setFormValues] = useState<StaffDirectoryUpsertInput>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const departmentOptions = useMemo(
     () => uniqueValues(staff.map((person) => person.department)),
@@ -264,6 +274,8 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     setFormValues(EMPTY_FORM);
     setFormError(null);
     setIsSaving(false);
+    setIsUploadingPhoto(false);
+    setPhotoUploadError(null);
   }
 
   function openCreateModal() {
@@ -271,6 +283,8 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     setModalMode("create");
     setFormValues(EMPTY_FORM);
     setFormError(null);
+    setPhotoUploadError(null);
+    setIsUploadingPhoto(false);
   }
 
   function openViewModal(staffMember: StaffDirectoryRecord) {
@@ -278,6 +292,8 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     setModalMode("view");
     setFormValues(toFormValues(staffMember));
     setFormError(null);
+    setPhotoUploadError(null);
+    setIsUploadingPhoto(false);
   }
 
   function openEditModal(staffMember: StaffDirectoryRecord) {
@@ -285,6 +301,51 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     setModalMode("edit");
     setFormValues(toFormValues(staffMember));
     setFormError(null);
+    setPhotoUploadError(null);
+    setIsUploadingPhoto(false);
+  }
+
+  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setPhotoUploadError(null);
+    setIsUploadingPhoto(true);
+
+    try {
+      const payload = new FormData();
+      payload.append("file", file);
+      payload.append("staffName", formValues.name || formValues.first_name || "staff");
+
+      const response = await fetch("/api/staff/photo", {
+        method: "POST",
+        body: payload
+      });
+
+      const result = (await response.json().catch(() => null)) as
+        | { publicUrl?: string; error?: string }
+        | null;
+
+      if (!response.ok || !result?.publicUrl) {
+        throw new Error(result?.error || "Photo upload failed.");
+      }
+
+      setFormValues((current) => ({
+        ...current,
+        photo_url: result.publicUrl ?? current.photo_url
+      }));
+    } catch (error) {
+      setPhotoUploadError(
+        error instanceof Error ? error.message : "We couldn't upload that photo just now."
+      );
+    } finally {
+      setIsUploadingPhoto(false);
+      if (photoInputRef.current) {
+        photoInputRef.current.value = "";
+      }
+    }
   }
 
   async function handleSave() {
@@ -666,7 +727,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                         >
                           <option value="">No class assigned</option>
                           {classOptions.map((option) => (
-                            <option key={option.classCode} value={option.className}>
+                            <option
+                              key={option.classCode || option.className}
+                              value={option.className}
+                            >
                               {classOptionLabel(option)}
                             </option>
                           ))}
@@ -716,6 +780,31 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                           }
                         />
                       </label>
+                      <div className="field field-span-2">
+                        <span>Staff Photo</span>
+                        <div className="directory-photo-upload-row">
+                          <label className="directory-upload-button">
+                            <input
+                              ref={photoInputRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoUpload}
+                              disabled={isSaving || isUploadingPhoto}
+                            />
+                            {isUploadingPhoto ? "Uploading photo..." : "Upload Photo"}
+                          </label>
+                          <span
+                            className={`directory-upload-status${
+                              formValues.photo_url ? "" : " muted"
+                            }`}
+                          >
+                            {formValues.photo_url ? "Photo ready" : "No photo uploaded"}
+                          </span>
+                        </div>
+                        {photoUploadError ? (
+                          <p className="directory-upload-error">{photoUploadError}</p>
+                        ) : null}
+                      </div>
                       <label className="field field-span-2">
                         <span>Unavailable Reason</span>
                         <textarea

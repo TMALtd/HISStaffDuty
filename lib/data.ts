@@ -1244,7 +1244,10 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
 }
 
 export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryClassOption[]> {
-  const classRecords = await getClassRecords();
+  const [classRecords, timetableRows] = await Promise.all([
+    getClassRecords(),
+    selectClassTimetableRows()
+  ]);
   const uniqueOptions = new Map<string, StaffDirectoryClassOption>();
 
   classRecords.forEach((row) => {
@@ -1266,6 +1269,27 @@ export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryCla
       normalizeTimetableLookupKey(classCode || className),
       option
     );
+  });
+
+  timetableRows.forEach((row) => {
+    const classCode = String(row.class_code ?? "").trim();
+    const className = String(row.class_name ?? "").trim();
+
+    if (!classCode && !className) {
+      return;
+    }
+
+    const key = normalizeTimetableLookupKey(classCode || className);
+    if (uniqueOptions.has(key)) {
+      return;
+    }
+
+    uniqueOptions.set(key, {
+      classCode,
+      className,
+      yearGroup: String(row.year_group ?? "").trim(),
+      streamType: normalizeTimetableStreamType(row.stream_type)
+    });
   });
 
   return Array.from(uniqueOptions.values()).sort((left, right) =>
