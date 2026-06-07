@@ -1504,22 +1504,6 @@ tr:last-child td {
   font-weight: 600;
 }
 
-.field-help {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.4;
-}
-
-.field-help code {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(159, 23, 36, 0.08);
-  color: var(--accent);
-  font-size: 0.78rem;
-}
-
 .directory-duty-stack {
   display: grid;
   gap: 10px;

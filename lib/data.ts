@@ -1244,14 +1244,37 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
 }
 
 export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryClassOption[]> {
-  const classSummaries = await getTimetableClassSummaries();
+  const classRecords = await getClassRecords();
+  const uniqueOptions = new Map<string, StaffDirectoryClassOption>();
 
-  return classSummaries.map((entry) => ({
-    classCode: entry.classCode,
-    className: entry.className,
-    yearGroup: entry.yearGroup,
-    streamType: entry.streamType
-  }));
+  classRecords.forEach((row) => {
+    const classCode = String(row["Class Code"] ?? "").trim();
+    const className = String(row["Class Name"] ?? "").trim();
+
+    if (!classCode && !className) {
+      return;
+    }
+
+    const option: StaffDirectoryClassOption = {
+      classCode,
+      className,
+      yearGroup: String(row["Year Group"] ?? "").trim(),
+      streamType: normalizeTimetableStreamType(row.Designation)
+    };
+
+    uniqueOptions.set(
+      normalizeTimetableLookupKey(classCode || className),
+      option
+    );
+  });
+
+  return Array.from(uniqueOptions.values()).sort((left, right) =>
+    [left.yearGroup, left.className, left.classCode]
+      .join("|")
+      .localeCompare([right.yearGroup, right.className, right.classCode].join("|"), undefined, {
+        numeric: true
+      })
+  );
 }
 
 export async function createStaffDirectoryRecord(

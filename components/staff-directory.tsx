@@ -716,20 +716,6 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                           }
                         />
                       </label>
-                      <label className="field">
-                        <span>Photo URL</span>
-                        <input
-                          type="text"
-                          value={String(formValues.photo_url ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, photo_url: event.target.value }))
-                          }
-                        />
-                        <small className="field-help">
-                          Full Supabase Storage URLs work best. The directory will also try your public
-                          <code>staff-photos</code> bucket automatically.
-                        </small>
-                      </label>
                       <label className="field field-span-2">
                         <span>Unavailable Reason</span>
                         <textarea
