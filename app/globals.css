@@ -1302,8 +1302,8 @@ tr:last-child td {
 
 .staff-card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr 44px;
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   border-top: 1px solid #ece7de;
   margin-top: 18px;
   padding-top: 14px;
@@ -1311,11 +1311,26 @@ tr:last-child td {
 
 .directory-action {
   border-radius: 10px;
-  padding: 10px 14px;
+  min-height: 48px;
+  padding: 10px 16px;
   font: inherit;
   border: 1px solid #dcdfe5;
   background: white;
   color: #273043;
+  cursor: pointer;
+  font-weight: 600;
+  text-align: center;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.directory-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(38, 23, 24, 0.08);
 }
 
 .directory-action.edit {
@@ -1329,13 +1344,39 @@ tr:last-child td {
   background: white;
 }
 
-.directory-action.icon {
-  padding-inline: 0;
+.directory-action.danger {
+  background: #fff7f7;
+  color: #991b1b;
+  border-color: rgba(185, 28, 28, 0.18);
+}
+
+.directory-action.edit.active {
+  background: #2f6e39;
+  border-color: #2f6e39;
+  box-shadow:
+    0 0 0 3px rgba(60, 139, 72, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+}
+
+.directory-action.view.active,
+.directory-action.close.active {
+  background: rgba(159, 23, 36, 0.08);
+  color: var(--accent);
+  border-color: rgba(159, 23, 36, 0.28);
+  box-shadow:
+    0 0 0 3px rgba(159, 23, 36, 0.1),
+    inset 0 0 0 1px rgba(159, 23, 36, 0.08);
+}
+
+.directory-action.danger:hover {
+  background: #feecec;
 }
 
 .directory-action:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+  transform: none;
+  box-shadow: none;
 }
 
 .directory-modal-backdrop {
@@ -1463,6 +1504,22 @@ tr:last-child td {
   font-weight: 600;
 }
 
+.field-help {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.field-help code {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(159, 23, 36, 0.08);
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
 .directory-duty-stack {
   display: grid;
   gap: 10px;
@@ -1535,6 +1592,7 @@ tr:last-child td {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .directory-name {

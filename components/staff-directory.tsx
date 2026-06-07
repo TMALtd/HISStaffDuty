@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ImgHTMLAttributes } from "react";
 import { useRouter } from "next/navigation";
 import type {
   StaffDirectoryClassOption,
@@ -72,6 +72,144 @@ function classOptionLabel(option: StaffDirectoryClassOption) {
   return [option.className, option.yearGroup, stream].filter(Boolean).join(" | ");
 }
 
+function resolvePhotoUrl(photoUrl: string | null | undefined) {
+  if (!photoUrl) {
+    return null;
+  }
+
+  const trimmed = photoUrl.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return encodeURI(trimmed);
+  }
+
+  return encodeURI(`/${trimmed}`);
+}
+
+function cleanPhotoToken(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const withoutExtension = value.replace(/\.[a-z0-9]+$/i, "");
+  const withoutTimestamp = withoutExtension.replace(/_\d+$/i, "");
+  const alphanumericOnly = withoutTimestamp.replace(/[^a-z0-9]+/gi, "");
+
+  return alphanumericOnly || null;
+}
+
+function buildPhotoCandidates(
+  photoUrl: string | null | undefined,
+  staffName: string,
+  firstName?: string | null
+) {
+  const directUrl = resolvePhotoUrl(photoUrl);
+  const candidates = new Set<string>();
+
+  if (directUrl) {
+    candidates.add(directUrl);
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/+$/, "");
+
+  if (!supabaseUrl) {
+    return Array.from(candidates);
+  }
+
+  const storageBase = `${supabaseUrl}/storage/v1/object/public/staff-photos`;
+  const fileName = photoUrl?.split("/").pop() ?? "";
+  const fileExtensionMatch = fileName.match(/\.([a-z0-9]+)$/i);
+  const existingExtension = fileExtensionMatch ? fileExtensionMatch[1].toLowerCase() : null;
+
+  const baseNames = [
+    cleanPhotoToken(fileName),
+    cleanPhotoToken(staffName),
+    cleanPhotoToken(firstName)
+  ].filter((value): value is string => Boolean(value));
+
+  const extensions = Array.from(
+    new Set([existingExtension, "png", "jpg", "jpeg", "webp"].filter((value): value is string => Boolean(value)))
+  );
+
+  for (const baseName of baseNames) {
+    for (const extension of extensions) {
+      candidates.add(encodeURI(`${storageBase}/${baseName}.${extension}`));
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+type StaffAvatarProps = {
+  photoUrl: string | null | undefined;
+  staffName: string;
+  firstName?: string | null;
+  alt: string;
+  fallback: string;
+  className?: string;
+  imageClassName?: string;
+  imgProps?: Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "alt" | "className">;
+};
+
+function StaffAvatar({
+  photoUrl,
+  staffName,
+  firstName,
+  alt,
+  fallback,
+  className = "",
+  imageClassName = "",
+  imgProps
+}: StaffAvatarProps) {
+  const photoCandidates = useMemo(
+    () => buildPhotoCandidates(photoUrl, staffName, firstName),
+    [firstName, photoUrl, staffName]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [photoCandidates]);
+
+  const resolvedPhotoUrl = photoCandidates[candidateIndex] ?? null;
+  const showImage = Boolean(resolvedPhotoUrl);
+
+  function handleImageError() {
+    setCandidateIndex((current) => {
+      if (current >= photoCandidates.length - 1) {
+        return current;
+      }
+
+      return current + 1;
+    });
+  }
+
+  return (
+    <div className={className}>
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={resolvedPhotoUrl ?? undefined}
+          alt={alt}
+          className={imageClassName}
+          onError={handleImageError}
+          {...imgProps}
+        />
+      ) : (
+        <span>{fallback}</span>
+      )}
+    </div>
+  );
+}
+
 export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
@@ -115,6 +253,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     filteredStaff.find((person) => person.id === selectedStaffId) ??
     staff.find((person) => person.id === selectedStaffId) ??
     null;
+
+  function actionStateClass(personId: string, mode: Exclude<ModalMode, "create">) {
+    return selectedStaffId === personId && modalMode === mode ? " active" : "";
+  }
 
   function closeModal() {
     setSelectedStaffId(null);
@@ -264,14 +406,15 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
             <span className="staff-card-badge">#{person.staff_id ?? index + 1}</span>
 
             <div className="staff-management-header">
-              <div className="directory-avatar management-avatar">
-                {person.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={person.photo_url} alt={person.name} className="directory-avatar-image" />
-                ) : (
-                  <span>{person.first_name?.[0] ?? person.name[0] ?? "?"}</span>
-                )}
-              </div>
+              <StaffAvatar
+                photoUrl={person.photo_url}
+                staffName={person.name}
+                firstName={person.first_name}
+                alt={person.name}
+                fallback={person.first_name?.[0] ?? person.name[0] ?? "?"}
+                className="directory-avatar management-avatar"
+                imageClassName="directory-avatar-image"
+              />
               <div className="staff-management-copy">
                 <h2 className="directory-name">{person.first_name ?? person.name}</h2>
                 <p className="staff-management-line primary">{person.department ?? "Department pending"}</p>
@@ -282,17 +425,25 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
             </div>
 
             <div className="staff-card-actions">
-              <button className="directory-action edit" type="button" onClick={() => openEditModal(person)}>
+              <button
+                className={`directory-action edit${actionStateClass(person.id, "edit")}`}
+                type="button"
+                onClick={() => openEditModal(person)}
+              >
                 Edit
               </button>
               <button
-                className="directory-action view"
+                className={`directory-action view${actionStateClass(person.id, "view")}`}
                 type="button"
                 onClick={() => openViewModal(person)}
               >
                 View
               </button>
-              <button className="directory-action icon" type="button" onClick={() => handleDelete(person)}>
+              <button
+                className="directory-action danger"
+                type="button"
+                onClick={() => handleDelete(person)}
+              >
                 Delete
               </button>
             </div>
@@ -320,20 +471,15 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
             </button>
 
             <div className="directory-modal-header">
-              <div className="directory-avatar management-avatar large">
-                {activeStaff?.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={activeStaff.photo_url}
-                    alt={activeStaff.name}
-                    className="directory-avatar-image"
-                  />
-                ) : (
-                  <span>
-                    {String(formValues.first_name || formValues.name || "?").trim().charAt(0) || "?"}
-                  </span>
-                )}
-              </div>
+              <StaffAvatar
+                photoUrl={activeStaff?.photo_url ?? formValues.photo_url}
+                staffName={activeStaff?.name ?? formValues.name ?? ""}
+                firstName={activeStaff?.first_name ?? formValues.first_name}
+                alt={activeStaff?.name ?? formValues.name ?? "Staff member"}
+                fallback={String(formValues.first_name || formValues.name || "?").trim().charAt(0) || "?"}
+                className="directory-avatar management-avatar large"
+                imageClassName="directory-avatar-image"
+              />
               <div>
                 <h2 id="staff-directory-modal-title" className="directory-modal-title">
                   {modalMode === "create" ? "Add staff member" : activeStaff?.name ?? "Staff member"}
@@ -410,7 +556,7 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                   <button className="directory-action edit" type="button" onClick={() => openEditModal(activeStaff)}>
                     Edit
                   </button>
-                  <button className="directory-action icon" type="button" onClick={() => handleDelete(activeStaff)}>
+                  <button className="directory-action danger" type="button" onClick={() => handleDelete(activeStaff)}>
                     Delete
                   </button>
                   <button className="directory-action close" type="button" onClick={closeModal}>
@@ -579,6 +725,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                             setFormValues((current) => ({ ...current, photo_url: event.target.value }))
                           }
                         />
+                        <small className="field-help">
+                          Full Supabase Storage URLs work best. The directory will also try your public
+                          <code>staff-photos</code> bucket automatically.
+                        </small>
                       </label>
                       <label className="field field-span-2">
                         <span>Unavailable Reason</span>
@@ -605,7 +755,7 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                   </button>
                   {activeStaff ? (
                     <button
-                      className="directory-action icon"
+                      className="directory-action danger"
                       type="button"
                       onClick={() => handleDelete(activeStaff)}
                       disabled={isSaving}
