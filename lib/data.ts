@@ -1243,6 +1243,21 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
   };
 }
 
+async function getNextStaffDirectoryStaffId(supabase: ReturnType<typeof createSupabaseAdminClient>) {
+  const { data, error } = await supabase.from(STAFF_TABLE).select("staff_id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const highestStaffId = (data ?? []).reduce((highest, row) => {
+    const parsed = Number(String(row?.staff_id ?? "").trim());
+    return Number.isFinite(parsed) ? Math.max(highest, parsed) : highest;
+  }, 0);
+
+  return String(highestStaffId + 1);
+}
+
 export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryClassOption[]> {
   const [classRecords, timetableRows] = await Promise.all([
     getClassRecords(),
@@ -1306,9 +1321,11 @@ export async function createStaffDirectoryRecord(
 ): Promise<StaffDirectoryRecord> {
   const supabase = createSupabaseAdminClient();
   const id = normalizeOptionalText(input.id) ?? `staff-${randomUUID()}`;
+  const nextStaffId = normalizeOptionalText(input.staff_id) ?? await getNextStaffDirectoryStaffId(supabase);
   const payload = {
     id,
-    ...buildStaffDirectoryPayload(input)
+    ...buildStaffDirectoryPayload(input),
+    staff_id: nextStaffId
   };
 
   const { data, error } = await supabase
