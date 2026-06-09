@@ -4,6 +4,8 @@ import { StaffDirectory } from "@/components/staff-directory";
 import { requirePortalAccess } from "@/lib/auth";
 import { getStaffDirectoryClassOptions, getStaffDirectoryData } from "@/lib/data";
 
+export const dynamic = "force-dynamic";
+
 export default async function DirectoryPage() {
   const { user, staffProfile, access } = await requirePortalAccess("directory");
   const [staff, classOptions] = await Promise.all([
