@@ -10,7 +10,8 @@ import type {
   TimetableBlockType,
   TimetableBuilderData,
   TimetableClassSummary,
-  TimetableStaffOption
+  TimetableStaffOption,
+  TimetableSubjectTarget
 } from "@/lib/types";
 
 type TimetableBuilderProps = {
@@ -93,54 +94,6 @@ const BLOCK_TYPE_LABELS: Record<TimetableBlockType, string> = {
 
 const PARENT_EXPORT_END_TIME = "15:00:00";
 const STANDARD_PARENT_EXPORT_END_TIME = "12:00:00";
-const MILEPOST_ONE_SUBJECTS = [
-  "English",
-  "Maths",
-  "IPC",
-  "Mandarin",
-  "BM",
-  "P.E.",
-  "Coding",
-  "Library",
-  "Shared Reading",
-  "Phonics",
-  "Guided Reading",
-  "Assembly",
-  "Financial Literacy"
-] as const;
-
-const MILEPOST_ONE_MAINSTREAM_TARGETS: Record<(typeof MILEPOST_ONE_SUBJECTS)[number], number> = {
-  English: 160,
-  Maths: 240,
-  IPC: 240,
-  Mandarin: 120,
-  BM: 120,
-  "P.E.": 120,
-  Coding: 40,
-  Library: 40,
-  "Shared Reading": 160,
-  Phonics: 160,
-  "Guided Reading": 160,
-  Assembly: 40,
-  "Financial Literacy": 40
-};
-
-const MILEPOST_ONE_BILINGUAL_TARGETS: Record<(typeof MILEPOST_ONE_SUBJECTS)[number], number> = {
-  English: 240,
-  Maths: 240,
-  IPC: 240,
-  Mandarin: 240,
-  BM: 120,
-  "P.E.": 120,
-  Coding: 40,
-  Library: 40,
-  "Shared Reading": 160,
-  Phonics: 160,
-  "Guided Reading": 160,
-  Assembly: 40,
-  "Financial Literacy": 40
-};
-
 function minutesBetween(startTime: string, endTime: string) {
   const [startHour, startMinute] = startTime.split(":").map(Number);
   const [endHour, endMinute] = endTime.split(":").map(Number);
@@ -327,8 +280,22 @@ function isMilepostOneYearGroup(yearGroup: string) {
   return normalized === "year 1" || normalized === "year 2";
 }
 
+function normalizeSubjectLookupValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeTimetableStream(value: string | null | undefined) {
+  const normalized = normalizeLabelForCompare(value ?? "");
+  if (normalized === "mainstream" || normalized === "bilingual") {
+    return normalized;
+  }
+
+  return null;
+}
+
 function subjectMatchesBlockTitle(subject: string, title: string) {
-  const normalizedTitle = normalizeLabelForCompare(title);
+  const normalizedTitle = normalizeSubjectLookupValue(title);
+  const normalizedSubject = normalizeSubjectLookupValue(subject);
 
   switch (subject) {
     case "BM":
@@ -339,7 +306,7 @@ function subjectMatchesBlockTitle(subject: string, title: string) {
     case "P.E.":
       return normalizedTitle.includes("p.e.") || normalizedTitle.includes("pe");
     default:
-      return normalizedTitle.includes(normalizeLabelForCompare(subject));
+      return normalizedTitle.includes(normalizedSubject);
   }
 }
 
@@ -491,15 +458,40 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     [data.classSummary.yearGroup]
   );
   const isMainstreamTimetable = useMemo(
-    () => normalizeLabelForCompare(data.classSummary.designation) === "mainstream",
-    [data.classSummary.designation]
+    () =>
+      normalizeTimetableStream(data.classSummary.streamType ?? data.classSummary.designation) ===
+      "mainstream",
+    [data.classSummary.designation, data.classSummary.streamType]
   );
   const isBilingualTimetable = useMemo(
-    () => normalizeLabelForCompare(data.classSummary.designation) === "bilingual",
-    [data.classSummary.designation]
+    () =>
+      normalizeTimetableStream(data.classSummary.streamType ?? data.classSummary.designation) ===
+      "bilingual",
+    [data.classSummary.designation, data.classSummary.streamType]
   );
-  const hasSubjectAllocationCheck =
-    isMilepostOneTimetable && (isMainstreamTimetable || isBilingualTimetable);
+  const activeSubjectTargets = useMemo(() => {
+    const currentStreamType = normalizeTimetableStream(
+      data.classSummary.streamType ?? data.classSummary.designation
+    );
+    if (!currentStreamType) {
+      return [];
+    }
+
+    return data.subjectTargets
+      .filter(
+        (target) =>
+          target.isActive &&
+          target.milepost === data.classSummary.milepost &&
+          target.streamType === currentStreamType
+      )
+      .sort((left, right) => left.sortOrder - right.sortOrder);
+  }, [
+    data.classSummary.designation,
+    data.classSummary.milepost,
+    data.classSummary.streamType,
+    data.subjectTargets
+  ]);
+  const hasSubjectAllocationCheck = activeSubjectTargets.length > 0;
   const isYearOneTwoTemplate = useMemo(
     () => normalizedTemplateName.includes("year 1") && normalizedTemplateName.includes("year 2"),
     [normalizedTemplateName]
@@ -576,12 +568,8 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
       return [];
     }
 
-    const targetSet = isBilingualTimetable
-      ? MILEPOST_ONE_BILINGUAL_TARGETS
-      : MILEPOST_ONE_MAINSTREAM_TARGETS;
-
     const totals = new Map<string, number>(
-      MILEPOST_ONE_SUBJECTS.map((subject) => [subject, 0])
+      activeSubjectTargets.map((target) => [target.subjectName, 0])
     );
 
     data.blocks.forEach((block) => {
@@ -591,25 +579,25 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
         return;
       }
 
-      MILEPOST_ONE_SUBJECTS.forEach((subject) => {
-        if (subjectMatchesBlockTitle(subject, title)) {
-          totals.set(subject, (totals.get(subject) ?? 0) + minutes);
+      activeSubjectTargets.forEach((target) => {
+        if (subjectMatchesBlockTitle(target.subjectName, title)) {
+          totals.set(target.subjectName, (totals.get(target.subjectName) ?? 0) + minutes);
         }
       });
     });
 
-    return MILEPOST_ONE_SUBJECTS.map((subject) => {
-      const actualMinutes = totals.get(subject) ?? 0;
-      const targetMinutes = targetSet[subject];
+    return activeSubjectTargets.map((target) => {
+      const actualMinutes = totals.get(target.subjectName) ?? 0;
+      const targetMinutes = target.requiredMinutes;
 
       return {
-        subject,
+        subject: target.subjectName,
         actualMinutes,
         targetMinutes,
         matches: actualMinutes === targetMinutes
       };
     });
-  }, [data.blocks, hasSubjectAllocationCheck, isBilingualTimetable]);
+  }, [activeSubjectTargets, data.blocks, hasSubjectAllocationCheck]);
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
@@ -1276,8 +1264,8 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
             <div>
               <h2 className="panel-title">Subject Allocation</h2>
               <p className="meta">
-                Milepost 1 {isBilingualTimetable ? "Bilingual" : "Mainstream"} allocation check. Mixed labels count
-                their full time toward each subject.
+                {data.classSummary.milepost} {isBilingualTimetable ? "Bilingual" : "Mainstream"} allocation
+                check. Mixed labels count their full time toward each subject.
               </p>
             </div>
           </div>
