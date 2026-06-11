@@ -423,6 +423,11 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
   const [isBusy, setIsBusy] = useState(false);
   const [isDeletingTimetable, setIsDeletingTimetable] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState<"standard" | "parent" | null>(null);
+  const query = searchParams.toString();
+
+  function withCurrentQuery(path: string) {
+    return query ? `${path}?${query}` : path;
+  }
 
   useEffect(() => {
     setData(initialData);
@@ -864,7 +869,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
         throw new Error(json.error ?? "Could not delete timetable.");
       }
 
-      router.push("/timetables");
+      router.push(withCurrentQuery("/timetables"));
       router.refresh();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Could not delete timetable.");
@@ -1144,7 +1149,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
             </p>
           </div>
           <div className="actions" style={{ marginTop: 0 }}>
-            <Link className="button secondary" href="/timetables">
+            <Link className="button secondary" href={withCurrentQuery("/timetables")}>
               Back to Timetables
             </Link>
             {data.timetable && !isReadOnly ? (

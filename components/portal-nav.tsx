@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { PORTAL_NAV_ITEMS, type PortalView } from "@/lib/access";
 
 type PortalNavProps = {
@@ -10,10 +10,12 @@ type PortalNavProps = {
 
 export function PortalNav({ allowedViews }: PortalNavProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const allowedViewSet = allowedViews ? new Set(allowedViews) : null;
   const navItems = allowedViewSet
     ? PORTAL_NAV_ITEMS.filter((item) => allowedViewSet.has(item.view))
     : PORTAL_NAV_ITEMS;
+  const query = searchParams.toString();
 
   return (
     <nav className="portal-nav" aria-label="Staff portal navigation">
@@ -24,7 +26,7 @@ export function PortalNav({ allowedViews }: PortalNavProps) {
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={query ? `${item.href}?${query}` : item.href}
             className={`portal-nav-link${isActive ? " active" : ""}`}
           >
             {item.label}

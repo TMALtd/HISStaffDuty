@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { TimetableClassSummary, TimetableTemplate } from "@/lib/types";
 
 type TimetableAdminProps = {
@@ -19,6 +19,7 @@ export function TimetableAdmin({
   canManageClasses = false
 }: TimetableAdminProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [classes, setClasses] = useState(initialClasses);
   const [selectedClassCode, setSelectedClassCode] = useState(initialClasses[0]?.classCode ?? "");
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id ?? "");
@@ -40,6 +41,11 @@ export function TimetableAdmin({
   const [newClassCode, setNewClassCode] = useState("");
   const [newClassStreamType, setNewClassStreamType] = useState<"mainstream" | "bilingual">("mainstream");
   const [isCreatingClass, setIsCreatingClass] = useState(false);
+  const query = searchParams.toString();
+
+  function withCurrentQuery(path: string) {
+    return query ? `${path}?${query}` : path;
+  }
 
   useEffect(() => {
     setClasses(initialClasses);
@@ -150,7 +156,7 @@ export function TimetableAdmin({
       const selectedClass = classes.find((entry) => entry.classCode === selectedClassCode);
       setStatus(`Timetable created for ${selectedClass?.className ?? selectedClassCode}.`);
       await refreshClasses();
-      router.push(`/timetables/${encodeURIComponent(selectedClassCode)}`);
+      router.push(withCurrentQuery(`/timetables/${encodeURIComponent(selectedClassCode)}`));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Could not create timetable.");
     } finally {
@@ -638,7 +644,7 @@ export function TimetableAdmin({
               <div className="timetable-admin-card-actions">
                 {entry.hasTimetable ? (
                   <>
-                    <Link className="button" href={`/timetables/${encodeURIComponent(entry.classCode)}`}>
+                    <Link className="button" href={withCurrentQuery(`/timetables/${encodeURIComponent(entry.classCode)}`)}>
                       {canManageClasses ? "Open Builder" : "Open Timetable"}
                     </Link>
                     {canManageClasses ? (
