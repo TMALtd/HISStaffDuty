@@ -279,9 +279,11 @@ function buildDisplayedTimeLabels(
   const preschoolMorningBuckets: Array<[string, string]> = [
     ["08:00:00", "08:30:00"],
     ["08:30:00", "09:00:00"],
-    ["09:00:00", "09:30:00"]
+    ["09:00:00", "09:30:00"],
+    ["12:00:00", "12:40:00"]
   ];
   const bucketStarts = new Set(preschoolMorningBuckets.map(([startTime]) => startTime));
+  const bucketHiddenStarts = new Set<string>(["08:15:00", "08:45:00", "12:15:00"]);
 
   preschoolMorningBuckets.forEach(([startTime, endTime]) => {
     const rowStart = rowLineByTime.get(startTime);
@@ -304,6 +306,10 @@ function buildDisplayedTimeLabels(
     }
 
     if (isPreschoolMorningSegment(segment) && !bucketStarts.has(segment.startTime)) {
+      return;
+    }
+
+    if (bucketHiddenStarts.has(segment.startTime)) {
       return;
     }
 
