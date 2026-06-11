@@ -38,6 +38,14 @@ type TimetableRowSegment = {
   endTime: string;
 };
 
+type TimetableDisplayLabel = {
+  key: string;
+  startTime: string;
+  endTime: string;
+  rowStart: number;
+  rowEnd: number;
+};
+
 type ParentExportBlock = {
   id: string;
   title: string;
@@ -228,6 +236,87 @@ function buildStandardRowSegments(
   }
 
   return merged;
+}
+
+function isPreschoolYearGroup(yearGroup: string) {
+  const normalized = normalizeLabelForCompare(yearGroup);
+  return normalized === "preschool" || normalized === "preschool 1" || normalized === "preschool 2";
+}
+
+function isPreschoolMorningSegment(segment: TimetableRowSegment) {
+  return segment.startTime >= "08:00:00" && segment.endTime <= "09:30:00";
+}
+
+function rowTrackSize(segment: TimetableRowSegment, isPreschoolTimetable: boolean) {
+  if (!isPreschoolTimetable || !isPreschoolMorningSegment(segment)) {
+    return "minmax(76px, auto)";
+  }
+
+  const minutes = minutesBetween(segment.startTime, segment.endTime);
+  if (minutes === 15) {
+    return "34px";
+  }
+
+  return "minmax(76px, auto)";
+}
+
+function buildDisplayedTimeLabels(
+  rowSegments: TimetableRowSegment[],
+  rowLineByTime: Map<string, number>,
+  isPreschoolTimetable: boolean
+) {
+  if (!isPreschoolTimetable) {
+    return rowSegments.map((segment) => ({
+      key: segment.key,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      rowStart: (rowLineByTime.get(segment.startTime) ?? 1) + 1,
+      rowEnd: (rowLineByTime.get(segment.endTime) ?? 2) + 1
+    }));
+  }
+
+  const labels: TimetableDisplayLabel[] = [];
+  const preschoolMorningBuckets: Array<[string, string]> = [
+    ["08:00:00", "08:30:00"],
+    ["08:30:00", "09:00:00"],
+    ["09:00:00", "09:30:00"]
+  ];
+  const bucketStarts = new Set(preschoolMorningBuckets.map(([startTime]) => startTime));
+
+  preschoolMorningBuckets.forEach(([startTime, endTime]) => {
+    const rowStart = rowLineByTime.get(startTime);
+    const rowEnd = rowLineByTime.get(endTime);
+
+    if (rowStart && rowEnd) {
+      labels.push({
+        key: `${startTime}-${endTime}`,
+        startTime,
+        endTime,
+        rowStart: rowStart + 1,
+        rowEnd: rowEnd + 1
+      });
+    }
+  });
+
+  rowSegments.forEach((segment) => {
+    if (isPreschoolMorningSegment(segment) && bucketStarts.has(segment.startTime)) {
+      return;
+    }
+
+    if (isPreschoolMorningSegment(segment) && !bucketStarts.has(segment.startTime)) {
+      return;
+    }
+
+    labels.push({
+      key: segment.key,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      rowStart: (rowLineByTime.get(segment.startTime) ?? 1) + 1,
+      rowEnd: (rowLineByTime.get(segment.endTime) ?? 2) + 1
+    });
+  });
+
+  return labels.sort((left, right) => left.rowStart - right.rowStart);
 }
 
 function textColorForBackground(color: string | null) {
@@ -509,6 +598,10 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     () => normalizedTemplateName.includes("year 5") && normalizedTemplateName.includes("year 6"),
     [normalizedTemplateName]
   );
+  const isPreschoolTimetable = useMemo(
+    () => isPreschoolYearGroup(data.classSummary.yearGroup),
+    [data.classSummary.yearGroup]
+  );
   const isMiddayCompactTemplate = isYearThreeFourTemplate || isYearFiveSixTemplate;
   const rowSegments = useMemo(
     () =>
@@ -526,6 +619,10 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
   const rowLineByTime = useMemo(
     () => new Map(rowSegments.flatMap((segment, index) => [[segment.startTime, index + 1], [segment.endTime, index + 2]])),
     [rowSegments]
+  );
+  const displayTimeLabels = useMemo(
+    () => buildDisplayedTimeLabels(rowSegments, rowLineByTime, isPreschoolTimetable),
+    [isPreschoolTimetable, rowLineByTime, rowSegments]
   );
   const parentRowLineByTime = useMemo(
     () =>
@@ -1309,7 +1406,14 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                 <div className="timetable-export-template">{data.timetable.template_name}</div>
               </div>
 
-              <div className="timetable-master-grid">
+              <div
+                className="timetable-master-grid"
+                style={{
+                  gridTemplateRows: `auto ${rowSegments
+                    .map((segment) => rowTrackSize(segment, isPreschoolTimetable))
+                    .join(" ")}`
+                }}
+              >
                 <div className="timetable-corner-cell" />
 
                 {WEEKDAYS.map((day, dayIndex) => (
@@ -1322,11 +1426,11 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                   </div>
                 ))}
 
-                {rowSegments.map((segment, segmentIndex) => (
+                {displayTimeLabels.map((segment) => (
                   <div
                     className="timetable-time-label"
                     key={segment.key}
-                    style={{ gridColumn: 1, gridRow: segmentIndex + 2 }}
+                    style={{ gridColumn: 1, gridRow: `${segment.rowStart} / ${segment.rowEnd}` }}
                   >
                     <span>{timeRangeLabel(segment.startTime, segment.endTime)}</span>
                   </div>
