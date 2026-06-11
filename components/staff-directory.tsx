@@ -37,7 +37,10 @@ const EMPTY_FORM: StaffDirectoryUpsertInput = {
   timetable: "",
   photo_url: "",
   designation: "",
-  system_role: ""
+  system_role: "",
+  can_view_own_timetable: false,
+  can_view_year_group_timetables: false,
+  timetable_access_year_group: ""
 };
 
 function uniqueValues(items: Array<string | null | undefined>) {
@@ -67,7 +70,10 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
     timetable: record.timetable ?? "",
     photo_url: record.photo_url ?? "",
     designation: record.designation ?? "",
-    system_role: record.system_role ?? ""
+    system_role: record.system_role ?? "",
+    can_view_own_timetable: record.can_view_own_timetable,
+    can_view_year_group_timetables: record.can_view_year_group_timetables,
+    timetable_access_year_group: record.timetable_access_year_group ?? ""
   };
 }
 
@@ -282,6 +288,10 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     () => uniqueValues(staff.map((person) => person.department)),
     [staff]
   );
+  const yearGroupOptions = useMemo(
+    () => uniqueValues(classOptions.map((option) => option.yearGroup)),
+    [classOptions]
+  );
   const knownClassLookup = useMemo(
     () => buildKnownClassLookup(classOptions),
     [classOptions]
@@ -405,6 +415,19 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
 
     if (!String(formValues.name ?? "").trim()) {
       setFormError("Staff name is required.");
+      return;
+    }
+
+    if (formValues.can_view_own_timetable && !String(formValues.class ?? "").trim()) {
+      setFormError("Assign a class before enabling own timetable access.");
+      return;
+    }
+
+    if (
+      formValues.can_view_year_group_timetables &&
+      !String(formValues.timetable_access_year_group ?? "").trim()
+    ) {
+      setFormError("Choose a year group before enabling year group timetable access.");
       return;
     }
 
@@ -773,9 +796,21 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                         <span>Assigned Class</span>
                         <select
                           value={String(formValues.class ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, class: event.target.value }))
-                          }
+                          onChange={(event) => {
+                            const nextClass = event.target.value;
+                            const matchedOption = classOptions.find(
+                              (option) => option.className === nextClass
+                            );
+
+                            setFormValues((current) => ({
+                              ...current,
+                              class: nextClass,
+                              timetable_access_year_group:
+                                current.can_view_year_group_timetables && !current.timetable_access_year_group
+                                  ? matchedOption?.yearGroup ?? current.timetable_access_year_group
+                                  : current.timetable_access_year_group
+                            }));
+                          }}
                         >
                           <option value="">No class assigned</option>
                           {classOptions.map((option) => (
@@ -798,6 +833,60 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
                           }
                         />
                       </label>
+                      <div className="field field-span-2">
+                        <span>Timetable Access</span>
+                        <div className="directory-access-grid">
+                          <label className="directory-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formValues.can_view_own_timetable)}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  can_view_own_timetable: event.target.checked
+                                }))
+                              }
+                            />
+                            <span>Can view own timetable</span>
+                          </label>
+                          <label className="directory-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formValues.can_view_year_group_timetables)}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  can_view_year_group_timetables: event.target.checked,
+                                  timetable_access_year_group: event.target.checked
+                                    ? current.timetable_access_year_group
+                                    : ""
+                                }))
+                              }
+                            />
+                            <span>Can view year group timetables</span>
+                          </label>
+                          <label className="field">
+                            <span>Timetable Access Year Group</span>
+                            <select
+                              value={String(formValues.timetable_access_year_group ?? "")}
+                              disabled={!formValues.can_view_year_group_timetables}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  timetable_access_year_group: event.target.value
+                                }))
+                              }
+                            >
+                              <option value="">Select year group</option>
+                              {yearGroupOptions.map((yearGroup) => (
+                                <option key={yearGroup} value={yearGroup}>
+                                  {yearGroup}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
                       <label className="field">
                         <span>Status</span>
                         <input

@@ -774,6 +774,23 @@ function splitTeacherCsvValue(value: string) {
 }
 
 function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
+  const normalizeBooleanField = (value: unknown) => {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "true" || normalized === "1" || normalized === "yes";
+    }
+
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+
+    return false;
+  };
+
   return {
     id: String(row.id ?? ""),
     staff_id: row.staff_id ? String(row.staff_id) : null,
@@ -795,7 +812,12 @@ function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
     timetable: row.timetable ? String(row.timetable) : null,
     photo_url: row.photo_url ? String(row.photo_url) : null,
     designation: row.designation ? String(row.designation) : null,
-    system_role: row.system_role ? String(row.system_role) : null
+    system_role: row.system_role ? String(row.system_role) : null,
+    can_view_own_timetable: normalizeBooleanField(row.can_view_own_timetable),
+    can_view_year_group_timetables: normalizeBooleanField(row.can_view_year_group_timetables),
+    timetable_access_year_group: row.timetable_access_year_group
+      ? String(row.timetable_access_year_group)
+      : null
   };
 }
 
@@ -1119,9 +1141,7 @@ export async function getStaffProfileByEmail(email: string): Promise<StaffProfil
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(STAFF_TABLE)
-    .select(
-      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
-    )
+    .select("*")
     .ilike("email", normalizedEmail)
     .maybeSingle();
 
@@ -1189,9 +1209,7 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
     await Promise.all([
       supabase
         .from(STAFF_TABLE)
-        .select(
-          "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
-        )
+        .select("*")
         .order("name"),
       supabase
         .from(DUTIES_TABLE)
@@ -1295,6 +1313,29 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
     timetable: normalizeOptionalText(input.timetable),
     photo_url: normalizeOptionalText(input.photo_url),
     designation: normalizeOptionalText(input.designation),
+    system_role: normalizeOptionalText(input.system_role),
+    can_view_own_timetable: Boolean(input.can_view_own_timetable),
+    can_view_year_group_timetables: Boolean(input.can_view_year_group_timetables),
+    timetable_access_year_group: normalizeOptionalText(input.timetable_access_year_group)
+  };
+}
+
+function buildLegacyStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
+  return {
+    staff_id: normalizeOptionalText(input.staff_id),
+    name: normalizeRequiredText(input.name, "Staff name"),
+    first_name: normalizeOptionalText(input.first_name),
+    role: normalizeOptionalText(input.role),
+    email: normalizeOptionalText(input.email)?.toLowerCase() ?? null,
+    department: normalizeOptionalText(input.department),
+    class: normalizeOptionalText(input.class),
+    extension: normalizeOptionalText(input.extension),
+    max_duties: normalizeOptionalNumber(input.max_duties),
+    status: normalizeOptionalText(input.status),
+    unavailable_reason: normalizeOptionalText(input.unavailable_reason),
+    timetable: normalizeOptionalText(input.timetable),
+    photo_url: normalizeOptionalText(input.photo_url),
+    designation: normalizeOptionalText(input.designation),
     system_role: normalizeOptionalText(input.system_role)
   };
 }
@@ -1378,25 +1419,39 @@ export async function createStaffDirectoryRecord(
   const supabase = createSupabaseAdminClient();
   const id = normalizeOptionalText(input.id) ?? `staff-${randomUUID()}`;
   const nextStaffId = normalizeOptionalText(input.staff_id) ?? await getNextStaffDirectoryStaffId(supabase);
-  const payload = {
-    id,
-    ...buildStaffDirectoryPayload(input),
-    staff_id: nextStaffId
-  };
+  const payloads = [
+    {
+      id,
+      ...buildStaffDirectoryPayload(input),
+      staff_id: nextStaffId
+    },
+    {
+      id,
+      ...buildLegacyStaffDirectoryPayload(input),
+      staff_id: nextStaffId
+    }
+  ];
 
-  const { data, error } = await supabase
-    .from(STAFF_TABLE)
-    .insert(payload)
-    .select(
-      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
-    )
-    .single();
+  let data: Record<string, unknown> | null = null;
+  let lastError: Error | null = null;
 
-  if (error) {
-    throw new Error(error.message);
+  for (const payload of payloads) {
+    const result = await supabase.from(STAFF_TABLE).insert(payload).select("*").single();
+
+    if (result.error) {
+      lastError = new Error(result.error.message);
+      continue;
+    }
+
+    data = (result.data as Record<string, unknown> | null) ?? null;
+    break;
   }
 
-  const profile = normalizeStaffProfile((data ?? {}) as Record<string, unknown>);
+  if (!data) {
+    throw lastError ?? new Error("Unable to create staff member.");
+  }
+
+  const profile = normalizeStaffProfile(data);
 
   return {
     ...profile,
@@ -1410,22 +1465,32 @@ export async function updateStaffDirectoryRecord(
 ): Promise<StaffDirectoryRecord> {
   const supabase = createSupabaseAdminClient();
   const normalizedId = normalizeRequiredText(id, "Staff ID");
-  const payload = buildStaffDirectoryPayload(input);
+  const payloads = [buildStaffDirectoryPayload(input), buildLegacyStaffDirectoryPayload(input)];
+  let data: Record<string, unknown> | null = null;
+  let lastError: Error | null = null;
 
-  const { data, error } = await supabase
-    .from(STAFF_TABLE)
-    .update(payload)
-    .eq("id", normalizedId)
-    .select(
-      "id,staff_id,name,first_name,role,email,department,class,extension,max_duties,status,unavailable_reason,timetable,photo_url,designation,system_role"
-    )
-    .single();
+  for (const payload of payloads) {
+    const result = await supabase
+      .from(STAFF_TABLE)
+      .update(payload)
+      .eq("id", normalizedId)
+      .select("*")
+      .single();
 
-  if (error) {
-    throw new Error(error.message);
+    if (result.error) {
+      lastError = new Error(result.error.message);
+      continue;
+    }
+
+    data = (result.data as Record<string, unknown> | null) ?? null;
+    break;
   }
 
-  const profile = normalizeStaffProfile((data ?? {}) as Record<string, unknown>);
+  if (!data) {
+    throw lastError ?? new Error("Unable to update staff member.");
+  }
+
+  const profile = normalizeStaffProfile(data);
 
   return {
     ...profile,

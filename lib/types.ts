@@ -88,6 +88,9 @@ export type StaffProfile = {
   photo_url: string | null;
   designation: string | null;
   system_role: string | null;
+  can_view_own_timetable: boolean;
+  can_view_year_group_timetables: boolean;
+  timetable_access_year_group: string | null;
 };
 
 export type DutySummary = {
@@ -138,6 +141,9 @@ export type StaffDirectoryUpsertInput = {
   photo_url: string | null;
   designation: string | null;
   system_role: string | null;
+  can_view_own_timetable: boolean;
+  can_view_year_group_timetables: boolean;
+  timetable_access_year_group: string | null;
 };
 
 export type DutyRosterRecord = DutySummary & {

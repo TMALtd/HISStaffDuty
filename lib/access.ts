@@ -25,20 +25,11 @@ export const PORTAL_NAV_ITEMS: Array<{
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
 
-const HOY_YEAR_GROUPS = new Map<string, string>([
-  ["natalie cook", "Year 1"],
-  ["laura munro", "Year 2"],
-  ["vannesa louis", "Year 3"],
-  ["vanessa louis", "Year 3"],
-  ["diana dennis", "Year 4"],
-  ["santiara van rijswijk", "Year 5"],
-  ["braden cobb", "Year 6"]
-]);
-
 export type StaffAccess = {
   isFullAccess: boolean;
   allowedViews: PortalView[];
-  allowedYearGroups: string[] | null;
+  allowedYearGroups: string[];
+  allowedClassKeys: string[];
   roleLabel: string;
 };
 
@@ -47,7 +38,6 @@ function normalize(value: string | null | undefined) {
 }
 
 export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
-  const normalizedName = normalize(staffProfile?.name);
   const normalizedSystemRole = normalize(staffProfile?.system_role);
   const isFullAccess =
     normalizedSystemRole === "admin" ||
@@ -57,18 +47,36 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     return {
       isFullAccess: true,
       allowedViews: [...ALL_PORTAL_VIEWS],
-      allowedYearGroups: null,
+      allowedYearGroups: [],
+      allowedClassKeys: [],
       roleLabel: "Full access"
     };
   }
+  const allowedClassKeys = staffProfile?.can_view_own_timetable
+    ? [staffProfile.class, staffProfile.timetable]
+        .map((value) => normalize(value))
+        .filter(Boolean)
+    : [];
+  const allowedYearGroups = staffProfile?.can_view_year_group_timetables
+    ? [staffProfile.timetable_access_year_group].map((value) => normalize(value)).filter(Boolean)
+    : [];
+  const hasTimetableAccess = allowedClassKeys.length > 0 || allowedYearGroups.length > 0;
+  const roleParts: string[] = [];
 
-  const hoyYearGroup = HOY_YEAR_GROUPS.get(normalizedName);
+  if (allowedClassKeys.length > 0) {
+    roleParts.push("Own timetable");
+  }
+
+  if (allowedYearGroups.length > 0) {
+    roleParts.push(`${staffProfile?.timetable_access_year_group ?? "Year group"} timetables`);
+  }
 
   return {
     isFullAccess: false,
-    allowedViews: ["timetables"],
-    allowedYearGroups: hoyYearGroup ? [hoyYearGroup] : null,
-    roleLabel: hoyYearGroup ? `HoY ${hoyYearGroup}` : "Timetables only"
+    allowedViews: hasTimetableAccess ? ["timetables"] : [],
+    allowedYearGroups,
+    allowedClassKeys,
+    roleLabel: roleParts.join(" + ") || "No timetable access"
   };
 }
 
@@ -77,10 +85,14 @@ export function canAccessView(access: StaffAccess, view: PortalView) {
 }
 
 export function canAccessTimetableClass(access: StaffAccess, classSummary: TimetableClassSummary) {
+  const classKeys = [classSummary.classCode, classSummary.className]
+    .map((value) => normalize(value))
+    .filter(Boolean);
+
   return (
     access.isFullAccess ||
-    access.allowedYearGroups === null ||
-    access.allowedYearGroups.includes(classSummary.yearGroup)
+    access.allowedYearGroups.includes(normalize(classSummary.yearGroup)) ||
+    classKeys.some((key) => access.allowedClassKeys.includes(key))
   );
 }
 
