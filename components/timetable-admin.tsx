@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { TimetableClassSummary, TimetableTemplate } from "@/lib/types";
 
@@ -41,19 +41,53 @@ export function TimetableAdmin({
   const [newClassStreamType, setNewClassStreamType] = useState<"mainstream" | "bilingual">("mainstream");
   const [isCreatingClass, setIsCreatingClass] = useState(false);
 
+  useEffect(() => {
+    setClasses(initialClasses);
+    setSelectedClassCode((current) => {
+      if (initialClasses.some((entry) => entry.classCode === current)) {
+        return current;
+      }
+
+      return initialClasses[0]?.classCode ?? "";
+    });
+    setSelectedClassCsvCode((current) => {
+      const nextOptions = initialClasses.filter((entry) => entry.hasTimetable);
+      if (nextOptions.some((entry) => entry.classCode === current)) {
+        return current;
+      }
+
+      return nextOptions[0]?.classCode ?? initialClasses[0]?.classCode ?? "";
+    });
+    setSelectedTemplateId((current) => {
+      if (templates.some((template) => template.id === current)) {
+        return current;
+      }
+
+      return templates[0]?.id ?? "";
+    });
+    setSearchTerm("");
+    setStatus("");
+    setError(setupMessage ?? "");
+  }, [initialClasses, setupMessage, templates]);
+
+  const visibleClasses = useMemo(
+    () => (canManageClasses ? classes : classes.filter((entry) => entry.hasTimetable)),
+    [canManageClasses, classes]
+  );
+
   const filteredClasses = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
     if (!search) {
-      return classes;
+      return visibleClasses;
     }
 
-    return classes.filter((entry) =>
+    return visibleClasses.filter((entry) =>
       [entry.classCode, entry.className, entry.school, entry.designation, entry.yearGroup]
         .join(" ")
         .toLowerCase()
         .includes(search)
     );
-  }, [classes, searchTerm]);
+  }, [searchTerm, visibleClasses]);
 
   const classCsvOptions = useMemo(
     () => classes.filter((entry) => entry.hasTimetable),
@@ -350,22 +384,28 @@ export function TimetableAdmin({
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
-        <p className="eyebrow">Timetable administration</p>
+        <p className="eyebrow">{canManageClasses ? "Timetable administration" : "Timetable access"}</p>
         <div className="topbar">
           <div>
-            <h1 className="hero-title">Build and manage class timetables</h1>
+            <h1 className="hero-title">
+              {canManageClasses ? "Build and manage class timetables" : "View class timetables"}
+            </h1>
             <p className="hero-copy">
-              Create one weekly timetable per class, attach it to a reusable period template, and
-              then fill each block with lessons and teachers.
+              {canManageClasses
+                ? "Create one weekly timetable per class, attach it to a reusable period template, and then fill each block with lessons and teachers."
+                : "Open the timetable cards you have access to and review the class schedules in a cleaner read-only view."}
             </p>
           </div>
-          <Link className="button secondary" href="/admin/gradebook">
-            Setup
-          </Link>
+          {canManageClasses ? (
+            <Link className="button secondary" href="/admin/gradebook">
+              Setup
+            </Link>
+          ) : null}
         </div>
       </section>
 
-      <section className="panel">
+      {canManageClasses ? (
+        <section className="panel">
         <div className="admin-grid">
           {canManageClasses ? (
             <form className="mi-card" onSubmit={createClass}>
@@ -539,27 +579,30 @@ export function TimetableAdmin({
 
         {status ? <div className="banner">{status}</div> : null}
         {error ? <div className="banner error-banner">{error}</div> : null}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="panel">
-        <h2 className="panel-title">Template library</h2>
-        <div className="breakdown-list">
-          {templates.map((template) => (
-            <div className="breakdown-row" key={template.id}>
-              <span>
-                {template.name}
-                {template.year_group ? ` | ${template.year_group}` : ""}
-              </span>
-              <strong>{template.school ?? "All school"}</strong>
-            </div>
-          ))}
-          {!templates.length ? (
-            <div className="empty-state compact">
-              No timetable templates are available yet. Add them in Supabase first.
-            </div>
-          ) : null}
-        </div>
-      </section>
+      {canManageClasses ? (
+        <section className="panel">
+          <h2 className="panel-title">Template library</h2>
+          <div className="breakdown-list">
+            {templates.map((template) => (
+              <div className="breakdown-row" key={template.id}>
+                <span>
+                  {template.name}
+                  {template.year_group ? ` | ${template.year_group}` : ""}
+                </span>
+                <strong>{template.school ?? "All school"}</strong>
+              </div>
+            ))}
+            {!templates.length ? (
+              <div className="empty-state compact">
+                No timetable templates are available yet. Add them in Supabase first.
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="panel">
         <div className="panel-heading">
@@ -596,18 +639,20 @@ export function TimetableAdmin({
                 {entry.hasTimetable ? (
                   <>
                     <Link className="button" href={`/timetables/${encodeURIComponent(entry.classCode)}`}>
-                      Open Builder
+                      {canManageClasses ? "Open Builder" : "Open Timetable"}
                     </Link>
-                    <button
-                      className="button secondary"
-                      type="button"
-                      disabled={deletingClassCode === entry.classCode}
-                      onClick={() => void deleteTimetable(entry.classCode, entry.className)}
-                    >
-                      {deletingClassCode === entry.classCode ? "Deleting..." : "Delete"}
-                    </button>
+                    {canManageClasses ? (
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={deletingClassCode === entry.classCode}
+                        onClick={() => void deleteTimetable(entry.classCode, entry.className)}
+                      >
+                        {deletingClassCode === entry.classCode ? "Deleting..." : "Delete"}
+                      </button>
+                    ) : null}
                   </>
-                ) : (
+                ) : canManageClasses ? (
                   <button
                     className="button secondary"
                     type="button"
@@ -618,7 +663,7 @@ export function TimetableAdmin({
                   >
                     Create Above
                   </button>
-                )}
+                ) : null}
               </div>
             </article>
           ))}

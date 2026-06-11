@@ -48,7 +48,7 @@ export default async function TimetableBuilderPage({ params, searchParams }: Tim
         <SignOutButton />
       </section>
       <PortalNav allowedViews={preview.activeAccess.allowedViews} />
-      <TimetableBuilder initialData={data} isReadOnly={preview.isPreviewing} />
+      <TimetableBuilder initialData={data} isReadOnly={!preview.activeAccess.isFullAccess || preview.isPreviewing} />
     </main>
   );
 }
