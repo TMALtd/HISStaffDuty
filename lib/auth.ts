@@ -50,7 +50,7 @@ async function buildStaffAccessSession(user: CurrentUser): Promise<StaffAccessSe
   return {
     user,
     staffProfile,
-    access: getStaffAccess(staffProfile, email)
+    access: getStaffAccess(staffProfile)
   };
 }
 
@@ -107,7 +107,7 @@ export async function getAccessPreviewSession(
 
   return {
     activeProfile: previewProfile,
-    activeAccess: getStaffAccess(previewProfile, previewProfile.email),
+    activeAccess: getStaffAccess(previewProfile),
     previewEmail: normalizedPreviewEmail,
     isPreviewing: true
   };
@@ -123,5 +123,5 @@ export async function requireStaffProfile(): Promise<{
 }
 
 export function isTimetableAdminEmail(email: string | null | undefined) {
-  return getStaffAccess(null, email).isFullAccess;
+  return false;
 }

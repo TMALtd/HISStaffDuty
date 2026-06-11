@@ -25,13 +25,6 @@ export const PORTAL_NAV_ITEMS: Array<{
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
 
-const FULL_ACCESS_EMAILS = new Set([
-  "benjamin.allen@kl.his.edu.my",
-  "daniel.goldspink@kl.his.edu.my"
-]);
-
-const FULL_ACCESS_NAMES = new Set(["benjamin allen", "daniel goldspink"]);
-
 const HOY_YEAR_GROUPS = new Map<string, string>([
   ["natalie cook", "Year 1"],
   ["laura munro", "Year 2"],
@@ -53,15 +46,12 @@ function normalize(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function getStaffAccess(staffProfile: StaffProfile | null, email?: string | null): StaffAccess {
-  const normalizedEmail = normalize(email ?? staffProfile?.email);
+export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
   const normalizedName = normalize(staffProfile?.name);
   const normalizedSystemRole = normalize(staffProfile?.system_role);
   const isFullAccess =
     normalizedSystemRole === "admin" ||
-    normalizedSystemRole === "administrator" ||
-    FULL_ACCESS_EMAILS.has(normalizedEmail) ||
-    FULL_ACCESS_NAMES.has(normalizedName);
+    normalizedSystemRole === "administrator";
 
   if (isFullAccess) {
     return {
