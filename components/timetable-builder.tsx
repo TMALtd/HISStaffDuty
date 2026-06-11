@@ -640,6 +640,10 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
       ),
     [parentRowSegments]
   );
+  const parentDisplayTimeLabels = useMemo(
+    () => buildDisplayedTimeLabels(parentRowSegments, parentRowLineByTime, isPreschoolTimetable),
+    [isPreschoolTimetable, parentRowLineByTime, parentRowSegments]
+  );
 
   const dayColumns = useMemo(
     () =>
@@ -709,6 +713,34 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
   const parentGridData = useMemo(() => {
     const sharedBars: ParentSharedBar[] = [];
     const blocks: ParentExportBlock[] = [];
+
+    if (isPreschoolTimetable) {
+      const lunchSource = dayColumns
+        .filter((day) => day.key !== "friday")
+        .flatMap((day) => day.blocks)
+        .find(
+          (block) =>
+            block.block_type === "lunch" &&
+            block.start_time <= "12:00:00" &&
+            block.end_time >= "12:40:00"
+        );
+
+      if (lunchSource) {
+        const lunchRowStart = (parentRowLineByTime.get("12:00:00") ?? 1) + 1;
+        const lunchRowEnd = (parentRowLineByTime.get("12:40:00") ?? lunchRowStart) + 1;
+
+        if (lunchRowEnd > lunchRowStart) {
+          sharedBars.push({
+            id: "shared-lunch-mon-thu-preschool",
+            title: "Lunchtime",
+            color: lunchSource.color,
+            rowStart: lunchRowStart,
+            rowEnd: lunchRowEnd,
+            gridColumn: "2 / 6"
+          });
+        }
+      }
+    }
 
     if (isYearOneTwoTemplate) {
       const lunchSource = dayColumns
@@ -893,7 +925,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     });
 
     return { blocks, sharedBars };
-  }, [dayColumns, isYearOneTwoTemplate, parentRowLineByTime, parentRowSegments]);
+  }, [dayColumns, isPreschoolTimetable, isYearOneTwoTemplate, parentRowLineByTime, parentRowSegments]);
 
   const selectedBlock = selectedBlockId
     ? visibleBlocks.find((block) => block.id === selectedBlockId) ?? null
@@ -1604,11 +1636,11 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                     </div>
                   ))}
 
-                  {parentRowSegments.map((segment, segmentIndex) => (
+                  {parentDisplayTimeLabels.map((segment) => (
                     <div
                       className="timetable-parent-time"
                       key={`parent-time-${segment.key}`}
-                      style={{ gridColumn: 1, gridRow: segmentIndex + 2 }}
+                      style={{ gridColumn: 1, gridRow: `${segment.rowStart} / ${segment.rowEnd}` }}
                     >
                       {timeRangeLabel(segment.startTime, segment.endTime)}
                     </div>
