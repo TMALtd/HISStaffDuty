@@ -889,18 +889,24 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
           });
         }
       } else if (!(isYearOneTwoTemplate && day.key === "friday")) {
-        const lastFillCandidate = [...clippedBlocks]
-          .reverse()
-          .find((block) => isParentFillCandidate(block) && block.end_time <= dayParentEndTime);
+        const hasDismissalBlock = clippedBlocks.some(
+          (block) => block.block_type === "dismissal" || /dismissal/i.test(labelForBlock(block))
+        );
 
-        if (lastFillCandidate && lastFillCandidate.end_time < dayParentEndTime) {
-          clippedBlocks.push({
-            ...lastFillCandidate,
-            id: `${lastFillCandidate.id}-parent-fill`,
-            start_time: lastFillCandidate.end_time,
-            end_time: dayParentEndTime,
-            mergedIds: [...lastFillCandidate.mergedIds]
-          });
+        if (!hasDismissalBlock) {
+          const lastFillCandidate = [...clippedBlocks]
+            .reverse()
+            .find((block) => isParentFillCandidate(block) && block.end_time <= dayParentEndTime);
+
+          if (lastFillCandidate && lastFillCandidate.end_time < dayParentEndTime) {
+            clippedBlocks.push({
+              ...lastFillCandidate,
+              id: `${lastFillCandidate.id}-parent-fill`,
+              start_time: lastFillCandidate.end_time,
+              end_time: dayParentEndTime,
+              mergedIds: [...lastFillCandidate.mergedIds]
+            });
+          }
         }
       }
 
