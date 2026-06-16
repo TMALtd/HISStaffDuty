@@ -553,6 +553,10 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     () => normalizeLabelForCompare(data.timetable?.template_name ?? ""),
     [data.timetable?.template_name]
   );
+  const isPreschoolTimetable = useMemo(
+    () => isPreschoolYearGroup(data.classSummary.yearGroup),
+    [data.classSummary.yearGroup]
+  );
   const isMilepostOneTimetable = useMemo(
     () => isMilepostOneYearGroup(data.classSummary.yearGroup),
     [data.classSummary.yearGroup]
@@ -577,11 +581,15 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
       return [];
     }
 
+    const targetGroup = isPreschoolTimetable
+      ? data.classSummary.yearGroup
+      : data.classSummary.milepost;
+
     return data.subjectTargets
       .filter(
         (target) =>
           target.isActive &&
-          target.milepost === data.classSummary.milepost &&
+          target.milepost === targetGroup &&
           target.streamType === currentStreamType
       )
       .sort((left, right) => left.sortOrder - right.sortOrder);
@@ -589,6 +597,8 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     data.classSummary.designation,
     data.classSummary.milepost,
     data.classSummary.streamType,
+    data.classSummary.yearGroup,
+    isPreschoolTimetable,
     data.subjectTargets
   ]);
   const hasSubjectAllocationCheck = activeSubjectTargets.length > 0;
@@ -603,10 +613,6 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
   const isYearFiveSixTemplate = useMemo(
     () => normalizedTemplateName.includes("year 5") && normalizedTemplateName.includes("year 6"),
     [normalizedTemplateName]
-  );
-  const isPreschoolTimetable = useMemo(
-    () => isPreschoolYearGroup(data.classSummary.yearGroup),
-    [data.classSummary.yearGroup]
   );
   const isMiddayCompactTemplate = isYearThreeFourTemplate || isYearFiveSixTemplate;
   const rowSegments = useMemo(
