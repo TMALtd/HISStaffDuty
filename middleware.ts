@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  const response = NextResponse.next({ request });
+  let response = NextResponse.next({ request });
   const config = getSupabaseConfig();
 
   const supabase = createServerClient(
@@ -38,9 +38,11 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({ name, value, ...options });
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
+          request.cookies.set({ name, value: "", ...options });
           response.cookies.set({ name, value: "", ...options });
         }
       }
@@ -48,16 +50,16 @@ export async function middleware(request: NextRequest) {
   );
 
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session && !isPublicPath(request.nextUrl.pathname)) {
+  if (!user && !isPublicPath(request.nextUrl.pathname)) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session && request.nextUrl.pathname === "/login") {
+  if (user && request.nextUrl.pathname === "/login") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

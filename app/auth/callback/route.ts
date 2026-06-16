@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type");
+  const loginUrl = new URL("/login", getAuthSiteUrl(request));
   const response = NextResponse.redirect(new URL("/", getAuthSiteUrl(request)));
 
   const supabase = createServerClient(
@@ -28,12 +29,32 @@ export async function GET(request: NextRequest) {
   );
 
   if (code) {
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      loginUrl.searchParams.set(
+        "message",
+        `Google sign-in could not be completed: ${error.message}`
+      );
+      return NextResponse.redirect(loginUrl);
+    }
   } else if (tokenHash && type) {
-    await supabase.auth.verifyOtp({
+    const { error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
       type: type as "magiclink"
     });
+    if (error) {
+      loginUrl.searchParams.set(
+        "message",
+        `Email sign-in could not be completed: ${error.message}`
+      );
+      return NextResponse.redirect(loginUrl);
+    }
+  } else {
+    loginUrl.searchParams.set(
+      "message",
+      "Sign-in could not be completed because no authentication code was returned."
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;
