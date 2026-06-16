@@ -44,10 +44,12 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  loginUrl.searchParams.set(
-    "message",
-    error ? error.message : "Magic link sent. Check your email to continue."
-  );
+  const message =
+    error?.message?.toLowerCase().includes("email logins are disabled")
+      ? "Email magic-link login is disabled. Please go back and use Sign In With Google."
+      : error?.message ?? "Magic link sent. Check your email to continue.";
+
+  loginUrl.searchParams.set("message", message);
 
   const redirectResponse = NextResponse.redirect(loginUrl);
   response.cookies.getAll().forEach((cookie) => {

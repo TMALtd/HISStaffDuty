@@ -243,6 +243,24 @@ function isPreschoolYearGroup(yearGroup: string) {
   return normalized === "preschool" || normalized === "preschool 1" || normalized === "preschool 2";
 }
 
+function resolvePreschoolTargetGroup(classSummary: TimetableClassSummary) {
+  const normalizedYearGroup = normalizeLabelForCompare(classSummary.yearGroup);
+  if (normalizedYearGroup === "preschool 1" || normalizedYearGroup === "preschool 2") {
+    return classSummary.yearGroup;
+  }
+
+  const className = classSummary.className.trim();
+  const preschoolMatch = className.match(/^(Preschool\s+[12])\b/i);
+  if (preschoolMatch) {
+    return preschoolMatch[1]
+      .split(/\s+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  return classSummary.yearGroup;
+}
+
 function isPreschoolMorningSegment(segment: TimetableRowSegment) {
   return segment.startTime >= "08:00:00" && segment.endTime <= "09:30:00";
 }
@@ -582,7 +600,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     }
 
     const targetGroup = isPreschoolTimetable
-      ? data.classSummary.yearGroup
+      ? resolvePreschoolTargetGroup(data.classSummary)
       : data.classSummary.milepost;
 
     return data.subjectTargets

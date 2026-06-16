@@ -45,8 +45,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p className="eyebrow">Private staff access</p>
         <h1 className="hero-title">Sign in to the roster portal</h1>
         <p className="hero-copy">
-          Sign in with your staff Google account. If you need a backup option, you can also
-          request a magic link by email. Once signed in, you can filter by school,
+          Sign in with your staff Google account. Once signed in, you can filter by school,
           designation, year group, milepost, level, and class.
         </p>
         <LoginForm message={message} />
