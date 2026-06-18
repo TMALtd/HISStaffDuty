@@ -5,6 +5,16 @@ import { canAccessView, getStaffAccess, type PortalView, type StaffAccess } from
 import { hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const VIEW_FALLBACK_PATHS: Partial<Record<PortalView, string>> = {
+  "student-filter": "/",
+  gradebook: "/gradebook",
+  duty: "/duties",
+  "duty-roster": "/duties/roster",
+  timetables: "/timetables",
+  directory: "/directory",
+  setup: "/admin/gradebook"
+};
+
 export async function getCurrentUserOrNull() {
   if (!hasSupabaseBrowserEnv()) {
     return null;
@@ -73,7 +83,16 @@ export async function requirePortalAccess(view: PortalView): Promise<StaffAccess
   const session = await requireStaffAccess();
 
   if (!canAccessView(session.access, view)) {
-    redirect("/timetables");
+    const fallbackView = session.access.allowedViews[0];
+    if (fallbackView) {
+      redirect(VIEW_FALLBACK_PATHS[fallbackView] ?? "/");
+    }
+
+    redirect(
+      `/login?message=${encodeURIComponent(
+        "Your Google login worked, but this email is not yet linked to a staff access profile. Please contact Benjamin Allen."
+      )}`
+    );
   }
 
   return session;

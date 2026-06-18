@@ -32,7 +32,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       data: { session }
     } = await supabase.auth.getSession();
 
-    if (session) {
+    if (session && !message) {
       redirect("/");
     }
   } else {

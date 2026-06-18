@@ -59,7 +59,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && request.nextUrl.pathname === "/login") {
+  if (
+    user &&
+    request.nextUrl.pathname === "/login" &&
+    !request.nextUrl.searchParams.get("message")
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
