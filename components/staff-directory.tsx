@@ -119,6 +119,77 @@ function includesAny(value: string, terms: string[]) {
   return terms.some((term) => value.includes(term));
 }
 
+function matchesWholeTerm(value: string, pattern: RegExp) {
+  return pattern.test(value);
+}
+
+function resolveExplicitYearGroup(person: StaffDirectoryRecord) {
+  const values = [
+    person.class,
+    person.timetable,
+    person.designation,
+    person.department,
+    person.role
+  ]
+    .map((value) => normalizeLookupValue(value))
+    .filter(Boolean);
+
+  for (const value of values) {
+    if (matchesWholeTerm(value, /\bpreschool 1\b/)) {
+      return "Preschool 1";
+    }
+    if (matchesWholeTerm(value, /\bpreschool 2\b/)) {
+      return "Preschool 2";
+    }
+    if (matchesWholeTerm(value, /\byear 1\b/)) {
+      return "Year 1";
+    }
+    if (matchesWholeTerm(value, /\byear 2\b/)) {
+      return "Year 2";
+    }
+    if (matchesWholeTerm(value, /\byear 3\b/)) {
+      return "Year 3";
+    }
+    if (matchesWholeTerm(value, /\byear 4\b/)) {
+      return "Year 4";
+    }
+    if (matchesWholeTerm(value, /\byear 5\b/)) {
+      return "Year 5";
+    }
+    if (matchesWholeTerm(value, /\byear 6\b/)) {
+      return "Year 6";
+    }
+  }
+
+  return null;
+}
+
+function resolveExplicitMilepost(person: StaffDirectoryRecord) {
+  const values = [
+    person.class,
+    person.timetable,
+    person.designation,
+    person.department,
+    person.role
+  ]
+    .map((value) => normalizeLookupValue(value))
+    .filter(Boolean);
+
+  for (const value of values) {
+    if (matchesWholeTerm(value, /\bmp1\b|\bmilepost 1\b/)) {
+      return "mp1";
+    }
+    if (matchesWholeTerm(value, /\bmp2\b|\bmilepost 2\b/)) {
+      return "mp2";
+    }
+    if (matchesWholeTerm(value, /\bmp3\b|\bmilepost 3\b/)) {
+      return "mp3";
+    }
+  }
+
+  return null;
+}
+
 function buildClassYearGroupLookup(options: StaffDirectoryClassOption[]) {
   const lookup = new Map<string, string>();
 
@@ -162,6 +233,8 @@ function getStaffTeamKey(
 ): StaffTeamKey {
   const text = combinedStaffText(person);
   const assignedYearGroup = resolveStaffAssignedYearGroup(person, classYearGroupLookup);
+  const explicitYearGroup = resolveExplicitYearGroup(person);
+  const explicitMilepost = resolveExplicitMilepost(person);
 
   if (
     includesAny(text, [
@@ -183,7 +256,15 @@ function getStaffTeamKey(
     return "preschool";
   }
 
+  if (explicitYearGroup === "Preschool 1" || explicitYearGroup === "Preschool 2") {
+    return "preschool";
+  }
+
   if (assignedYearGroup === "Year 1" || assignedYearGroup === "Year 2") {
+    return "mp1";
+  }
+
+  if (explicitYearGroup === "Year 1" || explicitYearGroup === "Year 2") {
     return "mp1";
   }
 
@@ -191,8 +272,20 @@ function getStaffTeamKey(
     return "mp2";
   }
 
+  if (explicitYearGroup === "Year 3" || explicitYearGroup === "Year 4") {
+    return "mp2";
+  }
+
   if (assignedYearGroup === "Year 5" || assignedYearGroup === "Year 6") {
     return "mp3";
+  }
+
+  if (explicitYearGroup === "Year 5" || explicitYearGroup === "Year 6") {
+    return "mp3";
+  }
+
+  if (explicitMilepost) {
+    return explicitMilepost;
   }
 
   if (text.includes("preschool")) {
@@ -238,7 +331,8 @@ function getStaffSubGroupTitle(
   classYearGroupLookup: Map<string, string>
 ) {
   const text = combinedStaffText(person);
-  const assignedYearGroup = resolveStaffAssignedYearGroup(person, classYearGroupLookup);
+  const assignedYearGroup =
+    resolveStaffAssignedYearGroup(person, classYearGroupLookup) ?? resolveExplicitYearGroup(person);
 
   if (teamKey === "slt") {
     return "Senior Leadership Team";
