@@ -1,5 +1,8 @@
 import type { StaffProfile, TimetableClassSummary } from "@/lib/types";
 
+export const ALL_TIMETABLES_ACCESS_VALUE = "All Timetables";
+const NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE = normalize(ALL_TIMETABLES_ACCESS_VALUE);
+
 export type PortalView =
   | "student-filter"
   | "gradebook"
@@ -68,7 +71,11 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
   }
 
   if (allowedYearGroups.length > 0) {
-    roleParts.push(`${staffProfile?.timetable_access_year_group ?? "Year group"} timetables`);
+    if (allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE)) {
+      roleParts.push("All timetables");
+    } else {
+      roleParts.push(`${staffProfile?.timetable_access_year_group ?? "Year group"} timetables`);
+    }
   }
 
   return {
@@ -91,6 +98,7 @@ export function canAccessTimetableClass(access: StaffAccess, classSummary: Timet
 
   return (
     access.isFullAccess ||
+    access.allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
     access.allowedYearGroups.includes(normalize(classSummary.yearGroup)) ||
     classKeys.some((key) => access.allowedClassKeys.includes(key))
   );

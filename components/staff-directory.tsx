@@ -9,6 +9,7 @@ import {
   type ImgHTMLAttributes
 } from "react";
 import { useRouter } from "next/navigation";
+import { ALL_TIMETABLES_ACCESS_VALUE } from "@/lib/access";
 import type {
   StaffDirectoryClassOption,
   StaffDirectoryRecord,
@@ -816,7 +817,10 @@ export function StaffDirectory({
     [staff]
   );
   const yearGroupOptions = useMemo(
-    () => uniqueValues(classOptions.map((option) => option.yearGroup)),
+    () => [
+      ALL_TIMETABLES_ACCESS_VALUE,
+      ...uniqueValues(classOptions.map((option) => option.yearGroup))
+    ],
     [classOptions]
   );
   const knownClassLookup = useMemo(
