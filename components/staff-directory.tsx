@@ -993,6 +993,30 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
             </select>
           </div>
         </div>
+
+        <div className="directory-guidance-panel">
+          <p className="directory-guidance-title">Field guide for team organisation</p>
+          <p className="directory-guidance-copy">
+            <strong>Class:</strong> use this for structural placement such as named homeroom
+            classes, year groups, or mileposts. Named classes are treated as homeroom teachers.
+            Broad labels like <code>MP1</code> or <code>Year 1</code> are treated as support
+            staff within that section.
+          </p>
+          <p className="directory-guidance-copy">
+            <strong>Department:</strong> use this for the broad area shown on the staff card,
+            such as <code>Primary</code>, <code>Preschool</code>, or <code>Specialist</code>.
+          </p>
+          <p className="directory-guidance-copy">
+            <strong>Role:</strong> use this for the staff type, for example{" "}
+            <code>Homeroom</code>, <code>Specialist</code>, <code>HoD</code>, or{" "}
+            <code>Head of Primary</code>.
+          </p>
+          <p className="directory-guidance-copy">
+            <strong>Designation:</strong> use this for the exact specialist or support team,
+            such as <code>Maths Support</code>, <code>Counselling</code>, <code>EAL</code>,{" "}
+            <code>SEN</code>, <code>Mandarin</code>, or <code>Music</code>.
+          </p>
+        </div>
       </section>
 
       {groupedStaffSections.map((teamSection) => (
