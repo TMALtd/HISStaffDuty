@@ -1241,6 +1241,39 @@ tr:last-child td {
   gap: 18px;
 }
 
+.directory-team-section {
+  display: grid;
+  gap: 18px;
+}
+
+.directory-team-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(146, 116, 92, 0.22);
+}
+
+.directory-team-title {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.directory-team-subgroup {
+  display: grid;
+  gap: 14px;
+}
+
+.directory-team-subtitle {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #5f4b44;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .staff-management-card {
   position: relative;
   background: #fff;
@@ -1947,6 +1980,11 @@ tr:last-child td {
 
   .directory-hero {
     align-items: stretch;
+  }
+
+  .directory-team-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .legacy-filter-label {

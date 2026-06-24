@@ -22,6 +22,25 @@ type StaffDirectoryProps = {
 
 type ModalMode = "view" | "edit" | "create";
 
+type StaffTeamKey =
+  | "slt"
+  | "preschool"
+  | "mp1"
+  | "mp2"
+  | "mp3"
+  | "specialist"
+  | "support";
+
+type StaffTeamSection = {
+  key: StaffTeamKey;
+  title: string;
+  subGroups: Array<{
+    key: string;
+    title: string;
+    staff: StaffDirectoryRecord[];
+  }>;
+};
+
 const EMPTY_FORM: StaffDirectoryUpsertInput = {
   staff_id: "",
   name: "",
@@ -79,6 +98,245 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
 
 function normalizeLookupValue(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
+}
+
+function combinedStaffText(person: StaffDirectoryRecord) {
+  return [
+    person.name,
+    person.first_name,
+    person.role,
+    person.department,
+    person.designation,
+    person.class,
+    person.timetable
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function includesAny(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
+}
+
+function getStaffTeamKey(person: StaffDirectoryRecord): StaffTeamKey {
+  const text = combinedStaffText(person);
+
+  if (
+    includesAny(text, [
+      "principal",
+      "assistant principal",
+      "vice principal",
+      "deputy",
+      "head of primary",
+      "head of school",
+      "headteacher",
+      "slt",
+      "senior leadership"
+    ])
+  ) {
+    return "slt";
+  }
+
+  if (text.includes("preschool")) {
+    return "preschool";
+  }
+
+  if (includesAny(text, ["year 1", "year 2", "mp1"])) {
+    return "mp1";
+  }
+
+  if (includesAny(text, ["year 3", "year 4", "mp2"])) {
+    return "mp2";
+  }
+
+  if (includesAny(text, ["year 5", "year 6", "mp3"])) {
+    return "mp3";
+  }
+
+  if (
+    includesAny(text, [
+      "music",
+      "mandarin",
+      "bm",
+      "bahasa",
+      "p.e.",
+      "pe ",
+      " pe",
+      "physical education",
+      "library",
+      "coding",
+      "specialist"
+    ])
+  ) {
+    return "specialist";
+  }
+
+  return "support";
+}
+
+function getStaffSubGroupTitle(person: StaffDirectoryRecord, teamKey: StaffTeamKey) {
+  const text = combinedStaffText(person);
+
+  if (teamKey === "slt") {
+    return "Senior Leadership Team";
+  }
+
+  if (teamKey === "preschool") {
+    if (includesAny(text, ["preschool 1"])) {
+      return "Preschool 1";
+    }
+    if (includesAny(text, ["preschool 2"])) {
+      return "Preschool 2";
+    }
+    return "Preschool Support Teachers";
+  }
+
+  if (teamKey === "mp1") {
+    if (includesAny(text, ["year 1"])) {
+      return "Year 1";
+    }
+    if (includesAny(text, ["year 2"])) {
+      return "Year 2";
+    }
+    return "Support Teachers";
+  }
+
+  if (teamKey === "mp2") {
+    if (includesAny(text, ["year 3"])) {
+      return "Year 3";
+    }
+    if (includesAny(text, ["year 4"])) {
+      return "Year 4";
+    }
+    return "Support Teachers";
+  }
+
+  if (teamKey === "mp3") {
+    if (includesAny(text, ["year 5"])) {
+      return "Year 5";
+    }
+    if (includesAny(text, ["year 6"])) {
+      return "Year 6";
+    }
+    return "Support Teachers";
+  }
+
+  if (teamKey === "specialist") {
+    if (includesAny(text, ["music"])) {
+      return "Music";
+    }
+    if (includesAny(text, ["mandarin"])) {
+      return "Mandarin";
+    }
+    if (includesAny(text, ["bm", "bahasa"])) {
+      return "BM";
+    }
+    if (includesAny(text, ["p.e.", "physical education", " pe ", "pe "])) {
+      return "P.E.";
+    }
+    if (includesAny(text, ["library"])) {
+      return "Library";
+    }
+    if (includesAny(text, ["coding"])) {
+      return "Coding";
+    }
+    return "Other Specialists";
+  }
+
+  if (includesAny(text, ["eal"])) {
+    return "EAL";
+  }
+  if (includesAny(text, ["maths", "math"])) {
+    return "Maths";
+  }
+  if (includesAny(text, ["reading"])) {
+    return "Reading";
+  }
+  if (includesAny(text, ["sen"])) {
+    return "SEN";
+  }
+
+  return "Other Support";
+}
+
+function compareStaff(left: StaffDirectoryRecord, right: StaffDirectoryRecord) {
+  const leftId = Number(left.staff_id ?? Number.NaN);
+  const rightId = Number(right.staff_id ?? Number.NaN);
+
+  if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) {
+    return leftId - rightId;
+  }
+
+  return left.name.localeCompare(right.name, undefined, { numeric: true });
+}
+
+function buildStaffTeamSections(staff: StaffDirectoryRecord[]): StaffTeamSection[] {
+  const teamDefinitions: Array<{
+    key: StaffTeamKey;
+    title: string;
+    subgroupOrder: string[];
+  }> = [
+    { key: "slt", title: "SLT", subgroupOrder: ["Senior Leadership Team"] },
+    {
+      key: "preschool",
+      title: "Preschool",
+      subgroupOrder: ["Preschool 1", "Preschool 2", "Preschool Support Teachers"]
+    },
+    { key: "mp1", title: "MP1", subgroupOrder: ["Year 1", "Year 2", "Support Teachers"] },
+    { key: "mp2", title: "MP2", subgroupOrder: ["Year 3", "Year 4", "Support Teachers"] },
+    { key: "mp3", title: "MP3", subgroupOrder: ["Year 5", "Year 6", "Support Teachers"] },
+    {
+      key: "specialist",
+      title: "Specialist Teams",
+      subgroupOrder: ["Music", "Mandarin", "BM", "P.E.", "Library", "Coding", "Other Specialists"]
+    },
+    {
+      key: "support",
+      title: "Support Teams",
+      subgroupOrder: ["EAL", "Maths", "Reading", "SEN", "Other Support"]
+    }
+  ];
+
+  return teamDefinitions
+    .map((teamDefinition) => {
+      const staffInTeam = staff.filter((person) => getStaffTeamKey(person) === teamDefinition.key);
+      const grouped = new Map<string, StaffDirectoryRecord[]>();
+
+      for (const person of staffInTeam) {
+        const subGroupTitle = getStaffSubGroupTitle(person, teamDefinition.key);
+        const existing = grouped.get(subGroupTitle) ?? [];
+        existing.push(person);
+        grouped.set(subGroupTitle, existing);
+      }
+
+      const orderedTitles = [
+        ...teamDefinition.subgroupOrder,
+        ...Array.from(grouped.keys()).filter((title) => !teamDefinition.subgroupOrder.includes(title)).sort()
+      ];
+
+      const subGroups = orderedTitles
+        .map((title) => {
+          const subGroupStaff = grouped.get(title) ?? [];
+          if (!subGroupStaff.length) {
+            return null;
+          }
+
+          return {
+            key: `${teamDefinition.key}-${title}`,
+            title,
+            staff: [...subGroupStaff].sort(compareStaff)
+          };
+        })
+        .filter((value): value is NonNullable<typeof value> => Boolean(value));
+
+      return {
+        key: teamDefinition.key,
+        title: teamDefinition.title,
+        subGroups
+      };
+    })
+    .filter((team) => team.subGroups.length > 0);
 }
 
 function buildKnownClassLookup(options: StaffDirectoryClassOption[]) {
@@ -321,6 +579,11 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     });
   }, [departmentFilter, searchTerm, staff]);
 
+  const groupedStaffSections = useMemo(
+    () => buildStaffTeamSections(filteredStaff),
+    [filteredStaff]
+  );
+
   const selectedStaff =
     filteredStaff.find((person) => person.id === selectedStaffId) ??
     staff.find((person) => person.id === selectedStaffId) ??
@@ -536,56 +799,72 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
         </div>
       </section>
 
-      <section className="directory-card-grid">
-        {filteredStaff.map((person, index) => (
-          <article className="staff-management-card" key={person.id}>
-            <span className="staff-card-badge">#{person.staff_id ?? index + 1}</span>
+      {groupedStaffSections.map((teamSection) => (
+        <section className="directory-team-section" key={teamSection.key}>
+          <div className="directory-team-header">
+            <p className="eyebrow">{teamSection.title}</p>
+            <h2 className="directory-team-title">{teamSection.title}</h2>
+          </div>
 
-            <div className="staff-management-header">
-              <StaffAvatar
-                photoUrl={person.photo_url}
-                staffName={person.name}
-                firstName={person.first_name}
-                alt={person.name}
-                fallback={person.first_name?.[0] ?? person.name[0] ?? "?"}
-                className="directory-avatar management-avatar"
-                imageClassName="directory-avatar-image"
-              />
-              <div className="staff-management-copy">
-                <h2 className="directory-name">{person.name}</h2>
-                <p className="staff-management-line primary">{person.department ?? "Department pending"}</p>
-                <p className="staff-management-line accent">
-                  {getStaffCardAccentLine(person, knownClassLookup)}
-                </p>
+          {teamSection.subGroups.map((subGroup) => (
+            <div className="directory-team-subgroup" key={subGroup.key}>
+              <h3 className="directory-team-subtitle">{subGroup.title}</h3>
+              <div className="directory-card-grid">
+                {subGroup.staff.map((person, index) => (
+                  <article className="staff-management-card" key={person.id}>
+                    <span className="staff-card-badge">#{person.staff_id ?? index + 1}</span>
+
+                    <div className="staff-management-header">
+                      <StaffAvatar
+                        photoUrl={person.photo_url}
+                        staffName={person.name}
+                        firstName={person.first_name}
+                        alt={person.name}
+                        fallback={person.first_name?.[0] ?? person.name[0] ?? "?"}
+                        className="directory-avatar management-avatar"
+                        imageClassName="directory-avatar-image"
+                      />
+                      <div className="staff-management-copy">
+                        <h2 className="directory-name">{person.name}</h2>
+                        <p className="staff-management-line primary">
+                          {person.department ?? "Department pending"}
+                        </p>
+                        <p className="staff-management-line accent">
+                          {getStaffCardAccentLine(person, knownClassLookup)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="staff-card-actions">
+                      <button
+                        className={`directory-action edit${actionStateClass(person.id, "edit")}`}
+                        type="button"
+                        onClick={() => openEditModal(person)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className={`directory-action view${actionStateClass(person.id, "view")}`}
+                        type="button"
+                        onClick={() => openViewModal(person)}
+                      >
+                        View
+                      </button>
+                      <button
+                        className="directory-action danger"
+                        type="button"
+                        onClick={() => handleDelete(person)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
-
-            <div className="staff-card-actions">
-              <button
-                className={`directory-action edit${actionStateClass(person.id, "edit")}`}
-                type="button"
-                onClick={() => openEditModal(person)}
-              >
-                Edit
-              </button>
-              <button
-                className={`directory-action view${actionStateClass(person.id, "view")}`}
-                type="button"
-                onClick={() => openViewModal(person)}
-              >
-                View
-              </button>
-              <button
-                className="directory-action danger"
-                type="button"
-                onClick={() => handleDelete(person)}
-              >
-                Delete
-              </button>
-            </div>
-          </article>
-        ))}
-      </section>
+          ))}
+        </section>
+      ))}
 
       {!filteredStaff.length ? (
         <section className="panel">
