@@ -119,8 +119,49 @@ function includesAny(value: string, terms: string[]) {
   return terms.some((term) => value.includes(term));
 }
 
-function getStaffTeamKey(person: StaffDirectoryRecord): StaffTeamKey {
+function buildClassYearGroupLookup(options: StaffDirectoryClassOption[]) {
+  const lookup = new Map<string, string>();
+
+  for (const option of options) {
+    const normalizedName = normalizeLookupValue(option.className);
+    const normalizedCode = normalizeLookupValue(option.classCode);
+
+    if (normalizedName) {
+      lookup.set(normalizedName, option.yearGroup);
+    }
+
+    if (normalizedCode) {
+      lookup.set(normalizedCode, option.yearGroup);
+    }
+  }
+
+  return lookup;
+}
+
+function resolveStaffAssignedYearGroup(
+  person: StaffDirectoryRecord,
+  classYearGroupLookup: Map<string, string>
+) {
+  const lookupCandidates = [person.class, person.timetable]
+    .map((value) => normalizeLookupValue(value))
+    .filter(Boolean);
+
+  for (const candidate of lookupCandidates) {
+    const matchedYearGroup = classYearGroupLookup.get(candidate);
+    if (matchedYearGroup) {
+      return matchedYearGroup;
+    }
+  }
+
+  return null;
+}
+
+function getStaffTeamKey(
+  person: StaffDirectoryRecord,
+  classYearGroupLookup: Map<string, string>
+): StaffTeamKey {
   const text = combinedStaffText(person);
+  const assignedYearGroup = resolveStaffAssignedYearGroup(person, classYearGroupLookup);
 
   if (
     includesAny(text, [
@@ -136,6 +177,22 @@ function getStaffTeamKey(person: StaffDirectoryRecord): StaffTeamKey {
     ])
   ) {
     return "slt";
+  }
+
+  if (assignedYearGroup === "Preschool 1" || assignedYearGroup === "Preschool 2") {
+    return "preschool";
+  }
+
+  if (assignedYearGroup === "Year 1" || assignedYearGroup === "Year 2") {
+    return "mp1";
+  }
+
+  if (assignedYearGroup === "Year 3" || assignedYearGroup === "Year 4") {
+    return "mp2";
+  }
+
+  if (assignedYearGroup === "Year 5" || assignedYearGroup === "Year 6") {
+    return "mp3";
   }
 
   if (text.includes("preschool")) {
@@ -175,55 +232,60 @@ function getStaffTeamKey(person: StaffDirectoryRecord): StaffTeamKey {
   return "support";
 }
 
-function getStaffSubGroupTitle(person: StaffDirectoryRecord, teamKey: StaffTeamKey) {
+function getStaffSubGroupTitle(
+  person: StaffDirectoryRecord,
+  teamKey: StaffTeamKey,
+  classYearGroupLookup: Map<string, string>
+) {
   const text = combinedStaffText(person);
+  const assignedYearGroup = resolveStaffAssignedYearGroup(person, classYearGroupLookup);
 
   if (teamKey === "slt") {
     return "Senior Leadership Team";
   }
 
   if (teamKey === "preschool") {
-    if (includesAny(text, ["preschool 1"])) {
+    if (assignedYearGroup === "Preschool 1") {
       return "Preschool 1";
     }
-    if (includesAny(text, ["preschool 2"])) {
+    if (assignedYearGroup === "Preschool 2") {
       return "Preschool 2";
     }
     return "Preschool Support Teachers";
   }
 
   if (teamKey === "mp1") {
-    if (includesAny(text, ["year 1"])) {
+    if (assignedYearGroup === "Year 1") {
       return "Year 1";
     }
-    if (includesAny(text, ["year 2"])) {
+    if (assignedYearGroup === "Year 2") {
       return "Year 2";
     }
     return "Support Teachers";
   }
 
   if (teamKey === "mp2") {
-    if (includesAny(text, ["year 3"])) {
+    if (assignedYearGroup === "Year 3") {
       return "Year 3";
     }
-    if (includesAny(text, ["year 4"])) {
+    if (assignedYearGroup === "Year 4") {
       return "Year 4";
     }
     return "Support Teachers";
   }
 
   if (teamKey === "mp3") {
-    if (includesAny(text, ["year 5"])) {
+    if (assignedYearGroup === "Year 5") {
       return "Year 5";
     }
-    if (includesAny(text, ["year 6"])) {
+    if (assignedYearGroup === "Year 6") {
       return "Year 6";
     }
     return "Support Teachers";
   }
 
   if (teamKey === "specialist") {
-    if (includesAny(text, ["music"])) {
+    if (includesAny(text, ["music & movement", "music and movement", "music"])) {
       return "Music";
     }
     if (includesAny(text, ["mandarin"])) {
@@ -238,26 +300,93 @@ function getStaffSubGroupTitle(person: StaffDirectoryRecord, teamKey: StaffTeamK
     if (includesAny(text, ["library"])) {
       return "Library";
     }
-    if (includesAny(text, ["coding"])) {
+    if (includesAny(text, ["coding", "computer science"])) {
       return "Coding";
     }
-    return "Other Specialists";
+    if (includesAny(text, ["steam"])) {
+      return "STEAM";
+    }
+    if (includesAny(text, ["counselling", "counseling", "counsellor", "counselor"])) {
+      return "Counselling";
+    }
+    if (includesAny(text, ["maths support", "math support"])) {
+      return "Maths Support";
+    }
+    if (includesAny(text, ["remedial reading", "reading support"])) {
+      return "Remedial Reading";
+    }
+    if (includesAny(text, ["eal", "english as an additional language"])) {
+      return "EAL";
+    }
+    if (includesAny(text, ["senco"])) {
+      return "SENCo";
+    }
+    if (includesAny(text, ["sen", "special educational needs"])) {
+      return "SEN";
+    }
+    if (includesAny(text, ["administration", "admin"])) {
+      return "Administration";
+    }
+    return "General Specialist";
   }
 
-  if (includesAny(text, ["eal"])) {
+  if (includesAny(text, ["counselling", "counseling", "counsellor", "counselor"])) {
+    return "Counselling";
+  }
+  if (includesAny(text, ["maths support", "math support"])) {
+    return "Maths Support";
+  }
+  if (includesAny(text, ["remedial reading", "reading support"])) {
+    return "Remedial Reading";
+  }
+  if (includesAny(text, ["eal", "english as an additional language"])) {
     return "EAL";
   }
-  if (includesAny(text, ["maths", "math"])) {
-    return "Maths";
+  if (includesAny(text, ["senco"])) {
+    return "SENCo";
   }
-  if (includesAny(text, ["reading"])) {
-    return "Reading";
-  }
-  if (includesAny(text, ["sen"])) {
+  if (includesAny(text, ["sen", "special educational needs"])) {
     return "SEN";
   }
+  if (includesAny(text, ["steam"])) {
+    return "STEAM";
+  }
+  if (includesAny(text, ["administration", "admin"])) {
+    return "Administration";
+  }
+  if (includesAny(text, ["music"])) {
+    return "Music";
+  }
+  if (includesAny(text, ["mandarin"])) {
+    return "Mandarin";
+  }
+  if (includesAny(text, ["bm", "bahasa"])) {
+    return "BM";
+  }
+  if (includesAny(text, ["p.e.", "physical education", " pe ", "pe "])) {
+    return "P.E.";
+  }
+  if (includesAny(text, ["library"])) {
+    return "Library";
+  }
+  if (includesAny(text, ["coding", "computer science"])) {
+    return "Coding";
+  }
 
-  return "Other Support";
+  return "General Support";
+}
+
+function getStaffFilterTeamLabel(
+  person: StaffDirectoryRecord,
+  classYearGroupLookup: Map<string, string>
+) {
+  const teamKey = getStaffTeamKey(person, classYearGroupLookup);
+
+  if (teamKey === "slt") {
+    return "SLT";
+  }
+
+  return getStaffSubGroupTitle(person, teamKey, classYearGroupLookup);
 }
 
 function compareStaff(left: StaffDirectoryRecord, right: StaffDirectoryRecord) {
@@ -271,7 +400,10 @@ function compareStaff(left: StaffDirectoryRecord, right: StaffDirectoryRecord) {
   return left.name.localeCompare(right.name, undefined, { numeric: true });
 }
 
-function buildStaffTeamSections(staff: StaffDirectoryRecord[]): StaffTeamSection[] {
+function buildStaffTeamSections(
+  staff: StaffDirectoryRecord[],
+  classYearGroupLookup: Map<string, string>
+): StaffTeamSection[] {
   const teamDefinitions: Array<{
     key: StaffTeamKey;
     title: string;
@@ -289,22 +421,60 @@ function buildStaffTeamSections(staff: StaffDirectoryRecord[]): StaffTeamSection
     {
       key: "specialist",
       title: "Specialist Teams",
-      subgroupOrder: ["Music", "Mandarin", "BM", "P.E.", "Library", "Coding", "Other Specialists"]
+      subgroupOrder: [
+        "Music",
+        "Mandarin",
+        "BM",
+        "P.E.",
+        "Library",
+        "Coding",
+        "STEAM",
+        "Maths Support",
+        "Remedial Reading",
+        "EAL",
+        "SENCo",
+        "SEN",
+        "Counselling",
+        "Administration",
+        "General Specialist"
+      ]
     },
     {
       key: "support",
       title: "Support Teams",
-      subgroupOrder: ["EAL", "Maths", "Reading", "SEN", "Other Support"]
+      subgroupOrder: [
+        "Administration",
+        "Counselling",
+        "Maths Support",
+        "Remedial Reading",
+        "EAL",
+        "SENCo",
+        "SEN",
+        "STEAM",
+        "Music",
+        "Mandarin",
+        "BM",
+        "P.E.",
+        "Library",
+        "Coding",
+        "General Support"
+      ]
     }
   ];
 
   return teamDefinitions
     .map((teamDefinition) => {
-      const staffInTeam = staff.filter((person) => getStaffTeamKey(person) === teamDefinition.key);
+      const staffInTeam = staff.filter(
+        (person) => getStaffTeamKey(person, classYearGroupLookup) === teamDefinition.key
+      );
       const grouped = new Map<string, StaffDirectoryRecord[]>();
 
       for (const person of staffInTeam) {
-        const subGroupTitle = getStaffSubGroupTitle(person, teamDefinition.key);
+        const subGroupTitle = getStaffSubGroupTitle(
+          person,
+          teamDefinition.key,
+          classYearGroupLookup
+        );
         const existing = grouped.get(subGroupTitle) ?? [];
         existing.push(person);
         grouped.set(subGroupTitle, existing);
@@ -338,7 +508,6 @@ function buildStaffTeamSections(staff: StaffDirectoryRecord[]): StaffTeamSection
     })
     .filter((team) => team.subGroups.length > 0);
 }
-
 function buildKnownClassLookup(options: StaffDirectoryClassOption[]) {
   const lookup = new Set<string>();
 
@@ -533,6 +702,7 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [formValues, setFormValues] = useState<StaffDirectoryUpsertInput>(EMPTY_FORM);
@@ -554,6 +724,15 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
     () => buildKnownClassLookup(classOptions),
     [classOptions]
   );
+  const classYearGroupLookup = useMemo(
+    () => buildClassYearGroupLookup(classOptions),
+    [classOptions]
+  );
+  const teamOptions = useMemo(
+    () =>
+      uniqueValues(staff.map((person) => getStaffFilterTeamLabel(person, classYearGroupLookup))),
+    [classYearGroupLookup, staff]
+  );
 
   const filteredStaff = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -574,14 +753,16 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
 
       const matchesDepartment =
         !departmentFilter || (person.department ?? "").trim() === departmentFilter;
+      const matchesTeam =
+        !teamFilter || getStaffFilterTeamLabel(person, classYearGroupLookup) === teamFilter;
 
-      return matchesSearch && matchesDepartment;
+      return matchesSearch && matchesDepartment && matchesTeam;
     });
-  }, [departmentFilter, searchTerm, staff]);
+  }, [classYearGroupLookup, departmentFilter, searchTerm, staff, teamFilter]);
 
   const groupedStaffSections = useMemo(
-    () => buildStaffTeamSections(filteredStaff),
-    [filteredStaff]
+    () => buildStaffTeamSections(filteredStaff, classYearGroupLookup),
+    [classYearGroupLookup, filteredStaff]
   );
 
   const selectedStaff =
@@ -790,6 +971,21 @@ export function StaffDirectory({ staff, classOptions }: StaffDirectoryProps) {
             >
               <option value="">All Departments</option>
               {departmentOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="teamFilter">Team</label>
+            <select
+              id="teamFilter"
+              value={teamFilter}
+              onChange={(event) => setTeamFilter(event.target.value)}
+            >
+              <option value="">All Teams</option>
+              {teamOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
