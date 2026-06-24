@@ -25,7 +25,11 @@ export default async function DirectoryPage() {
         <SignOutButton />
       </section>
       <PortalNav allowedViews={access.allowedViews} />
-      <StaffDirectory staff={staff} classOptions={classOptions} />
+      <StaffDirectory
+        staff={staff}
+        classOptions={classOptions}
+        showAdminGuidance={access.isFullAccess}
+      />
     </main>
   );
 }
