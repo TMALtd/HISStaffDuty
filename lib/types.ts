@@ -71,6 +71,34 @@ export type GradebookEntry = {
   field_values: Record<string, string>;
 };
 
+export type GradebookSectionMode = "profile" | "assessment";
+
+export type GradebookSectionSlug =
+  | "pastoral"
+  | "learning-support"
+  | "ptms"
+  | "phonics"
+  | "reading"
+  | "writing"
+  | "maths"
+  | "ipc";
+
+export type GradebookSectionDefinition = {
+  slug: GradebookSectionSlug;
+  name: string;
+  mode: GradebookSectionMode;
+  description: string;
+  recommendedPageName: string;
+  emptyStateTitle: string;
+  emptyStateCopy: string;
+  fieldOrder?: string[];
+};
+
+export type GradebookWorkspaceSection = GradebookSectionDefinition & {
+  subject: GradebookSubject | null;
+  isConfigured: boolean;
+};
+
 export type StaffProfile = {
   id: string;
   staff_id: string | null;
