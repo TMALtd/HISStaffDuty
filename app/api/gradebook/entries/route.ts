@@ -4,6 +4,7 @@ import {
   getGradebookSubjectById,
   getGradebookEntries,
   getGradebookFieldDefinitions,
+  getStaffDirectoryClassOptions,
   getStudents,
   upsertGradebookEntry
 } from "@/lib/data";
@@ -31,15 +32,18 @@ export async function GET(request: Request) {
     const infoOnly = subject?.slug === "student-pastoral";
     const students = await getStudents(filters);
     const fields = await getGradebookFieldDefinitions(subjectId);
-    const entries = await getGradebookEntries({
-      subjectId,
-      studentIds: students.map((student) => student.school_id),
-      assessmentName,
-      assessmentDate,
-      infoOnly
-    });
+    const [entries, classOptions] = await Promise.all([
+      getGradebookEntries({
+        subjectId,
+        studentIds: students.map((student) => student.school_id),
+        assessmentName,
+        assessmentDate,
+        infoOnly
+      }),
+      getStaffDirectoryClassOptions()
+    ]);
 
-    return NextResponse.json({ students, fields, entries, subject });
+    return NextResponse.json({ students, fields, entries, subject, classOptions });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load gradebook entries." },

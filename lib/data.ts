@@ -32,6 +32,7 @@ import {
   type FilterOptions,
   type FilterState,
   type StaffDirectoryClassOption,
+  type StudentClassAssignmentInput,
   type StaffDirectoryRecord,
   type StaffDirectoryUpsertInput,
   type StaffProfile,
@@ -48,8 +49,25 @@ type ClassRecord = {
   "Class Name": string;
 };
 
+type StudentClassAssignmentRow = {
+  student_school_id: string;
+  class_name: string;
+  class_code: string | null;
+};
+
+type StudentClassMetadata = {
+  class_code: string;
+  class_name: string;
+  school: string;
+  designation: string;
+  year_group: string;
+  milepost: string;
+  level: string;
+};
+
 const TABLE_NAME = "Class List";
 const VIEW_NAME = "student_class_roster";
+const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
 const SUBJECTS_TABLE = "gradebook_subjects";
 const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
@@ -1121,11 +1139,142 @@ export async function getFilterOptions(filters: Partial<FilterState>): Promise<F
   return result;
 }
 
+async function getStudentClassAssignmentRows(): Promise<StudentClassAssignmentRow[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+    .select("student_school_id,class_name,class_code");
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+      return [];
+    }
+
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    student_school_id: String(row.student_school_id ?? "").trim(),
+    class_name: String(row.class_name ?? "").trim(),
+    class_code: row.class_code ? String(row.class_code).trim() : null
+  }));
+}
+
+function buildStudentClassMetadataLookup(
+  classRecords: ClassRecord[],
+  timetableRows: Array<Record<string, unknown> & { class_code: string | null; class_name: string }>
+) {
+  const byClassName = new Map<string, StudentClassMetadata>();
+  const byClassCode = new Map<string, StudentClassMetadata>();
+
+  const register = (metadata: StudentClassMetadata) => {
+    buildTimetableLookupKeys(metadata.class_name).forEach((key) => byClassName.set(key, metadata));
+    buildTimetableLookupKeys(metadata.class_code).forEach((key) => byClassCode.set(key, metadata));
+  };
+
+  classRecords.forEach((row) => {
+    register({
+      class_code: String(row["Class Code"] ?? "").trim(),
+      class_name: String(row["Class Name"] ?? "").trim(),
+      school: String(row.School ?? "").trim(),
+      designation: String(row.Designation ?? "").trim(),
+      year_group: String(row["Year Group"] ?? "").trim(),
+      milepost: String(row.Milepost ?? "").trim(),
+      level: String(row.Level ?? "").trim()
+    });
+  });
+
+  timetableRows.forEach((row) => {
+    const className = String(row.class_name ?? "").trim();
+    const classCode = row.class_code ? String(row.class_code).trim() : "";
+    const existing =
+      buildTimetableLookupKeys(className)
+        .map((key) => byClassName.get(key))
+        .find(Boolean) ?? null;
+
+    register({
+      class_code: classCode || existing?.class_code || "",
+      class_name: className,
+      school: existing?.school || "Primary",
+      designation:
+        existing?.designation ||
+        titleCaseWords(String(row.stream_type ?? "").trim() || "Mainstream"),
+      year_group: existing?.year_group || "",
+      milepost:
+        existing?.milepost || inferMilepostFromYearGroup(existing?.year_group || ""),
+      level: existing?.level || "Primary"
+    });
+  });
+
+  return { byClassName, byClassCode };
+}
+
+async function getClassTeacherLookup(): Promise<Map<string, string>> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STAFF_TABLE)
+    .select("name,first_name,role,class")
+    .not("class", "is", null)
+    .order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const grouped = new Map<string, Array<{ name: string; first_name: string | null; role: string | null }>>();
+
+  ((data ?? []) as Array<Record<string, unknown>>).forEach((row) => {
+    const className = String(row.class ?? "").trim();
+    if (!className) {
+      return;
+    }
+
+    const teacher = {
+      name: String(row.name ?? "").trim(),
+      first_name: row.first_name ? String(row.first_name).trim() : null,
+      role: row.role ? String(row.role).trim() : null
+    };
+
+    buildTimetableLookupKeys(className).forEach((key) => {
+      const current = grouped.get(key) ?? [];
+      current.push(teacher);
+      grouped.set(key, current);
+    });
+  });
+
+  const resolved = new Map<string, string>();
+
+  grouped.forEach((teachers, key) => {
+    const ordered = [...teachers].sort((left, right) => {
+      const leftRole = (left.role ?? "").toLowerCase();
+      const rightRole = (right.role ?? "").toLowerCase();
+      const leftScore = leftRole.includes("homeroom") ? 0 : 1;
+      const rightScore = rightRole.includes("homeroom") ? 0 : 1;
+
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore;
+      }
+
+      return left.name.localeCompare(right.name, undefined, { numeric: true });
+    });
+
+    resolved.set(
+      key,
+      ordered
+        .map((teacher) => teacher.first_name || teacher.name)
+        .filter(Boolean)
+        .join(" / ")
+    );
+  });
+
+  return resolved;
+}
+
 export async function getStudents(filters: Partial<FilterState>): Promise<StudentRow[]> {
   const supabase = createSupabaseAdminClient();
   const normalized = normalizeFilterState(filters);
 
-  let query = supabase
+  const { data, error } = await supabase
     .from(VIEW_NAME)
     .select(
       "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
@@ -1133,44 +1282,144 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
     .order("class_name")
     .order("full_name");
 
-  if (normalized.school) {
-    query = query.eq("school", normalized.school);
-  }
-  if (normalized.designation) {
-    query = query.eq("designation", normalized.designation);
-  }
-  if (normalized.yearGroup) {
-    query = query.eq("year_group", normalized.yearGroup);
-  }
-  if (normalized.milepost) {
-    query = query.eq("milepost", normalized.milepost);
-  }
-  if (normalized.level) {
-    query = query.eq("level", normalized.level);
-  }
-  if (normalized.className) {
-    query = query.eq("class_name", normalized.className);
-  }
-
-  const { data, error } = await query;
-
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as StudentRow[]).map((student) => ({
-    ...student,
-    school_id: String(student.school_id),
-    full_name: student.full_name ?? "",
-    surname: student.surname ?? null,
-    first_name: student.first_name ?? null,
-    preferred_name: student.preferred_name ?? null,
-    gender: student.gender ?? null,
-    form: student.form ?? "",
-    year_code: student.year_code ?? null,
-    tutor: student.tutor ?? null,
-    academic_house: student.academic_house ?? null
-  }));
+  const [assignmentRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
+    getStudentClassAssignmentRows(),
+    getClassRecords(),
+    selectClassTimetableRows(),
+    getClassTeacherLookup()
+  ]);
+
+  const assignmentsByStudentId = new Map(
+    assignmentRows.map((row) => [row.student_school_id, row])
+  );
+  const classMetadataLookup = buildStudentClassMetadataLookup(classRecords, timetableRows);
+
+  return ((data ?? []) as StudentRow[])
+    .map((student) => {
+      const schoolId = String(student.school_id);
+      const assignment = assignmentsByStudentId.get(schoolId) ?? null;
+      const assignedMetadata = assignment
+        ? (assignment.class_code
+            ? classMetadataLookup.byClassCode.get(normalizeTimetableLookupKey(assignment.class_code))
+            : null) ??
+          classMetadataLookup.byClassName.get(normalizeTimetableLookupKey(assignment.class_name)) ??
+          null
+        : null;
+
+      const classCode = assignedMetadata?.class_code || assignment?.class_code || String(student.class_code ?? "");
+      const className = assignedMetadata?.class_name || assignment?.class_name || String(student.class_name ?? "");
+      const teacherName =
+        buildTimetableLookupKeys(className)
+          .map((key) => teacherLookup.get(key))
+          .find(Boolean) ?? null;
+
+      const nextStudent: StudentRow = {
+        ...student,
+        class_code: classCode,
+        class_name: className,
+        school: assignedMetadata?.school || String(student.school ?? ""),
+        designation: assignedMetadata?.designation || String(student.designation ?? ""),
+        year_group: assignedMetadata?.year_group || String(student.year_group ?? ""),
+        milepost: assignedMetadata?.milepost || String(student.milepost ?? ""),
+        level: assignedMetadata?.level || String(student.level ?? ""),
+        school_id: schoolId,
+        full_name: student.full_name ?? "",
+        surname: student.surname ?? null,
+        first_name: student.first_name ?? null,
+        preferred_name: student.preferred_name ?? null,
+        gender: student.gender ?? null,
+        form: student.form ?? "",
+        year_code: student.year_code ?? null,
+        tutor: student.tutor ?? null,
+        academic_house: student.academic_house ?? null,
+        assigned_teacher_name: teacherName,
+        class_assignment_source: assignment ? "override" : "roster"
+      };
+
+      return nextStudent;
+    })
+    .filter((student) => {
+      if (normalized.school && student.school !== normalized.school) {
+        return false;
+      }
+      if (normalized.designation && student.designation !== normalized.designation) {
+        return false;
+      }
+      if (normalized.yearGroup && student.year_group !== normalized.yearGroup) {
+        return false;
+      }
+      if (normalized.milepost && student.milepost !== normalized.milepost) {
+        return false;
+      }
+      if (normalized.level && student.level !== normalized.level) {
+        return false;
+      }
+      if (normalized.className && student.class_name !== normalized.className) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        left.class_name.localeCompare(right.class_name, undefined, { numeric: true }) ||
+        left.full_name.localeCompare(right.full_name, undefined, { numeric: true })
+    );
+}
+
+export async function upsertStudentClassAssignment(
+  input: StudentClassAssignmentInput,
+  assignedByEmail?: string | null
+): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const studentSchoolId = normalizeRequiredText(input.studentSchoolId, "Student school ID");
+  const className = normalizeOptionalText(input.className);
+  const classCode = normalizeOptionalText(input.classCode);
+
+  if (!className) {
+    const { error } = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .delete()
+      .eq("student_school_id", studentSchoolId);
+
+    if (error) {
+      if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+        throw new Error(
+          "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
+        );
+      }
+
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const payload = {
+    student_school_id: studentSchoolId,
+    class_name: className,
+    class_code: classCode,
+    assigned_by_email: normalizeOptionalText(assignedByEmail)?.toLowerCase() ?? null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+    .upsert(payload, { onConflict: "student_school_id" });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+      throw new Error(
+        "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
+      );
+    }
+
+    throw new Error(error.message);
+  }
 }
 
 export async function getStaffProfileByEmail(email: string): Promise<StaffProfile | null> {

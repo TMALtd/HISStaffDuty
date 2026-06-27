@@ -9,15 +9,18 @@ import type {
   GradebookSubject,
   GradebookWorkspaceSection,
   FilterState,
+  StaffDirectoryClassOption,
   StudentRow
 } from "@/lib/types";
 
 type GradebookWorkspaceProps = {
+  canManageAssignments: boolean;
   initialFilters: FilterState;
 };
 
 type EntriesResponse = {
   students: StudentRow[];
+  classOptions: StaffDirectoryClassOption[];
   fields: GradebookFieldDefinition[];
   entries: GradebookEntry[];
   subject: GradebookSubject | null;
@@ -42,6 +45,17 @@ type DraftRow = {
   assessmentName: string;
   assessmentDate: string;
 };
+
+function formatClassOptionLabel(option: StaffDirectoryClassOption) {
+  const streamLabel =
+    option.streamType === "bilingual"
+      ? "Bilingual"
+      : option.streamType === "mainstream"
+        ? "Mainstream"
+        : null;
+
+  return [option.className, option.yearGroup, streamLabel].filter(Boolean).join(" | ");
+}
 
 function buildQueryString(filters: FilterState) {
   const params = new URLSearchParams();
@@ -78,7 +92,10 @@ function orderFields(section: GradebookWorkspaceSection, fields: GradebookFieldD
     );
 }
 
-export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) {
+export function GradebookWorkspace({
+  canManageAssignments,
+  initialFilters
+}: GradebookWorkspaceProps) {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSectionSlug, setSelectedSectionSlug] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -88,10 +105,14 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     Array<{ assessment_name: string; assessment_date: string }>
   >([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [classOptions, setClassOptions] = useState<StaffDirectoryClassOption[]>([]);
+  const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<GradebookFieldDefinition[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({});
   const [subjectMeta, setSubjectMeta] = useState<GradebookSubject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [assignmentSavingId, setAssignmentSavingId] = useState("");
+  const [refreshToken, setRefreshToken] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -101,6 +122,10 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     [sections, selectedSectionSlug]
   );
   const linkedSubject = selectedSection?.subject ?? null;
+  const classOptionLookup = useMemo(
+    () => new Map(classOptions.map((option) => [option.className, option])),
+    [classOptions]
+  );
   const filteredStudents = useMemo(
     () =>
       selectedStudentId
@@ -160,6 +185,8 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     setAssessmentDate("");
     setAssessments([]);
     setStudents([]);
+    setClassOptions([]);
+    setClassDrafts({});
     setFields([]);
     setDrafts({});
     setSubjectMeta(null);
@@ -270,10 +297,13 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         }
 
         setSubjectMeta(json.subject);
+        setClassOptions(json.classOptions);
 
         const nextDrafts: Record<string, DraftRow> = {};
+        const nextClassDrafts: Record<string, string> = {};
         json.students.forEach((student) => {
           const existing = json.entries.find((entry) => entry.student_school_id === student.school_id);
+          nextClassDrafts[student.school_id] = student.class_name;
           nextDrafts[student.school_id] = existing
             ? {
                 grade: existing.grade ?? "",
@@ -287,6 +317,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         });
 
         setStudents(json.students);
+        setClassDrafts(nextClassDrafts);
         if (selectedStudentId && !json.students.some((student) => student.school_id === selectedStudentId)) {
           setSelectedStudentId("");
         }
@@ -314,6 +345,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     assessments.length,
     initialFilters,
     linkedSubject,
+    refreshToken,
     selectedSection,
     selectedStudentId
   ]);
@@ -351,6 +383,49 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
         }
       }
     }));
+  }
+
+  function updateClassDraft(studentId: string, className: string) {
+    setClassDrafts((current) => ({
+      ...current,
+      [studentId]: className
+    }));
+  }
+
+  async function saveStudentClassAssignment(student: StudentRow) {
+    const nextClassName = classDrafts[student.school_id] ?? student.class_name;
+    const selectedOption = classOptionLookup.get(nextClassName) ?? null;
+
+    setAssignmentSavingId(student.school_id);
+    setError("");
+
+    try {
+      const response = await fetch("/api/students", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          studentSchoolId: student.school_id,
+          className: nextClassName,
+          classCode: selectedOption?.classCode ?? null
+        })
+      });
+
+      if (!response.ok) {
+        const json = (await response.json()) as { error?: string };
+        throw new Error(json.error ?? "Could not update class placement.");
+      }
+
+      setStatus(`Updated ${student.full_name} to ${nextClassName}.`);
+      setError("");
+      setSelectedStudentId(student.school_id);
+      setAssignmentSavingId("");
+      setRefreshToken((current) => current + 1);
+    } catch (saveError) {
+      setAssignmentSavingId("");
+      setError(saveError instanceof Error ? saveError.message : "Could not update class placement.");
+    }
   }
 
   async function saveEntry(student: StudentRow) {
@@ -490,6 +565,49 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
     );
   }
 
+  function renderClassAssignmentControls(student: StudentRow) {
+    if (!canManageAssignments || !classOptions.length) {
+      return null;
+    }
+
+    return (
+      <div className="student-assignment-grid">
+        <div className="field">
+          <label htmlFor={`studentClass-${student.school_id}`}>Assigned class</label>
+          <select
+            id={`studentClass-${student.school_id}`}
+            value={classDrafts[student.school_id] ?? student.class_name}
+            onChange={(event) => updateClassDraft(student.school_id, event.target.value)}
+          >
+            {classOptions.map((option) => (
+              <option key={`${option.classCode}-${option.className}`} value={option.className}>
+                {formatClassOptionLabel(option)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="identity-chip">
+          <span>Assigned teacher</span>
+          <strong>{student.assigned_teacher_name || "No linked homeroom teacher yet"}</strong>
+        </div>
+        <div className="identity-chip">
+          <span>Assignment source</span>
+          <strong>{student.class_assignment_source === "override" ? "Manual override" : "Roster"}</strong>
+        </div>
+        <div className="actions">
+          <button
+            className="button"
+            type="button"
+            onClick={() => void saveStudentClassAssignment(student)}
+            disabled={assignmentSavingId === student.school_id}
+          >
+            {assignmentSavingId === student.school_id ? "Saving..." : "Update Class Placement"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function renderProfileCards() {
     return (
       <div className="pastoral-grid">
@@ -520,6 +638,7 @@ export function GradebookWorkspace({ initialFilters }: GradebookWorkspaceProps) 
               </div>
 
               {renderIdentityChips(student)}
+              {renderClassAssignmentControls(student)}
 
               <div className="pastoral-fields-grid">
                 {fields.map((field) => (

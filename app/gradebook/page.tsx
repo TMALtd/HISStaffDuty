@@ -25,6 +25,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
       </section>
       <PortalNav allowedViews={access.allowedViews} />
       <GradebookWorkspace
+        canManageAssignments={access.isFullAccess}
         initialFilters={{
           school: toStringValue(searchParams.school),
           designation: toStringValue(searchParams.designation),

@@ -38,6 +38,8 @@ export type StudentRow = {
   year_code: string | null;
   tutor: string | null;
   academic_house: string | null;
+  assigned_teacher_name: string | null;
+  class_assignment_source: "roster" | "override";
 };
 
 export type GradebookSubject = {
@@ -150,6 +152,12 @@ export type StaffDirectoryClassOption = {
   className: string;
   yearGroup: string;
   streamType: TimetableStreamType | null;
+};
+
+export type StudentClassAssignmentInput = {
+  studentSchoolId: string;
+  className: string | null;
+  classCode?: string | null;
 };
 
 export type StaffDirectoryUpsertInput = {
