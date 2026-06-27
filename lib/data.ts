@@ -3270,13 +3270,16 @@ export async function getGradebookEntries(params: {
   if (params.infoOnly) {
     query = query.order("assessment_date", { ascending: false }).order("updated_at", { ascending: false });
   } else {
-    if (!params.assessmentName || !params.assessmentDate) {
-      return [];
+    if (params.assessmentName && params.assessmentDate) {
+      query = query
+        .eq("assessment_name", params.assessmentName)
+        .eq("assessment_date", params.assessmentDate);
+    } else {
+      query = query
+        .order("assessment_date", { ascending: true })
+        .order("assessment_name")
+        .order("student_school_id");
     }
-
-    query = query
-      .eq("assessment_name", params.assessmentName)
-      .eq("assessment_date", params.assessmentDate);
   }
 
   const { data, error } = await query;

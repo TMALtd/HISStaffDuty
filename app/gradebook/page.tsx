@@ -1,4 +1,6 @@
-import { requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getTimetablePreviewStaffOptions } from "@/lib/data";
+import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { GradebookWorkspace } from "@/components/gradebook-workspace";
@@ -12,7 +14,15 @@ function toStringValue(value: string | string[] | undefined) {
 }
 
 export default async function GradebookPage({ searchParams }: GradebookPageProps) {
-  const { user, access } = await requirePortalAccess("gradebook");
+  const session = await requirePortalAccess("gradebook");
+  const { user, access } = session;
+  const previewEmail = toStringValue(searchParams.viewAs);
+  const preview = await getAccessPreviewSession(session, previewEmail);
+  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
+  const activeClassName =
+    !preview.activeAccess.isFullAccess
+      ? preview.activeProfile?.class || preview.activeProfile?.timetable || ""
+      : toStringValue(searchParams.className);
 
   return (
     <main className="page-shell">
@@ -20,19 +30,29 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         <div>
           <p className="eyebrow">HELP staff workspace</p>
           <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+          {preview.isPreviewing ? (
+            <p className="meta">
+              Viewing as {preview.activeProfile?.name ?? preview.previewEmail} ({preview.activeAccess.roleLabel})
+            </p>
+          ) : null}
         </div>
+        {access.isFullAccess ? (
+          <AccessPreviewSwitcher options={previewOptions} selectedEmail={preview.previewEmail} />
+        ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={access.allowedViews} />
+      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
       <GradebookWorkspace
-        canManageAssignments={access.isFullAccess}
+        canManageAssignments={access.isFullAccess && !preview.isPreviewing}
+        canManageSetup={access.isFullAccess && !preview.isPreviewing}
+        previewEmail={preview.previewEmail}
         initialFilters={{
           school: toStringValue(searchParams.school),
           designation: toStringValue(searchParams.designation),
           yearGroup: toStringValue(searchParams.yearGroup),
           milepost: toStringValue(searchParams.milepost),
           level: toStringValue(searchParams.level),
-          className: toStringValue(searchParams.className)
+          className: activeClassName
         }}
       />
     </main>

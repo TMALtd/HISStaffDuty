@@ -15,7 +15,9 @@ import type {
 
 type GradebookWorkspaceProps = {
   canManageAssignments: boolean;
+  canManageSetup: boolean;
   initialFilters: FilterState;
+  previewEmail?: string | null;
 };
 
 type EntriesResponse = {
@@ -23,18 +25,15 @@ type EntriesResponse = {
   classOptions: StaffDirectoryClassOption[];
   fields: GradebookFieldDefinition[];
   entries: GradebookEntry[];
+  assessments?: Array<{
+    assessment_name: string;
+    assessment_date: string;
+  }>;
   subject: GradebookSubject | null;
 };
 
 type SubjectsResponse = {
   subjects: GradebookSubject[];
-};
-
-type AssessmentsResponse = {
-  assessments: Array<{
-    assessment_name: string;
-    assessment_date: string;
-  }>;
 };
 
 type DraftRow = {
@@ -45,6 +44,15 @@ type DraftRow = {
   assessmentName: string;
   assessmentDate: string;
 };
+
+type AssessmentColumn = {
+  assessment_name: string;
+  assessment_date: string;
+};
+
+function assessmentKey(assessmentName: string, assessmentDate: string) {
+  return `${assessmentName}||${assessmentDate}`;
+}
 
 function formatClassOptionLabel(option: StaffDirectoryClassOption) {
   const streamLabel =
@@ -94,24 +102,28 @@ function orderFields(section: GradebookWorkspaceSection, fields: GradebookFieldD
 
 export function GradebookWorkspace({
   canManageAssignments,
+  canManageSetup,
   initialFilters
+  ,
+  previewEmail
 }: GradebookWorkspaceProps) {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSectionSlug, setSelectedSectionSlug] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [assessmentName, setAssessmentName] = useState("");
-  const [assessmentDate, setAssessmentDate] = useState("");
-  const [assessments, setAssessments] = useState<
-    Array<{ assessment_name: string; assessment_date: string }>
-  >([]);
+  const [newAssessmentName, setNewAssessmentName] = useState("");
+  const [newAssessmentDate, setNewAssessmentDate] = useState("");
+  const [assessments, setAssessments] = useState<AssessmentColumn[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [classOptions, setClassOptions] = useState<StaffDirectoryClassOption[]>([]);
   const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<GradebookFieldDefinition[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({});
+  const [assessmentDrafts, setAssessmentDrafts] = useState<Record<string, Record<string, DraftRow>>>({});
+  const [entryIndex, setEntryIndex] = useState<Record<string, Record<string, GradebookEntry>>>({});
   const [subjectMeta, setSubjectMeta] = useState<GradebookSubject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [assignmentSavingId, setAssignmentSavingId] = useState("");
+  const [isSavingAssessmentGrid, setIsSavingAssessmentGrid] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -181,14 +193,16 @@ export function GradebookWorkspace({
 
   useEffect(() => {
     setSelectedStudentId("");
-    setAssessmentName("");
-    setAssessmentDate("");
+    setNewAssessmentName("");
+    setNewAssessmentDate("");
     setAssessments([]);
     setStudents([]);
     setClassOptions([]);
     setClassDrafts({});
     setFields([]);
     setDrafts({});
+    setAssessmentDrafts({});
+    setEntryIndex({});
     setSubjectMeta(null);
     setStatus("");
     setError("");
@@ -197,70 +211,8 @@ export function GradebookWorkspace({
   useEffect(() => {
     let isMounted = true;
 
-    async function loadAssessments() {
-      if (!selectedSection || selectedSection.mode !== "assessment" || !linkedSubject) {
-        setAssessments([]);
-        return;
-      }
-
-      const params = new URLSearchParams({ subjectId: linkedSubject.id });
-      if (initialFilters.className) {
-        params.set("className", initialFilters.className);
-      }
-
-      const response = await fetch(`/api/gradebook/assessments?${params.toString()}`, {
-        cache: "no-store"
-      });
-
-      if (!response.ok) {
-        throw new Error("Could not load assessments.");
-      }
-
-      const json = (await response.json()) as AssessmentsResponse;
-
-      if (!isMounted) {
-        return;
-      }
-
-      setAssessments(json.assessments);
-
-      const hasCurrentMatch = json.assessments.some(
-        (assessment) =>
-          assessment.assessment_name === assessmentName &&
-          assessment.assessment_date === assessmentDate
-      );
-
-      if ((!assessmentName && !assessmentDate && json.assessments[0]) || (!hasCurrentMatch && json.assessments[0])) {
-        setAssessmentName(json.assessments[0].assessment_name);
-        setAssessmentDate(json.assessments[0].assessment_date);
-      }
-    }
-
-    void loadAssessments().catch((loadError) => {
-      if (isMounted) {
-        setError(loadError instanceof Error ? loadError.message : "Could not load assessments.");
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [assessmentDate, assessmentName, initialFilters.className, linkedSubject, selectedSection]);
-
-  useEffect(() => {
-    let isMounted = true;
-
     async function loadEntries() {
       if (!selectedSection || !linkedSubject) {
-        setIsLoading(false);
-        return;
-      }
-
-      if (
-        selectedSection.mode === "assessment" &&
-        (!assessmentName || !assessmentDate) &&
-        assessments.length > 0
-      ) {
         setIsLoading(false);
         return;
       }
@@ -272,14 +224,8 @@ export function GradebookWorkspace({
       try {
         const params = new URLSearchParams(buildQueryString(initialFilters));
         params.set("subjectId", linkedSubject.id);
-
-        if (selectedSection.mode === "assessment") {
-          if (assessmentName) {
-            params.set("assessmentName", assessmentName);
-          }
-          if (assessmentDate) {
-            params.set("assessmentDate", assessmentDate);
-          }
+        if (previewEmail) {
+          params.set("viewAs", previewEmail);
         }
 
         const response = await fetch(`/api/gradebook/entries?${params.toString()}`, {
@@ -298,12 +244,73 @@ export function GradebookWorkspace({
 
         setSubjectMeta(json.subject);
         setClassOptions(json.classOptions);
+        const assessmentSet = new Map<string, AssessmentColumn>();
+
+        (json.assessments ?? []).forEach((assessment) => {
+          assessmentSet.set(
+            assessmentKey(assessment.assessment_name, assessment.assessment_date),
+            assessment
+          );
+        });
+
+        json.entries.forEach((entry) => {
+          assessmentSet.set(
+            assessmentKey(entry.assessment_name, entry.assessment_date),
+            {
+              assessment_name: entry.assessment_name,
+              assessment_date: entry.assessment_date
+            }
+          );
+        });
+
+        const nextAssessments = Array.from(assessmentSet.values()).sort(
+          (left, right) =>
+            left.assessment_date.localeCompare(right.assessment_date) ||
+            left.assessment_name.localeCompare(right.assessment_name, undefined, { numeric: true })
+        );
+        setAssessments(nextAssessments);
 
         const nextDrafts: Record<string, DraftRow> = {};
         const nextClassDrafts: Record<string, string> = {};
+        const nextAssessmentDrafts: Record<string, Record<string, DraftRow>> = {};
+        const nextEntryIndex: Record<string, Record<string, GradebookEntry>> = {};
         json.students.forEach((student) => {
           const existing = json.entries.find((entry) => entry.student_school_id === student.school_id);
           nextClassDrafts[student.school_id] = student.class_name;
+          const studentEntries = json.entries.filter(
+            (entry) => entry.student_school_id === student.school_id
+          );
+          nextEntryIndex[student.school_id] = {};
+          nextAssessmentDrafts[student.school_id] = {};
+
+          nextAssessments.forEach((assessment) => {
+            const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+            const matchingEntry = studentEntries.find(
+              (entry) =>
+                entry.assessment_name === assessment.assessment_name &&
+                entry.assessment_date === assessment.assessment_date
+            );
+
+            if (matchingEntry) {
+              nextEntryIndex[student.school_id][key] = matchingEntry;
+            }
+
+            nextAssessmentDrafts[student.school_id][key] = matchingEntry
+              ? {
+                  grade: matchingEntry.grade ?? "",
+                  score: matchingEntry.score ?? "",
+                  comment: matchingEntry.comment ?? "",
+                  fieldValues: matchingEntry.field_values ?? {},
+                  assessmentName: matchingEntry.assessment_name,
+                  assessmentDate: matchingEntry.assessment_date
+                }
+              : {
+                  ...makeEmptyDraft(),
+                  assessmentName: assessment.assessment_name,
+                  assessmentDate: assessment.assessment_date
+                };
+          });
+
           nextDrafts[student.school_id] = existing
             ? {
                 grade: existing.grade ?? "",
@@ -318,6 +325,8 @@ export function GradebookWorkspace({
 
         setStudents(json.students);
         setClassDrafts(nextClassDrafts);
+        setAssessmentDrafts(nextAssessmentDrafts);
+        setEntryIndex(nextEntryIndex);
         if (selectedStudentId && !json.students.some((student) => student.school_id === selectedStudentId)) {
           setSelectedStudentId("");
         }
@@ -340,27 +349,13 @@ export function GradebookWorkspace({
       isMounted = false;
     };
   }, [
-    assessmentDate,
-    assessmentName,
-    assessments.length,
     initialFilters,
     linkedSubject,
+    previewEmail,
     refreshToken,
     selectedSection,
     selectedStudentId
   ]);
-
-  function handleAssessmentSelection(value: string) {
-    if (!value) {
-      setAssessmentName("");
-      setAssessmentDate("");
-      return;
-    }
-
-    const [name, date] = value.split("||");
-    setAssessmentName(name ?? "");
-    setAssessmentDate(date ?? "");
-  }
 
   function updateDraft(studentId: string, field: keyof DraftRow, value: string) {
     setDrafts((current) => ({
@@ -390,6 +385,178 @@ export function GradebookWorkspace({
       ...current,
       [studentId]: className
     }));
+  }
+
+  function updateAssessmentDraft(
+    studentId: string,
+    columnKey: string,
+    field: keyof DraftRow,
+    value: string
+  ) {
+    setAssessmentDrafts((current) => ({
+      ...current,
+      [studentId]: {
+        ...(current[studentId] ?? {}),
+        [columnKey]: {
+          ...(current[studentId]?.[columnKey] ?? makeEmptyDraft()),
+          [field]: value
+        }
+      }
+    }));
+  }
+
+  function addAssessmentColumn() {
+    if (!newAssessmentName || !newAssessmentDate) {
+      setError("Add both an assessment name and date before creating a new assignment column.");
+      return;
+    }
+
+    const nextColumn = {
+      assessment_name: newAssessmentName.trim(),
+      assessment_date: newAssessmentDate
+    };
+    const key = assessmentKey(nextColumn.assessment_name, nextColumn.assessment_date);
+
+    if (assessments.some((assessment) => assessmentKey(assessment.assessment_name, assessment.assessment_date) === key)) {
+      setError("This assignment column already exists.");
+      return;
+    }
+
+    const nextAssessments = [...assessments, nextColumn].sort(
+      (left, right) =>
+        left.assessment_date.localeCompare(right.assessment_date) ||
+        left.assessment_name.localeCompare(right.assessment_name, undefined, { numeric: true })
+    );
+
+    setAssessments(nextAssessments);
+    setAssessmentDrafts((current) => {
+      const next = { ...current };
+      students.forEach((student) => {
+        next[student.school_id] = {
+          ...(next[student.school_id] ?? {}),
+          [key]: {
+            ...makeEmptyDraft(),
+            assessmentName: nextColumn.assessment_name,
+            assessmentDate: nextColumn.assessment_date
+          }
+        };
+      });
+      return next;
+    });
+    setNewAssessmentName("");
+    setNewAssessmentDate("");
+    setError("");
+    setStatus(`Added ${nextColumn.assessment_name} as a new assignment column.`);
+  }
+
+  async function saveAssessmentSpreadsheet() {
+    if (!linkedSubject) {
+      setError("Choose a configured gradebook section before saving.");
+      return;
+    }
+
+    setIsSavingAssessmentGrid(true);
+    setError("");
+
+    try {
+      const upserts: Array<{
+        studentSchoolId: string;
+        className: string;
+        subjectId: string;
+        assessmentName: string;
+        assessmentDate: string;
+        grade: string;
+        score: string;
+        comment: string;
+        fieldValues: Record<string, string>;
+      }> = [];
+      const deletions: Array<{
+        studentSchoolId: string;
+        subjectId: string;
+        assessmentName: string;
+        assessmentDate: string;
+      }> = [];
+
+      filteredStudents.forEach((student) => {
+        assessments.forEach((assessment) => {
+          const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+          const draft = assessmentDrafts[student.school_id]?.[key];
+          if (!draft) {
+            return;
+          }
+
+          const hasValue =
+            Boolean(draft.grade.trim()) ||
+            Boolean(draft.score.trim()) ||
+            Boolean(draft.comment.trim()) ||
+            Object.values(draft.fieldValues).some((value) => Boolean(value?.trim()));
+
+          if (hasValue) {
+            upserts.push({
+              studentSchoolId: student.school_id,
+              className: student.class_name,
+              subjectId: linkedSubject.id,
+              assessmentName: assessment.assessment_name,
+              assessmentDate: assessment.assessment_date,
+              grade: draft.grade,
+              score: draft.score,
+              comment: draft.comment,
+              fieldValues: draft.fieldValues
+            });
+          } else if (entryIndex[student.school_id]?.[key]) {
+            deletions.push({
+              studentSchoolId: student.school_id,
+              subjectId: linkedSubject.id,
+              assessmentName: assessment.assessment_name,
+              assessmentDate: assessment.assessment_date
+            });
+          }
+        });
+      });
+
+      if (!upserts.length && !deletions.length) {
+        setStatus("No assessment changes to save.");
+        setIsSavingAssessmentGrid(false);
+        return;
+      }
+
+      if (upserts.length) {
+        const saveResponse = await fetch("/api/gradebook/entries", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ entries: upserts })
+        });
+
+        if (!saveResponse.ok) {
+          const json = (await saveResponse.json()) as { error?: string };
+          throw new Error(json.error ?? "Could not save assessment spreadsheet.");
+        }
+      }
+
+      if (deletions.length) {
+        const deleteResponse = await fetch("/api/gradebook/entries", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ entries: deletions })
+        });
+
+        if (!deleteResponse.ok) {
+          const json = (await deleteResponse.json()) as { error?: string };
+          throw new Error(json.error ?? "Could not clear empty assessment cells.");
+        }
+      }
+
+      setStatus(`Saved ${upserts.length} assessment value${upserts.length === 1 ? "" : "s"} across the sheet.`);
+      setRefreshToken((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save assessment spreadsheet.");
+    } finally {
+      setIsSavingAssessmentGrid(false);
+    }
   }
 
   async function saveStudentClassAssignment(student: StudentRow) {
@@ -434,20 +601,15 @@ export function GradebookWorkspace({
       return;
     }
 
-    if (selectedSection.mode === "assessment" && (!assessmentName || !assessmentDate)) {
-      setError("Select an assessment name and date before saving.");
-      return;
-    }
-
     const draft = drafts[student.school_id] ?? makeEmptyDraft();
     const effectiveAssessmentName =
       selectedSection.mode === "profile"
         ? `${selectedSection.name} Profile`
-        : assessmentName;
+        : draft.assessmentName;
     const effectiveAssessmentDate =
       selectedSection.mode === "profile"
         ? "2000-01-01"
-        : assessmentDate;
+        : draft.assessmentDate;
 
     const response = await fetch("/api/gradebook/entries", {
       method: "POST",
@@ -483,11 +645,6 @@ export function GradebookWorkspace({
       return;
     }
 
-    if (selectedSection.mode === "assessment" && (!assessmentName || !assessmentDate)) {
-      setError("Select an assessment name and date before deleting.");
-      return;
-    }
-
     const response = await fetch("/api/gradebook/entries", {
       method: "DELETE",
       headers: {
@@ -497,8 +654,8 @@ export function GradebookWorkspace({
         studentSchoolId: student.school_id,
         subjectId: linkedSubject.id,
         assessmentName:
-          selectedSection.mode === "profile" ? `${selectedSection.name} Profile` : assessmentName,
-        assessmentDate: selectedSection.mode === "profile" ? "2000-01-01" : assessmentDate
+          selectedSection.mode === "profile" ? `${selectedSection.name} Profile` : drafts[student.school_id]?.assessmentName ?? "",
+        assessmentDate: selectedSection.mode === "profile" ? "2000-01-01" : drafts[student.school_id]?.assessmentDate ?? ""
       })
     });
 
@@ -678,102 +835,63 @@ export function GradebookWorkspace({
     );
   }
 
-  function renderAssessmentTable() {
+  function renderAssessmentSpreadsheet() {
     return (
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Name</th>
-              <th>Assessment Name</th>
-              <th>Assessment Date</th>
-              <th>Grade</th>
-              <th>Score</th>
-              <th>Comment</th>
-              {fields.map((field) => (
-                <th key={field.id}>{field.field_label}</th>
+              {assessments.map((assessment) => (
+                <th key={assessmentKey(assessment.assessment_name, assessment.assessment_date)}>
+                  <div className="gradebook-assessment-column-title">{assessment.assessment_name}</div>
+                  <div className="gradebook-assessment-column-date">{assessment.assessment_date}</div>
+                </th>
               ))}
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.map((student) => {
-              const draft = drafts[student.school_id] ?? makeEmptyDraft();
-
               return (
                 <tr key={student.school_id}>
-                  <td>{student.full_name}</td>
-                  <td>{assessmentName || "Set above"}</td>
-                  <td>{assessmentDate || "Set above"}</td>
                   <td>
-                    <input
-                      className="cell-input"
-                      value={draft.grade}
-                      onChange={(event) =>
-                        updateDraft(student.school_id, "grade", event.target.value)
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="cell-input"
-                      value={draft.score}
-                      onChange={(event) =>
-                        updateDraft(student.school_id, "score", event.target.value)
-                      }
-                    />
-                  </td>
-                  <td>
-                    <textarea
-                      className="cell-textarea"
-                      value={draft.comment}
-                      onChange={(event) =>
-                        updateDraft(student.school_id, "comment", event.target.value)
-                      }
-                    />
-                  </td>
-                  {fields.map((field) => (
-                    <td key={field.id}>
-                      {field.field_type === "long_text" ? (
-                        <textarea
-                          className="cell-textarea"
-                          value={draft.fieldValues[field.field_key] ?? ""}
-                          onChange={(event) =>
-                            updateCustomField(student.school_id, field.field_key, event.target.value)
-                          }
-                        />
-                      ) : (
-                        <input
-                          className="cell-input"
-                          type={
-                            field.field_type === "number"
-                              ? "number"
-                              : field.field_type === "date"
-                                ? "date"
-                                : "text"
-                          }
-                          value={draft.fieldValues[field.field_key] ?? ""}
-                          onChange={(event) =>
-                            updateCustomField(student.school_id, field.field_key, event.target.value)
-                          }
-                        />
-                      )}
-                    </td>
-                  ))}
-                  <td>
-                    <div className="table-actions">
-                      <button className="button" type="button" onClick={() => void saveEntry(student)}>
-                        Save
-                      </button>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        onClick={() => void deleteEntry(student)}
-                      >
-                        Erase
-                      </button>
+                    <div className="gradebook-student-name">{student.full_name}</div>
+                    <div className="gradebook-student-meta">
+                      {student.class_name}
+                      {student.assigned_teacher_name ? ` | ${student.assigned_teacher_name}` : ""}
                     </div>
                   </td>
+                  {assessments.map((assessment) => {
+                    const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+                    const draft = assessmentDrafts[student.school_id]?.[key] ?? {
+                      ...makeEmptyDraft(),
+                      assessmentName: assessment.assessment_name,
+                      assessmentDate: assessment.assessment_date
+                    };
+
+                    return (
+                      <td key={`${student.school_id}-${key}`}>
+                        <div className="gradebook-assessment-cell">
+                          <input
+                            className="cell-input"
+                            placeholder="Score"
+                            value={draft.score}
+                            onChange={(event) =>
+                              updateAssessmentDraft(student.school_id, key, "score", event.target.value)
+                            }
+                          />
+                          <input
+                            className="cell-input"
+                            placeholder="Grade"
+                            value={draft.grade}
+                            onChange={(event) =>
+                              updateAssessmentDraft(student.school_id, key, "grade", event.target.value)
+                            }
+                          />
+                        </div>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -793,9 +911,11 @@ export function GradebookWorkspace({
         <h2 className="panel-title">{selectedSection.emptyStateTitle}</h2>
         <p className="hero-copy compact-copy">{selectedSection.emptyStateCopy}</p>
         <div className="actions">
-          <Link className="button" href="/admin/gradebook">
-            Open Gradebook Setup
-          </Link>
+          {canManageSetup ? (
+            <Link className="button" href="/admin/gradebook">
+              Open Gradebook Setup
+            </Link>
+          ) : null}
           <span className="hint">
             Recommended page name: {selectedSection.recommendedPageName}
           </span>
@@ -824,9 +944,11 @@ export function GradebookWorkspace({
             >
               Back to Filter View
             </Link>
-            <Link className="button" href="/admin/gradebook">
-              Gradebook Setup
-            </Link>
+            {canManageSetup ? (
+              <Link className="button" href="/admin/gradebook">
+                Gradebook Setup
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
@@ -889,45 +1011,45 @@ export function GradebookWorkspace({
           {selectedSection?.mode === "assessment" ? (
             <>
               <div className="field">
-                <label htmlFor="existingAssessment">Existing assessment</label>
-                <select
-                  id="existingAssessment"
-                  value={
-                    assessmentName && assessmentDate ? `${assessmentName}||${assessmentDate}` : ""
-                  }
-                  onChange={(event) => handleAssessmentSelection(event.target.value)}
-                  disabled={!linkedSubject}
-                >
-                  <option value="">New or custom assessment</option>
-                  {assessments.map((assessment) => (
-                    <option
-                      key={`${assessment.assessment_name}-${assessment.assessment_date}`}
-                      value={`${assessment.assessment_name}||${assessment.assessment_date}`}
-                    >
-                      {assessment.assessment_name} | {assessment.assessment_date}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="assessmentName">Assessment name</label>
+                <label htmlFor="assessmentName">New assignment name</label>
                 <input
                   id="assessmentName"
-                  value={assessmentName}
-                  onChange={(event) => setAssessmentName(event.target.value)}
+                  value={newAssessmentName}
+                  onChange={(event) => setNewAssessmentName(event.target.value)}
                   placeholder="e.g. Term 1 Numbers within 10"
                   disabled={!linkedSubject}
                 />
               </div>
               <div className="field">
-                <label htmlFor="assessmentDate">Assessment date</label>
+                <label htmlFor="assessmentDate">New assignment date</label>
                 <input
                   id="assessmentDate"
                   type="date"
-                  value={assessmentDate}
-                  onChange={(event) => setAssessmentDate(event.target.value)}
+                  value={newAssessmentDate}
+                  onChange={(event) => setNewAssessmentDate(event.target.value)}
                   disabled={!linkedSubject}
                 />
+              </div>
+              <div className="field">
+                <label>Assessment sheet</label>
+                <div className="actions" style={{ marginTop: 0 }}>
+                  <button className="button secondary" type="button" onClick={addAssessmentColumn}>
+                    Add Assignment Column
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => void saveAssessmentSpreadsheet()}
+                    disabled={isSavingAssessmentGrid}
+                  >
+                    {isSavingAssessmentGrid ? "Saving Sheet..." : "Save Assessment Sheet"}
+                  </button>
+                </div>
+                <div className="hint">
+                  {assessments.length
+                    ? `${assessments.length} assignment column${assessments.length === 1 ? "" : "s"} loaded.`
+                    : "No assignment columns yet. Add the first one above."}
+                </div>
               </div>
             </>
           ) : null}
@@ -964,7 +1086,7 @@ export function GradebookWorkspace({
             </div>
           ) : (
             <>
-              {renderAssessmentTable()}
+              {renderAssessmentSpreadsheet()}
               {!students.length && !isLoading ? (
                 <div className="empty-state">
                   No students match the current filters. Choose a different class or return to the

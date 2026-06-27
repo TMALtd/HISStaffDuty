@@ -1,4 +1,4 @@
-import type { StaffProfile, TimetableClassSummary } from "@/lib/types";
+import type { StaffProfile, StudentRow, TimetableClassSummary } from "@/lib/types";
 
 export const ALL_TIMETABLES_ACCESS_VALUE = "All Timetables";
 const NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE = normalize(ALL_TIMETABLES_ACCESS_VALUE);
@@ -27,8 +27,8 @@ export const PORTAL_NAV_ITEMS: Array<{
 ];
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
-const BASE_LINKED_PORTAL_VIEWS: PortalView[] = ["student-filter"];
-const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "timetables"];
+const BASE_LINKED_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook"];
+const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook", "timetables"];
 
 export type StaffAccess = {
   isFullAccess: boolean;
@@ -116,4 +116,25 @@ export function filterTimetableClassesForAccess(
   access: StaffAccess
 ) {
   return classes.filter((classSummary) => canAccessTimetableClass(access, classSummary));
+}
+
+export function canAccessStudent(access: StaffAccess, student: Pick<StudentRow, "class_code" | "class_name" | "year_group">) {
+  const classKeys = [student.class_code, student.class_name]
+    .map((value) => normalize(value))
+    .filter(Boolean);
+
+  return (
+    access.isFullAccess ||
+    access.allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
+    access.allowedYearGroups.includes(normalize(student.year_group)) ||
+    classKeys.some((key) => access.allowedClassKeys.includes(key))
+  );
+}
+
+export function filterStudentsForAccess(students: StudentRow[], access: StaffAccess) {
+  if (access.isFullAccess) {
+    return students;
+  }
+
+  return students.filter((student) => canAccessStudent(access, student));
 }

@@ -1121,6 +1121,32 @@ tr:last-child td {
   margin-bottom: 18px;
 }
 
+.gradebook-student-name {
+  font-weight: 700;
+}
+
+.gradebook-student-meta {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.gradebook-assessment-column-title {
+  font-weight: 700;
+}
+
+.gradebook-assessment-column-date {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.gradebook-assessment-cell {
+  display: grid;
+  gap: 8px;
+  min-width: 124px;
+}
+
 .identity-chip {
   padding: 12px 14px;
   border-radius: 16px;

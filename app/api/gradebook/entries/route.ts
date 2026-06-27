@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   deleteGradebookEntry,
+  getGradebookAssessments,
   getGradebookSubjectById,
   getGradebookEntries,
   getGradebookFieldDefinitions,
@@ -8,7 +9,8 @@ import {
   getStudents,
   upsertGradebookEntry
 } from "@/lib/data";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull, getCurrentUserOrNull } from "@/lib/auth";
+import { filterStudentsForAccess } from "@/lib/access";
 import { toQueryFilters } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -28,11 +30,15 @@ export async function GET(request: Request) {
 
   try {
     const filters = toQueryFilters(url.searchParams);
+    const session = await getCurrentStaffAccessOrNull();
+    const preview = session
+      ? await getAccessPreviewSession(session, url.searchParams.get("viewAs"))
+      : null;
     const subject = await getGradebookSubjectById(subjectId);
     const infoOnly = subject?.slug === "student-pastoral";
-    const students = await getStudents(filters);
+    const students = preview ? filterStudentsForAccess(await getStudents(filters), preview.activeAccess) : await getStudents(filters);
     const fields = await getGradebookFieldDefinitions(subjectId);
-    const [entries, classOptions] = await Promise.all([
+    const [entries, classOptions, assessments] = await Promise.all([
       getGradebookEntries({
         subjectId,
         studentIds: students.map((student) => student.school_id),
@@ -40,10 +46,11 @@ export async function GET(request: Request) {
         assessmentDate,
         infoOnly
       }),
-      getStaffDirectoryClassOptions()
+      getStaffDirectoryClassOptions(),
+      infoOnly ? Promise.resolve([]) : getGradebookAssessments({ subjectId, className: filters.className || undefined })
     ]);
 
-    return NextResponse.json({ students, fields, entries, subject, classOptions });
+    return NextResponse.json({ students, fields, entries, subject, classOptions, assessments });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load gradebook entries." },
@@ -60,6 +67,36 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    if (Array.isArray(body.entries)) {
+      const entries = await Promise.all(
+        (body.entries as Array<{
+          studentSchoolId: string;
+          className: string;
+          subjectId: string;
+          assessmentName: string;
+          assessmentDate: string;
+          grade?: string;
+          score?: string;
+          comment?: string;
+          fieldValues?: Record<string, string>;
+        }>).map((entryBody) =>
+          upsertGradebookEntry({
+            studentSchoolId: entryBody.studentSchoolId,
+            className: entryBody.className,
+            subjectId: entryBody.subjectId,
+            assessmentName: entryBody.assessmentName,
+            assessmentDate: entryBody.assessmentDate,
+            grade: entryBody.grade ?? "",
+            score: entryBody.score ?? "",
+            comment: entryBody.comment ?? "",
+            fieldValues: entryBody.fieldValues ?? {}
+          })
+        )
+      );
+
+      return NextResponse.json({ entries });
+    }
+
     const entry = await upsertGradebookEntry({
       studentSchoolId: body.studentSchoolId,
       className: body.className,
@@ -89,6 +126,26 @@ export async function DELETE(request: Request) {
 
   try {
     const body = await request.json();
+    if (Array.isArray(body.entries)) {
+      await Promise.all(
+        (body.entries as Array<{
+          studentSchoolId: string;
+          subjectId: string;
+          assessmentName: string;
+          assessmentDate: string;
+        }>).map((entryBody) =>
+          deleteGradebookEntry({
+            studentSchoolId: entryBody.studentSchoolId,
+            subjectId: entryBody.subjectId,
+            assessmentName: entryBody.assessmentName,
+            assessmentDate: entryBody.assessmentDate
+          })
+        )
+      );
+
+      return NextResponse.json({ ok: true });
+    }
+
     await deleteGradebookEntry({
       studentSchoolId: body.studentSchoolId,
       subjectId: body.subjectId,
