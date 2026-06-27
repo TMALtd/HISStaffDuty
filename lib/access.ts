@@ -27,6 +27,8 @@ export const PORTAL_NAV_ITEMS: Array<{
 ];
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
+const BASE_LINKED_PORTAL_VIEWS: PortalView[] = ["student-filter"];
+const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "timetables"];
 
 export type StaffAccess = {
   isFullAccess: boolean;
@@ -64,6 +66,7 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     ? [staffProfile.timetable_access_year_group].map((value) => normalize(value)).filter(Boolean)
     : [];
   const hasTimetableAccess = allowedClassKeys.length > 0 || allowedYearGroups.length > 0;
+  const hasLinkedProfile = Boolean(staffProfile);
   const roleParts: string[] = [];
 
   if (allowedClassKeys.length > 0) {
@@ -80,10 +83,14 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
 
   return {
     isFullAccess: false,
-    allowedViews: hasTimetableAccess ? ["timetables"] : [],
+    allowedViews: hasTimetableAccess
+      ? [...TIMETABLE_PORTAL_VIEWS]
+      : hasLinkedProfile
+        ? [...BASE_LINKED_PORTAL_VIEWS]
+        : [],
     allowedYearGroups,
     allowedClassKeys,
-    roleLabel: roleParts.join(" + ") || "No timetable access"
+    roleLabel: roleParts.join(" + ") || (hasLinkedProfile ? "Portal access" : "No timetable access")
   };
 }
 
