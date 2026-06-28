@@ -331,7 +331,9 @@ export function GradebookWorkspace({
               class_name: activeFilters.className || null,
               assessment_name: entry.assessment_name,
               assessment_date: entry.assessment_date,
-              max_score: null
+              max_score: null,
+              include_in_term: false,
+              weighting_percent: null
             }
           );
         });
