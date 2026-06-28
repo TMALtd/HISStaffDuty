@@ -4,7 +4,9 @@ create table if not exists public.gradebook_assessments (
   class_name text null,
   assessment_name text not null,
   assessment_date date not null,
-  max_score numeric(10,2) not null,
+  max_score numeric(10,2) null,
+  include_in_term boolean not null default false,
+  weighting_percent numeric(6,2) null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (subject_id, class_name, assessment_name, assessment_date)
@@ -26,3 +28,10 @@ create trigger gradebook_assessments_set_updated_at
 before update on public.gradebook_assessments
 for each row
 execute function public.set_gradebook_assessments_updated_at();
+
+alter table public.gradebook_assessments
+  alter column max_score drop not null;
+
+alter table public.gradebook_assessments
+  add column if not exists include_in_term boolean not null default false,
+  add column if not exists weighting_percent numeric(6,2) null;

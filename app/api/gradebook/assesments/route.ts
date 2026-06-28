@@ -40,7 +40,17 @@ export async function POST(request: Request) {
       className: body.className ?? null,
       assessmentName: body.assessmentName,
       assessmentDate: body.assessmentDate,
-      maxScore: Number(body.maxScore)
+      maxScore:
+        body.maxScore === null || body.maxScore === undefined || body.maxScore === ""
+          ? null
+          : Number(body.maxScore),
+      includeInTerm: Boolean(body.includeInTerm),
+      weightingPercent:
+        body.weightingPercent === null ||
+        body.weightingPercent === undefined ||
+        body.weightingPercent === ""
+          ? null
+          : Number(body.weightingPercent)
     });
     return NextResponse.json({ assessment });
   } catch (error) {

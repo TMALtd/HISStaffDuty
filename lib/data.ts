@@ -3320,7 +3320,7 @@ export async function getGradebookAssessments(params: {
   const supabase = createSupabaseAdminClient();
   let query = supabase
     .from(ASSESSMENTS_TABLE)
-    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score")
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
     .eq("subject_id", params.subjectId)
     .order("assessment_date", { ascending: false })
     .order("assessment_name");
@@ -3369,7 +3369,9 @@ export async function getGradebookAssessments(params: {
       class_name: params.className ?? null,
       assessment_name: item.assessment_name,
       assessment_date: item.assessment_date,
-      max_score: null
+      max_score: null,
+      include_in_term: false,
+      weighting_percent: null
     }));
   }
 
@@ -3391,7 +3393,9 @@ export async function createGradebookAssessment(input: {
   className: string | null;
   assessmentName: string;
   assessmentDate: string;
-  maxScore: number;
+  maxScore: number | null;
+  includeInTerm?: boolean;
+  weightingPercent?: number | null;
 }): Promise<GradebookAssessment> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
@@ -3402,13 +3406,15 @@ export async function createGradebookAssessment(input: {
         class_name: input.className,
         assessment_name: input.assessmentName,
         assessment_date: input.assessmentDate,
-        max_score: input.maxScore
+        max_score: input.maxScore,
+        include_in_term: input.includeInTerm ?? false,
+        weighting_percent: input.weightingPercent ?? null
       },
       {
         onConflict: "subject_id,class_name,assessment_name,assessment_date"
       }
     )
-    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score")
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
     .single();
 
   if (error) {
