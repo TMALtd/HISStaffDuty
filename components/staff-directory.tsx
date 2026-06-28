@@ -61,6 +61,8 @@ const EMPTY_FORM: StaffDirectoryUpsertInput = {
   system_role: "",
   can_view_own_timetable: false,
   can_view_year_group_timetables: false,
+  can_view_class: false,
+  can_view_year_group_classes: false,
   timetable_access_year_group: ""
 };
 
@@ -94,6 +96,8 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
     system_role: record.system_role ?? "",
     can_view_own_timetable: record.can_view_own_timetable,
     can_view_year_group_timetables: record.can_view_year_group_timetables,
+    can_view_class: record.can_view_class,
+    can_view_year_group_classes: record.can_view_year_group_classes,
     timetable_access_year_group: record.timetable_access_year_group ?? ""
   };
 }
@@ -970,11 +974,16 @@ export function StaffDirectory({
       return;
     }
 
+    if (formValues.can_view_class && !String(formValues.class ?? "").trim()) {
+      setFormError("Assign a class before enabling class access.");
+      return;
+    }
+
     if (
-      formValues.can_view_year_group_timetables &&
+      (formValues.can_view_year_group_timetables || formValues.can_view_year_group_classes) &&
       !String(formValues.timetable_access_year_group ?? "").trim()
     ) {
-      setFormError("Choose a year group before enabling year group timetable access.");
+      setFormError("Choose a year group before enabling year group access.");
       return;
     }
 
@@ -1469,11 +1478,45 @@ export function StaffDirectory({
                             />
                             <span>Can view year group timetables</span>
                           </label>
+                          <label className="directory-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formValues.can_view_class)}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  can_view_class: event.target.checked
+                                }))
+                              }
+                            />
+                            <span>Can view class</span>
+                          </label>
+                          <label className="directory-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formValues.can_view_year_group_classes)}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  can_view_year_group_classes: event.target.checked,
+                                  timetable_access_year_group: event.target.checked
+                                    ? current.timetable_access_year_group
+                                    : current.can_view_year_group_timetables
+                                      ? current.timetable_access_year_group
+                                      : ""
+                                }))
+                              }
+                            />
+                            <span>Can view year group classes</span>
+                          </label>
                           <label className="field">
-                            <span>Timetable Access Year Group</span>
+                            <span>Year Group Access</span>
                             <select
                               value={String(formValues.timetable_access_year_group ?? "")}
-                              disabled={!formValues.can_view_year_group_timetables}
+                              disabled={
+                                !formValues.can_view_year_group_timetables &&
+                                !formValues.can_view_year_group_classes
+                              }
                               onChange={(event) =>
                                 setFormValues((current) => ({
                                   ...current,

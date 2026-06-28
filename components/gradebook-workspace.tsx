@@ -8,6 +8,7 @@ import type {
   GradebookFieldDefinition,
   GradebookSubject,
   GradebookWorkspaceSection,
+  FilterOptions,
   FilterState,
   StaffDirectoryClassOption,
   StudentRow
@@ -75,6 +76,17 @@ function buildQueryString(filters: FilterState) {
   return params.toString();
 }
 
+function makeEmptyFilterOptions(): FilterOptions {
+  return {
+    school: [],
+    designation: [],
+    yearGroup: [],
+    milepost: [],
+    level: [],
+    className: []
+  };
+}
+
 function makeEmptyDraft(): DraftRow {
   return {
     grade: "",
@@ -107,6 +119,9 @@ export function GradebookWorkspace({
   ,
   previewEmail
 }: GradebookWorkspaceProps) {
+  const isAdminView = canManageAssignments || canManageSetup;
+  const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilters);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>(makeEmptyFilterOptions());
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSectionSlug, setSelectedSectionSlug] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -147,12 +162,16 @@ export function GradebookWorkspace({
   );
 
   useEffect(() => {
+    setActiveFilters(initialFilters);
+  }, [initialFilters]);
+
+  useEffect(() => {
     let isMounted = true;
 
     async function loadSubjects() {
       const params = new URLSearchParams();
-      if (initialFilters.className) {
-        params.set("className", initialFilters.className);
+      if (activeFilters.className) {
+        params.set("className", activeFilters.className);
       }
 
       const response = await fetch(`/api/gradebook/subjects?${params.toString()}`, {
@@ -189,7 +208,43 @@ export function GradebookWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [initialFilters.className]);
+  }, [activeFilters.className]);
+
+  useEffect(() => {
+    if (!isAdminView) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadFilterOptions() {
+      const response = await fetch(`/api/filters?${buildQueryString(activeFilters)}`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not load gradebook filters.");
+      }
+
+      const json = (await response.json()) as { options?: FilterOptions };
+
+      if (!isMounted) {
+        return;
+      }
+
+      setFilterOptions(json.options ?? makeEmptyFilterOptions());
+    }
+
+    void loadFilterOptions().catch((loadError) => {
+      if (isMounted) {
+        setError(loadError instanceof Error ? loadError.message : "Could not load gradebook filters.");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilters, isAdminView]);
 
   useEffect(() => {
     setSelectedStudentId("");
@@ -222,7 +277,7 @@ export function GradebookWorkspace({
       setError("");
 
       try {
-        const params = new URLSearchParams(buildQueryString(initialFilters));
+        const params = new URLSearchParams(buildQueryString(activeFilters));
         params.set("subjectId", linkedSubject.id);
         if (previewEmail) {
           params.set("viewAs", previewEmail);
@@ -349,7 +404,7 @@ export function GradebookWorkspace({
       isMounted = false;
     };
   }, [
-    initialFilters,
+    activeFilters,
     linkedSubject,
     previewEmail,
     refreshToken,
@@ -403,6 +458,37 @@ export function GradebookWorkspace({
         }
       }
     }));
+  }
+
+  function updateFilter<K extends keyof FilterState>(field: K, value: FilterState[K]) {
+    setSelectedStudentId("");
+    setActiveFilters((current) => {
+      const nextFilters: FilterState = {
+        ...current,
+        [field]: value
+      };
+
+      if (field === "school") {
+        nextFilters.designation = "";
+        nextFilters.yearGroup = "";
+        nextFilters.milepost = "";
+        nextFilters.level = "";
+        nextFilters.className = "";
+      } else if (field === "designation") {
+        nextFilters.yearGroup = "";
+        nextFilters.milepost = "";
+        nextFilters.level = "";
+        nextFilters.className = "";
+      } else if (field === "yearGroup") {
+        nextFilters.milepost = "";
+        nextFilters.level = "";
+        nextFilters.className = "";
+      } else if (field === "milepost" || field === "level") {
+        nextFilters.className = "";
+      }
+
+      return nextFilters;
+    });
   }
 
   function addAssessmentColumn() {
@@ -940,7 +1026,7 @@ export function GradebookWorkspace({
           <div className="actions" style={{ marginTop: 0 }}>
             <Link
               className="button secondary"
-              href={`/${buildQueryString(initialFilters) ? `?${buildQueryString(initialFilters)}` : ""}`}
+              href={`/${buildQueryString(activeFilters) ? `?${buildQueryString(activeFilters)}` : ""}`}
             >
               Back to Filter View
             </Link>
@@ -958,7 +1044,7 @@ export function GradebookWorkspace({
           <div>
             <p className="eyebrow compact-eyebrow">Class Markbook</p>
             <h2 className="panel-title" style={{ marginBottom: 0 }}>
-              {initialFilters.className || "Whole-school gradebook"}
+              {activeFilters.className || "Whole-school gradebook"}
             </h2>
           </div>
           <span className="hint">
@@ -970,6 +1056,100 @@ export function GradebookWorkspace({
 
       <section className="panel">
         <div className="filters-grid">
+          {isAdminView ? (
+            <>
+              <div className="field">
+                <label htmlFor="gradebookSchoolFilter">School</label>
+                <select
+                  id="gradebookSchoolFilter"
+                  value={activeFilters.school}
+                  onChange={(event) => updateFilter("school", event.target.value)}
+                >
+                  <option value="">All schools</option>
+                  {filterOptions.school.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="gradebookDesignationFilter">Designation</label>
+                <select
+                  id="gradebookDesignationFilter"
+                  value={activeFilters.designation}
+                  onChange={(event) => updateFilter("designation", event.target.value)}
+                >
+                  <option value="">All designations</option>
+                  {filterOptions.designation.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="gradebookYearGroupFilter">Year group</label>
+                <select
+                  id="gradebookYearGroupFilter"
+                  value={activeFilters.yearGroup}
+                  onChange={(event) => updateFilter("yearGroup", event.target.value)}
+                >
+                  <option value="">All year groups</option>
+                  {filterOptions.yearGroup.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="gradebookMilepostFilter">Milepost</label>
+                <select
+                  id="gradebookMilepostFilter"
+                  value={activeFilters.milepost}
+                  onChange={(event) => updateFilter("milepost", event.target.value)}
+                >
+                  <option value="">All mileposts</option>
+                  {filterOptions.milepost.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="gradebookLevelFilter">Level</label>
+                <select
+                  id="gradebookLevelFilter"
+                  value={activeFilters.level}
+                  onChange={(event) => updateFilter("level", event.target.value)}
+                >
+                  <option value="">All levels</option>
+                  {filterOptions.level.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="gradebookClassFilter">Class</label>
+                <select
+                  id="gradebookClassFilter"
+                  value={activeFilters.className}
+                  onChange={(event) => updateFilter("className", event.target.value)}
+                >
+                  <option value="">All classes</option>
+                  {filterOptions.className.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : null}
           <div className="field">
             <label htmlFor="gradebookSection">Section</label>
             <select
@@ -1056,7 +1236,7 @@ export function GradebookWorkspace({
         </div>
         <div className="actions">
           <span className="hint">
-            Active class filter: {initialFilters.className || "All classes"}
+            Active class filter: {activeFilters.className || "All classes"}
             {selectedSection ? ` | Section: ${selectedSection.name}` : ""}
             {selectedStudentId
               ? ` | Student: ${

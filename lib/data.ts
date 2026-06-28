@@ -874,6 +874,8 @@ function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
     system_role: row.system_role ? String(row.system_role) : null,
     can_view_own_timetable: normalizeBooleanField(row.can_view_own_timetable),
     can_view_year_group_timetables: normalizeBooleanField(row.can_view_year_group_timetables),
+    can_view_class: normalizeBooleanField(row.can_view_class),
+    can_view_year_group_classes: normalizeBooleanField(row.can_view_year_group_classes),
     timetable_access_year_group: row.timetable_access_year_group
       ? String(row.timetable_access_year_group)
       : null
@@ -1606,6 +1608,8 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
     system_role: normalizeOptionalText(input.system_role),
     can_view_own_timetable: Boolean(input.can_view_own_timetable),
     can_view_year_group_timetables: Boolean(input.can_view_year_group_timetables),
+    can_view_class: Boolean(input.can_view_class),
+    can_view_year_group_classes: Boolean(input.can_view_year_group_classes),
     timetable_access_year_group: normalizeOptionalText(input.timetable_access_year_group)
   };
 }

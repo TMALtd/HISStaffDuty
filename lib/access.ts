@@ -33,8 +33,10 @@ const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook", "ti
 export type StaffAccess = {
   isFullAccess: boolean;
   allowedViews: PortalView[];
-  allowedYearGroups: string[];
-  allowedClassKeys: string[];
+  allowedTimetableYearGroups: string[];
+  allowedTimetableClassKeys: string[];
+  allowedStudentYearGroups: string[];
+  allowedStudentClassKeys: string[];
   roleLabel: string;
 };
 
@@ -52,32 +54,63 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     return {
       isFullAccess: true,
       allowedViews: [...ALL_PORTAL_VIEWS],
-      allowedYearGroups: [],
-      allowedClassKeys: [],
+      allowedTimetableYearGroups: [],
+      allowedTimetableClassKeys: [],
+      allowedStudentYearGroups: [],
+      allowedStudentClassKeys: [],
       roleLabel: "Full access"
     };
   }
-  const allowedClassKeys = staffProfile?.can_view_own_timetable
+  const allowedTimetableClassKeys = staffProfile?.can_view_own_timetable
     ? [staffProfile.class, staffProfile.timetable]
         .map((value) => normalize(value))
         .filter(Boolean)
     : [];
-  const allowedYearGroups = staffProfile?.can_view_year_group_timetables
+  const allowedTimetableYearGroups = staffProfile?.can_view_year_group_timetables
     ? [staffProfile.timetable_access_year_group].map((value) => normalize(value)).filter(Boolean)
     : [];
-  const hasTimetableAccess = allowedClassKeys.length > 0 || allowedYearGroups.length > 0;
+  const hasTimetableAccess =
+    allowedTimetableClassKeys.length > 0 || allowedTimetableYearGroups.length > 0;
+  const usesDedicatedStudentAccess =
+    Boolean(staffProfile?.can_view_class) || Boolean(staffProfile?.can_view_year_group_classes);
+  const allowedStudentClassKeys = usesDedicatedStudentAccess
+    ? staffProfile?.can_view_class
+      ? [staffProfile.class, staffProfile.timetable]
+          .map((value) => normalize(value))
+          .filter(Boolean)
+      : []
+    : [...allowedTimetableClassKeys];
+  const allowedStudentYearGroups = usesDedicatedStudentAccess
+    ? staffProfile?.can_view_year_group_classes
+      ? [staffProfile.timetable_access_year_group].map((value) => normalize(value)).filter(Boolean)
+      : []
+    : [...allowedTimetableYearGroups];
   const hasLinkedProfile = Boolean(staffProfile);
   const roleParts: string[] = [];
 
-  if (allowedClassKeys.length > 0) {
+  if (allowedTimetableClassKeys.length > 0) {
     roleParts.push("Own timetable");
   }
 
-  if (allowedYearGroups.length > 0) {
-    if (allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE)) {
+  if (allowedTimetableYearGroups.length > 0) {
+    if (allowedTimetableYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE)) {
       roleParts.push("All timetables");
     } else {
       roleParts.push(`${staffProfile?.timetable_access_year_group ?? "Year group"} timetables`);
+    }
+  }
+
+  if (usesDedicatedStudentAccess) {
+    if (allowedStudentClassKeys.length > 0) {
+      roleParts.push("Class view");
+    }
+
+    if (allowedStudentYearGroups.length > 0) {
+      if (allowedStudentYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE)) {
+        roleParts.push("All classes");
+      } else {
+        roleParts.push(`${staffProfile?.timetable_access_year_group ?? "Year group"} classes`);
+      }
     }
   }
 
@@ -88,8 +121,10 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
       : hasLinkedProfile
         ? [...BASE_LINKED_PORTAL_VIEWS]
         : [],
-    allowedYearGroups,
-    allowedClassKeys,
+    allowedTimetableYearGroups,
+    allowedTimetableClassKeys,
+    allowedStudentYearGroups,
+    allowedStudentClassKeys,
     roleLabel: roleParts.join(" + ") || (hasLinkedProfile ? "Portal access" : "No timetable access")
   };
 }
@@ -105,9 +140,9 @@ export function canAccessTimetableClass(access: StaffAccess, classSummary: Timet
 
   return (
     access.isFullAccess ||
-    access.allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
-    access.allowedYearGroups.includes(normalize(classSummary.yearGroup)) ||
-    classKeys.some((key) => access.allowedClassKeys.includes(key))
+    access.allowedTimetableYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
+    access.allowedTimetableYearGroups.includes(normalize(classSummary.yearGroup)) ||
+    classKeys.some((key) => access.allowedTimetableClassKeys.includes(key))
   );
 }
 
@@ -125,9 +160,9 @@ export function canAccessStudent(access: StaffAccess, student: Pick<StudentRow, 
 
   return (
     access.isFullAccess ||
-    access.allowedYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
-    access.allowedYearGroups.includes(normalize(student.year_group)) ||
-    classKeys.some((key) => access.allowedClassKeys.includes(key))
+    access.allowedStudentYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
+    access.allowedStudentYearGroups.includes(normalize(student.year_group)) ||
+    classKeys.some((key) => access.allowedStudentClassKeys.includes(key))
   );
 }
 
