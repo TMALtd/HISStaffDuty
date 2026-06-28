@@ -26,6 +26,7 @@ import {
   EMPTY_FILTERS,
   FILTER_FIELDS,
   type GradebookEntry,
+  type GradebookAssessment,
   type GradebookFieldDefinition,
   type GradebookSubject,
   type FilterField,
@@ -71,6 +72,7 @@ const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
 const SUBJECTS_TABLE = "gradebook_subjects";
 const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
+const ASSESSMENTS_TABLE = "gradebook_assessments";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
 const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
@@ -3314,11 +3316,11 @@ export async function getGradebookEntries(params: {
 export async function getGradebookAssessments(params: {
   subjectId: string;
   className?: string;
-}): Promise<Array<{ assessment_name: string; assessment_date: string }>> {
+}): Promise<GradebookAssessment[]> {
   const supabase = createSupabaseAdminClient();
   let query = supabase
-    .from(ENTRIES_TABLE)
-    .select("assessment_name,assessment_date")
+    .from(ASSESSMENTS_TABLE)
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score")
     .eq("subject_id", params.subjectId)
     .order("assessment_date", { ascending: false })
     .order("assessment_name");
@@ -3330,11 +3332,49 @@ export async function getGradebookAssessments(params: {
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(error.message);
+    if (!isMissingSupabaseRelationError(new Error(error.message), ASSESSMENTS_TABLE)) {
+      throw new Error(error.message);
+    }
+
+    let legacyQuery = supabase
+      .from(ENTRIES_TABLE)
+      .select("assessment_name,assessment_date")
+      .eq("subject_id", params.subjectId)
+      .order("assessment_date", { ascending: false })
+      .order("assessment_name");
+
+    if (params.className) {
+      legacyQuery = legacyQuery.eq("class_name", params.className);
+    }
+
+    const { data: legacyData, error: legacyError } = await legacyQuery;
+
+    if (legacyError) {
+      throw new Error(legacyError.message);
+    }
+
+    const seen = new Set<string>();
+    return ((legacyData ?? []) as Array<{ assessment_name: string; assessment_date: string }>).filter(
+      (item) => {
+        const key = `${item.assessment_name}|${item.assessment_date}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }
+    ).map((item) => ({
+      id: `legacy-${item.assessment_name}-${item.assessment_date}`,
+      subject_id: params.subjectId,
+      class_name: params.className ?? null,
+      assessment_name: item.assessment_name,
+      assessment_date: item.assessment_date,
+      max_score: null
+    }));
   }
 
   const seen = new Set<string>();
-  return ((data ?? []) as Array<{ assessment_name: string; assessment_date: string }>).filter(
+  return ((data ?? []) as GradebookAssessment[]).filter(
     (item) => {
       const key = `${item.assessment_name}|${item.assessment_date}`;
       if (seen.has(key)) {
@@ -3344,6 +3384,44 @@ export async function getGradebookAssessments(params: {
       return true;
     }
   );
+}
+
+export async function createGradebookAssessment(input: {
+  subjectId: string;
+  className: string | null;
+  assessmentName: string;
+  assessmentDate: string;
+  maxScore: number;
+}): Promise<GradebookAssessment> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(ASSESSMENTS_TABLE)
+    .upsert(
+      {
+        subject_id: input.subjectId,
+        class_name: input.className,
+        assessment_name: input.assessmentName,
+        assessment_date: input.assessmentDate,
+        max_score: input.maxScore
+      },
+      {
+        onConflict: "subject_id,class_name,assessment_name,assessment_date"
+      }
+    )
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score")
+    .single();
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), ASSESSMENTS_TABLE)) {
+      throw new Error(
+        "Gradebook assessments table is not set up yet. Run supabase_gradebook_assessments.sql first."
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
+  return data as GradebookAssessment;
 }
 
 export async function createGradebookSubject(input: {

@@ -73,6 +73,15 @@ export type GradebookEntry = {
   field_values: Record<string, string>;
 };
 
+export type GradebookAssessment = {
+  id: string;
+  subject_id: string;
+  class_name: string | null;
+  assessment_name: string;
+  assessment_date: string;
+  max_score: number | null;
+};
+
 export type GradebookSectionMode = "profile" | "assessment";
 
 export type GradebookSectionSlug =

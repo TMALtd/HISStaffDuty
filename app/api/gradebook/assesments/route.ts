@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserOrNull } from "@/lib/auth";
-import { getGradebookAssessments } from "@/lib/data";
+import { createGradebookAssessment, getGradebookAssessments } from "@/lib/data";
 
 export async function GET(request: Request) {
   const user = await getCurrentUserOrNull();
@@ -23,6 +23,30 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load assessments." },
       { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  const user = await getCurrentUserOrNull();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const assessment = await createGradebookAssessment({
+      subjectId: body.subjectId,
+      className: body.className ?? null,
+      assessmentName: body.assessmentName,
+      assessmentDate: body.assessmentDate,
+      maxScore: Number(body.maxScore)
+    });
+    return NextResponse.json({ assessment });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to save assessment." },
+      { status: 400 }
     );
   }
 }
