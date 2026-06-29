@@ -67,6 +67,36 @@ function formatPercentage(score: string, maxScore: number | null) {
   return `${((numericScore / maxScore) * 100).toFixed(1)}%`;
 }
 
+function computePercentageNumber(score: string, maxScore: number | null) {
+  const numericScore = Number(score);
+  if (!Number.isFinite(numericScore) || numericScore < 0 || !maxScore || maxScore <= 0) {
+    return null;
+  }
+
+  return (numericScore / maxScore) * 100;
+}
+
+function deriveTermGrade(yearGroup: string, percentage: number | null) {
+  if (percentage === null) {
+    return "—";
+  }
+
+  const normalized = yearGroup.trim().toLowerCase();
+
+  if (normalized === "year 1" || normalized === "year 2") {
+    if (percentage >= 85) return "Above";
+    if (percentage >= 65) return "At";
+    if (percentage >= 45) return "Below";
+    return "Well Below";
+  }
+
+  if (percentage >= 80) return "A";
+  if (percentage >= 70) return "B";
+  if (percentage >= 60) return "C";
+  if (percentage >= 50) return "D";
+  return "E";
+}
+
 function formatClassOptionLabel(option: StaffDirectoryClassOption) {
   const streamLabel =
     option.streamType === "bilingual"
@@ -140,6 +170,8 @@ export function GradebookWorkspace({
   const [newAssessmentName, setNewAssessmentName] = useState("");
   const [newAssessmentDate, setNewAssessmentDate] = useState("");
   const [newAssessmentMaxScore, setNewAssessmentMaxScore] = useState("");
+  const [newAssessmentIncludeInTerm, setNewAssessmentIncludeInTerm] = useState(false);
+  const [newAssessmentWeightingPercent, setNewAssessmentWeightingPercent] = useState("");
   const [assessments, setAssessments] = useState<GradebookAssessment[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [classOptions, setClassOptions] = useState<StaffDirectoryClassOption[]>([]);
@@ -264,6 +296,8 @@ export function GradebookWorkspace({
     setNewAssessmentName("");
     setNewAssessmentDate("");
     setNewAssessmentMaxScore("");
+    setNewAssessmentIncludeInTerm(false);
+    setNewAssessmentWeightingPercent("");
     setAssessments([]);
     setStudents([]);
     setClassOptions([]);
@@ -323,19 +357,21 @@ export function GradebookWorkspace({
         });
 
         json.entries.forEach((entry) => {
-          assessmentSet.set(
-            assessmentKey(entry.assessment_name, entry.assessment_date),
-            {
-              id: `entry-${entry.assessment_name}-${entry.assessment_date}`,
-              subject_id: linkedSubject.id,
-              class_name: activeFilters.className || null,
-              assessment_name: entry.assessment_name,
-              assessment_date: entry.assessment_date,
-              max_score: null,
-              include_in_term: false,
-              weighting_percent: null
-            }
-          );
+          const key = assessmentKey(entry.assessment_name, entry.assessment_date);
+          if (assessmentSet.has(key)) {
+            return;
+          }
+
+          assessmentSet.set(key, {
+            id: `entry-${entry.assessment_name}-${entry.assessment_date}`,
+            subject_id: linkedSubject.id,
+            class_name: activeFilters.className || null,
+            assessment_name: entry.assessment_name,
+            assessment_date: entry.assessment_date,
+            max_score: null,
+            include_in_term: false,
+            weighting_percent: null
+          });
         });
 
         const nextAssessments = Array.from(assessmentSet.values()).sort(
@@ -480,6 +516,35 @@ export function GradebookWorkspace({
     }));
   }
 
+  function updateAssessmentMetadata(
+    columnKey: string,
+    updates: Partial<Pick<GradebookAssessment, "max_score" | "include_in_term" | "weighting_percent">>
+  ) {
+    setAssessments((current) =>
+      current.map((assessment) =>
+        assessmentKey(assessment.assessment_name, assessment.assessment_date) === columnKey
+          ? {
+              ...assessment,
+              ...updates
+            }
+          : assessment
+      )
+    );
+  }
+
+  function saveAssessmentMetadataLocally(
+    assessmentName: string,
+    assessmentDate: string,
+    includeInTerm: boolean,
+    weightingPercent: number | null
+  ) {
+    const key = assessmentKey(assessmentName, assessmentDate);
+    updateAssessmentMetadata(key, {
+      include_in_term: includeInTerm,
+      weighting_percent: weightingPercent
+    });
+  }
+
   function seedAssessmentColumn(assessment: GradebookAssessment) {
     const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
 
@@ -556,6 +621,9 @@ export function GradebookWorkspace({
     }
 
     const parsedMaxScore = Number(newAssessmentMaxScore);
+    const parsedWeightingPercent = newAssessmentWeightingPercent.trim()
+      ? Number(newAssessmentWeightingPercent)
+      : null;
 
     if (!newAssessmentName || !newAssessmentDate || !newAssessmentMaxScore) {
       setError("Add an assessment name, date, and out-of score before creating a new assignment column.");
@@ -564,6 +632,14 @@ export function GradebookWorkspace({
 
     if (!Number.isFinite(parsedMaxScore) || parsedMaxScore <= 0) {
       setError("Use a valid number greater than 0 for the out-of score.");
+      return;
+    }
+
+    if (
+      parsedWeightingPercent !== null &&
+      (!Number.isFinite(parsedWeightingPercent) || parsedWeightingPercent < 0 || parsedWeightingPercent > 100)
+    ) {
+      setError("Use a weighting between 0 and 100, or leave it blank.");
       return;
     }
 
@@ -588,7 +664,9 @@ export function GradebookWorkspace({
           className: activeFilters.className || null,
           assessmentName: newAssessmentName.trim(),
           assessmentDate: newAssessmentDate,
-          maxScore: parsedMaxScore
+          maxScore: parsedMaxScore,
+          includeInTerm: newAssessmentIncludeInTerm,
+          weightingPercent: newAssessmentIncludeInTerm ? parsedWeightingPercent : null
         })
       });
 
@@ -601,6 +679,8 @@ export function GradebookWorkspace({
       setNewAssessmentName("");
       setNewAssessmentDate("");
       setNewAssessmentMaxScore("");
+      setNewAssessmentIncludeInTerm(false);
+      setNewAssessmentWeightingPercent("");
       setError("");
       setStatus(`Added ${json.assessment.assessment_name} as a new assignment column.`);
     } catch (saveError) {
@@ -620,6 +700,44 @@ export function GradebookWorkspace({
     setError("");
 
     try {
+      const metadataPayload = assessments.map((assessment) => ({
+        subjectId: linkedSubject.id,
+        className: activeFilters.className || null,
+        assessmentName: assessment.assessment_name,
+        assessmentDate: assessment.assessment_date,
+        maxScore: assessment.max_score,
+        includeInTerm: assessment.include_in_term,
+        weightingPercent: assessment.include_in_term ? assessment.weighting_percent : null
+      }));
+
+      if (metadataPayload.length) {
+        const metadataResponses = await Promise.all(
+          metadataPayload.map((payload) =>
+            fetch("/api/gradebook/assessments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            })
+          )
+        );
+
+        const failedMetadata = await Promise.all(
+          metadataResponses.map(async (response) => {
+            if (response.ok) {
+              return null;
+            }
+
+            const json = (await response.json()) as { error?: string };
+            return json.error ?? "Could not save assignment settings.";
+          })
+        );
+
+        const metadataError = failedMetadata.find(Boolean);
+        if (metadataError) {
+          throw new Error(metadataError);
+        }
+      }
+
       const upserts: Array<{
         studentSchoolId: string;
         className: string;
@@ -1011,10 +1129,68 @@ export function GradebookWorkspace({
                   <div className="gradebook-assessment-column-title">{assessment.assessment_name}</div>
                   <div className="gradebook-assessment-column-date">{assessment.assessment_date}</div>
                   <div className="gradebook-assessment-column-date">
-                    Out of {assessment.max_score ?? "—"}
+                    <label style={{ display: "block" }}>
+                      <span style={{ display: "block" }}>Out of</span>
+                      <input
+                        className="cell-input"
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        value={assessment.max_score ?? ""}
+                        onChange={(event) =>
+                          updateAssessmentMetadata(
+                            assessmentKey(assessment.assessment_name, assessment.assessment_date),
+                            {
+                              max_score: event.target.value ? Number(event.target.value) : null
+                            }
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="gradebook-assessment-column-date">
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", justifyContent: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={assessment.include_in_term}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          saveAssessmentMetadataLocally(
+                            assessment.assessment_name,
+                            assessment.assessment_date,
+                            checked,
+                            checked ? assessment.weighting_percent : null
+                          );
+                        }}
+                      />
+                      <span>Include in term</span>
+                    </label>
+                  </div>
+                  <div className="gradebook-assessment-column-date">
+                    <label style={{ display: "block" }}>
+                      <span style={{ display: "block" }}>Weighting %</span>
+                      <input
+                        className="cell-input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={assessment.weighting_percent ?? ""}
+                        onChange={(event) =>
+                          updateAssessmentMetadata(
+                            assessmentKey(assessment.assessment_name, assessment.assessment_date),
+                            {
+                              weighting_percent: event.target.value ? Number(event.target.value) : null
+                            }
+                          )
+                        }
+                        disabled={!assessment.include_in_term}
+                      />
+                    </label>
                   </div>
                 </th>
               ))}
+              <th colSpan={2}>Term Summary</th>
             </tr>
             <tr>
               {assessments.flatMap((assessment) => [
@@ -1022,11 +1198,52 @@ export function GradebookWorkspace({
                 <th key={`${assessment.id}-percent`}>%</th>,
                 <th key={`${assessment.id}-grade`}>Grade</th>
               ])}
+              <th>Term %</th>
+              <th>Term Grade</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.map((student) => {
               const gradeOptions = getGradeOptionsForYearGroup(student.year_group);
+              const includedAssessments = assessments.filter((assessment) => assessment.include_in_term);
+              const explicitWeightingTotal = includedAssessments.reduce(
+                (total, assessment) => total + (assessment.weighting_percent ?? 0),
+                0
+              );
+              const unspecifiedWeightingCount = includedAssessments.filter(
+                (assessment) => assessment.weighting_percent === null
+              ).length;
+              const remainingWeighting =
+                unspecifiedWeightingCount > 0 ? Math.max(100 - explicitWeightingTotal, 0) / unspecifiedWeightingCount : 0;
+              const weightedPercentages = includedAssessments
+                .map((assessment) => {
+                  const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+                  const draft = assessmentDrafts[student.school_id]?.[key] ?? {
+                    ...makeEmptyDraft(),
+                    assessmentName: assessment.assessment_name,
+                    assessmentDate: assessment.assessment_date
+                  };
+                  const percentage = computePercentageNumber(draft.score, assessment.max_score);
+                  if (percentage === null) {
+                    return null;
+                  }
+
+                  const appliedWeight =
+                    assessment.weighting_percent !== null ? assessment.weighting_percent : remainingWeighting;
+
+                  return {
+                    percentage,
+                    weight: appliedWeight
+                  };
+                })
+                .filter(Boolean) as Array<{ percentage: number; weight: number }>;
+              const termWeightTotal = weightedPercentages.reduce((total, item) => total + item.weight, 0);
+              const termPercentage =
+                termWeightTotal > 0
+                  ? weightedPercentages.reduce((total, item) => total + item.percentage * (item.weight / termWeightTotal), 0)
+                  : null;
+              const termGrade = deriveTermGrade(student.year_group, termPercentage);
+
               return (
                 <tr key={student.school_id}>
                   <td>
@@ -1080,6 +1297,14 @@ export function GradebookWorkspace({
                       </Fragment>
                     );
                   })}
+                  <td>
+                    <div className="gradebook-percentage-value">
+                      {termPercentage === null ? "—" : `${termPercentage.toFixed(1)}%`}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="gradebook-percentage-value">{termGrade}</div>
+                  </td>
                 </tr>
               );
             })}
@@ -1323,6 +1548,33 @@ export function GradebookWorkspace({
                   onChange={(event) => setNewAssessmentMaxScore(event.target.value)}
                   placeholder="e.g. 20"
                   disabled={!linkedSubject}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="assessmentIncludeInTerm">Include in term grade?</label>
+                <div className="hint" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                  <input
+                    id="assessmentIncludeInTerm"
+                    type="checkbox"
+                    checked={newAssessmentIncludeInTerm}
+                    onChange={(event) => setNewAssessmentIncludeInTerm(event.target.checked)}
+                    disabled={!linkedSubject}
+                  />
+                  <span>Tick this if the assignment should count towards the term summary.</span>
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="assessmentWeightingPercent">Weighting %</label>
+                <input
+                  id="assessmentWeightingPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={newAssessmentWeightingPercent}
+                  onChange={(event) => setNewAssessmentWeightingPercent(event.target.value)}
+                  placeholder="Leave blank to auto-balance"
+                  disabled={!linkedSubject || !newAssessmentIncludeInTerm}
                 />
               </div>
               <div className="field">

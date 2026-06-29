@@ -25,16 +25,6 @@
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/admin/gradebook/page-164865c3289f0ce4.js"
     ],
-    "/gradebook/page": [
-      "static/chunks/webpack-e24ad0af4fc1e462.js",
-      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
-      "static/chunks/117-ebd18671ebde02ac.js",
-      "static/chunks/main-app-d81c768c58ee14ff.js",
-      "static/chunks/44530001-5f86e157ede9686f.js",
-      "static/chunks/609-c7931071362a6c9e.js",
-      "static/chunks/944-945b602a1bb2c2de.js",
-      "static/chunks/app/gradebook/page-af763d7946cffa67.js"
-    ],
     "/duties/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
       "static/chunks/fd9d1056-7bc50396a5a8af55.js",
@@ -44,14 +34,6 @@
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/duties/page-d25b06fb07a27b66.js"
-    ],
-    "/login/page": [
-      "static/chunks/webpack-e24ad0af4fc1e462.js",
-      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
-      "static/chunks/117-ebd18671ebde02ac.js",
-      "static/chunks/main-app-d81c768c58ee14ff.js",
-      "static/chunks/609-c7931071362a6c9e.js",
-      "static/chunks/app/login/page-e6753845ad799687.js"
     ],
     "/duties/roster/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
@@ -63,6 +45,14 @@
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/duties/roster/page-14f40ac7076cb905.js"
     ],
+    "/login/page": [
+      "static/chunks/webpack-e24ad0af4fc1e462.js",
+      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
+      "static/chunks/117-ebd18671ebde02ac.js",
+      "static/chunks/main-app-d81c768c58ee14ff.js",
+      "static/chunks/609-c7931071362a6c9e.js",
+      "static/chunks/app/login/page-e6753845ad799687.js"
+    ],
     "/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
       "static/chunks/fd9d1056-7bc50396a5a8af55.js",
@@ -73,7 +63,7 @@
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/page-47d07976f70ae91b.js"
     ],
-    "/directory/page": [
+    "/gradebook/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
       "static/chunks/fd9d1056-7bc50396a5a8af55.js",
       "static/chunks/117-ebd18671ebde02ac.js",
@@ -81,7 +71,7 @@
       "static/chunks/44530001-5f86e157ede9686f.js",
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/944-945b602a1bb2c2de.js",
-      "static/chunks/app/directory/page-2e92b2d0143ab625.js"
+      "static/chunks/app/gradebook/page-2c18a0f7d88b2d4c.js"
     ],
     "/timetables/[classCode]/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
@@ -105,6 +95,16 @@
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/timetables/page-42afb4c46212aaca.js"
+    ],
+    "/directory/page": [
+      "static/chunks/webpack-e24ad0af4fc1e462.js",
+      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
+      "static/chunks/117-ebd18671ebde02ac.js",
+      "static/chunks/main-app-d81c768c58ee14ff.js",
+      "static/chunks/44530001-5f86e157ede9686f.js",
+      "static/chunks/609-c7931071362a6c9e.js",
+      "static/chunks/944-945b602a1bb2c2de.js",
+      "static/chunks/app/directory/page-2e92b2d0143ab625.js"
     ]
   }
 }
