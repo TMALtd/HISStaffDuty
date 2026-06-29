@@ -1753,6 +1753,11 @@ export function GradebookWorkspace({
               <div className="field">
                 <label>Assessment sheet</label>
                 <div className="actions" style={{ marginTop: 0 }}>
+                  {canManageSetup ? (
+                    <Link className="button secondary" href="/admin/gradebook">
+                      Set Term Dates
+                    </Link>
+                  ) : null}
                   <button
                     className="button secondary"
                     type="button"

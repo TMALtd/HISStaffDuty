@@ -3419,7 +3419,27 @@ export async function getGradebookAssessments(params: {
     query = query.eq("class_name", params.className);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+
+  if (error && isMissingSupabaseColumnError(new Error(error.message), ASSESSMENTS_TABLE, "term_key")) {
+    let fallbackQuery = supabase
+      .from(ASSESSMENTS_TABLE)
+      .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
+      .eq("subject_id", params.subjectId)
+      .order("assessment_date", { ascending: false })
+      .order("assessment_name");
+
+    if (params.className) {
+      fallbackQuery = fallbackQuery.eq("class_name", params.className);
+    }
+
+    const fallbackResult = await fallbackQuery;
+    data = (fallbackResult.data ?? []).map((item) => ({
+      ...item,
+      term_key: inferGradebookTermKey(String(item.assessment_date ?? ""), terms)
+    }));
+    error = fallbackResult.error;
+  }
 
   if (error) {
     if (!isMissingSupabaseRelationError(new Error(error.message), ASSESSMENTS_TABLE)) {
@@ -3490,7 +3510,7 @@ export async function createGradebookAssessment(input: {
   weightingPercent?: number | null;
 }): Promise<GradebookAssessment> {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
+  let result = await supabase
     .from(ASSESSMENTS_TABLE)
     .upsert(
       {
@@ -3510,6 +3530,32 @@ export async function createGradebookAssessment(input: {
     .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,term_key,include_in_term,weighting_percent")
     .single();
 
+  if (
+    result.error &&
+    isMissingSupabaseColumnError(new Error(result.error.message), ASSESSMENTS_TABLE, "term_key")
+  ) {
+    result = await supabase
+      .from(ASSESSMENTS_TABLE)
+      .upsert(
+        {
+          subject_id: input.subjectId,
+          class_name: input.className,
+          assessment_name: input.assessmentName,
+          assessment_date: input.assessmentDate,
+          max_score: input.maxScore,
+          include_in_term: input.includeInTerm ?? false,
+          weighting_percent: input.weightingPercent ?? null
+        },
+        {
+          onConflict: "subject_id,class_name,assessment_name,assessment_date"
+        }
+      )
+      .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
+      .single();
+  }
+
+  const { data, error } = result;
+
   if (error) {
     if (isMissingSupabaseRelationError(new Error(error.message), ASSESSMENTS_TABLE)) {
       throw new Error(
@@ -3520,7 +3566,13 @@ export async function createGradebookAssessment(input: {
     throw new Error(error.message);
   }
 
-  return data as GradebookAssessment;
+  return {
+    ...(data as Omit<GradebookAssessment, "term_key"> & { term_key?: string | null }),
+    term_key:
+      "term_key" in (data as Record<string, unknown>)
+        ? ((data as Record<string, unknown>).term_key as string | null)
+        : inferGradebookTermKey(input.assessmentDate, await getGradebookTerms())
+  } as GradebookAssessment;
 }
 
 export async function createGradebookSubject(input: {

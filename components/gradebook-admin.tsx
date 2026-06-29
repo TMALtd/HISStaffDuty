@@ -213,6 +213,9 @@ export function GradebookAdmin() {
             <p className="hero-copy compact-copy">
               Set the date range for each term so assignments can be grouped correctly in the Markbook.
             </p>
+            <div className="banner" style={{ marginBottom: "1rem" }}>
+              Update term dates here in the app, then return to the Markbook to assign assessments to Term 1, Term 2, or Term 3.
+            </div>
             {terms.map((term) => (
               <div key={term.term_key} style={{ marginBottom: "1rem" }}>
                 <strong style={{ display: "block", marginBottom: "0.5rem" }}>{term.term_label}</strong>
