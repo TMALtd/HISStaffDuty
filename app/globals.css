@@ -357,12 +357,15 @@ input {
   width: max-content;
   min-width: 100%;
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .gradebook-term-table th,
 .gradebook-term-table td {
   padding: 10px 12px;
   vertical-align: top;
+  background-clip: padding-box;
 }
 
 .gradebook-name-column {
@@ -377,6 +380,14 @@ input {
 
 .gradebook-name-cell {
   z-index: 2;
+}
+
+.gradebook-term-table thead .gradebook-name-column {
+  z-index: 6;
+}
+
+.gradebook-term-table tbody .gradebook-name-column {
+  z-index: 5;
 }
 
 .gradebook-summary-column {
