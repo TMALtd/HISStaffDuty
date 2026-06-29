@@ -35,16 +35,6 @@
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/duties/page-3ecede9fe203b0e9.js"
     ],
-    "/duties/roster/page": [
-      "static/chunks/webpack-e24ad0af4fc1e462.js",
-      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
-      "static/chunks/117-ebd18671ebde02ac.js",
-      "static/chunks/main-app-d81c768c58ee14ff.js",
-      "static/chunks/44530001-5f86e157ede9686f.js",
-      "static/chunks/609-c7931071362a6c9e.js",
-      "static/chunks/944-945b602a1bb2c2de.js",
-      "static/chunks/app/duties/roster/page-c255afd30c047106.js"
-    ],
     "/login/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
       "static/chunks/fd9d1056-7bc50396a5a8af55.js",
@@ -52,6 +42,16 @@
       "static/chunks/main-app-d81c768c58ee14ff.js",
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/app/login/page-e6753845ad799687.js"
+    ],
+    "/gradebook/page": [
+      "static/chunks/webpack-e24ad0af4fc1e462.js",
+      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
+      "static/chunks/117-ebd18671ebde02ac.js",
+      "static/chunks/main-app-d81c768c58ee14ff.js",
+      "static/chunks/44530001-5f86e157ede9686f.js",
+      "static/chunks/609-c7931071362a6c9e.js",
+      "static/chunks/944-945b602a1bb2c2de.js",
+      "static/chunks/app/gradebook/page-be66c6e61c8ab363.js"
     ],
     "/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
@@ -63,7 +63,7 @@
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/page-094469fa3fbbe1f8.js"
     ],
-    "/gradebook/page": [
+    "/duties/roster/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
       "static/chunks/fd9d1056-7bc50396a5a8af55.js",
       "static/chunks/117-ebd18671ebde02ac.js",
@@ -71,7 +71,17 @@
       "static/chunks/44530001-5f86e157ede9686f.js",
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/944-945b602a1bb2c2de.js",
-      "static/chunks/app/gradebook/page-be66c6e61c8ab363.js"
+      "static/chunks/app/duties/roster/page-c255afd30c047106.js"
+    ],
+    "/directory/page": [
+      "static/chunks/webpack-e24ad0af4fc1e462.js",
+      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
+      "static/chunks/117-ebd18671ebde02ac.js",
+      "static/chunks/main-app-d81c768c58ee14ff.js",
+      "static/chunks/44530001-5f86e157ede9686f.js",
+      "static/chunks/609-c7931071362a6c9e.js",
+      "static/chunks/944-945b602a1bb2c2de.js",
+      "static/chunks/app/directory/page-bf29d5cdda2182ce.js"
     ],
     "/timetables/[classCode]/page": [
       "static/chunks/webpack-e24ad0af4fc1e462.js",
@@ -95,16 +105,6 @@
       "static/chunks/609-c7931071362a6c9e.js",
       "static/chunks/944-945b602a1bb2c2de.js",
       "static/chunks/app/timetables/page-2ad90d5bd86b1731.js"
-    ],
-    "/directory/page": [
-      "static/chunks/webpack-e24ad0af4fc1e462.js",
-      "static/chunks/fd9d1056-7bc50396a5a8af55.js",
-      "static/chunks/117-ebd18671ebde02ac.js",
-      "static/chunks/main-app-d81c768c58ee14ff.js",
-      "static/chunks/44530001-5f86e157ede9686f.js",
-      "static/chunks/609-c7931071362a6c9e.js",
-      "static/chunks/944-945b602a1bb2c2de.js",
-      "static/chunks/app/directory/page-a8397a94c8fcd423.js"
     ]
   }
 }

@@ -40,6 +40,13 @@ values
     'This new workspace is organised the same way your class markbook works in practice: student profiles, parent meeting notes, and subject assessment areas such as Phonics, Reading, Writing, Maths, and IPC.'
   ),
   (
+    'staff-directory',
+    'Staff Directory',
+    'HELP Staff Workspace',
+    'Staff Directory',
+    'Manage staff profiles, roles, teams, and timetable access in one place.'
+  ),
+  (
     'timetables-admin',
     'Timetables Admin',
     'Timetable administration',

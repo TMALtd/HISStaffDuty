@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { ALL_TIMETABLES_ACCESS_VALUE } from "@/lib/access";
 import type {
+  PortalHeroSettings,
   StaffDirectoryClassOption,
   StaffDirectoryRecord,
   StaffDirectoryUpsertInput
@@ -20,6 +21,7 @@ type StaffDirectoryProps = {
   staff: StaffDirectoryRecord[];
   classOptions: StaffDirectoryClassOption[];
   showAdminGuidance?: boolean;
+  heroSettings?: PortalHeroSettings | null;
 };
 
 type ModalMode = "view" | "edit" | "create";
@@ -801,7 +803,8 @@ function StaffAvatar({
 export function StaffDirectory({
   staff,
   classOptions,
-  showAdminGuidance = false
+  showAdminGuidance = false,
+  heroSettings
 }: StaffDirectoryProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
@@ -1054,8 +1057,11 @@ export function StaffDirectory({
     <div className="dashboard-grid">
       <section className="directory-hero">
         <div>
-          <h1 className="directory-page-title">Staff Management</h1>
-          <p className="directory-page-copy">Manage teaching staff profiles and information</p>
+          <p className="eyebrow">{heroSettings?.eyebrow ?? "HELP Staff Workspace"}</p>
+          <h1 className="directory-page-title">{heroSettings?.title ?? "Staff Directory"}</h1>
+          <p className="directory-page-copy">
+            {heroSettings?.description ?? "Manage teaching staff profiles and information"}
+          </p>
         </div>
         <button className="directory-add-button" type="button" onClick={openCreateModal}>
           + Add Staff Member

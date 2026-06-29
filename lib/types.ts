@@ -129,6 +129,7 @@ export type GradebookSectionSettingsInput = {
 export type PortalHeroPageKey =
   | "student-filter"
   | "markbook"
+  | "staff-directory"
   | "timetables-admin"
   | "timetables-view";
 

@@ -127,6 +127,13 @@ const DEFAULT_PORTAL_HERO_SETTINGS: PortalHeroSettings[] = [
       "This new workspace is organised the same way your class markbook works in practice: student profiles, parent meeting notes, and subject assessment areas such as Phonics, Reading, Writing, Maths, and IPC."
   },
   {
+    pageKey: "staff-directory",
+    label: "Staff Directory",
+    eyebrow: "HELP Staff Workspace",
+    title: "Staff Directory",
+    description: "Manage staff profiles, roles, teams, and timetable access in one place."
+  },
+  {
     pageKey: "timetables-admin",
     label: "Timetables Admin",
     eyebrow: "Timetable administration",
