@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClassTimetable, deleteClassTimetable, getTimetableBuilderData } from "@/lib/data";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
-import { canAccessTimetableClass } from "@/lib/access";
+import { canAccessTimetableClass, canEditTimetableClass } from "@/lib/access";
 
 type TimetableRouteContext = {
   params: {
@@ -44,6 +44,12 @@ export async function POST(request: Request, context: TimetableRouteContext) {
 
   try {
     const classCode = decodeURIComponent(context.params.classCode);
+    const data = await getTimetableBuilderData(classCode);
+
+    if (!canEditTimetableClass(session.access, data.classSummary)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
     const timetable = await createClassTimetable({
       classCode,

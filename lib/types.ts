@@ -164,6 +164,7 @@ export type StaffProfile = {
   designation: string | null;
   system_role: string | null;
   can_view_own_timetable: boolean;
+  can_edit_own_timetable: boolean;
   can_view_year_group_timetables: boolean;
   can_view_class: boolean;
   can_view_year_group_classes: boolean;
@@ -245,6 +246,7 @@ export type StaffDirectoryUpsertInput = {
   designation: string | null;
   system_role: string | null;
   can_view_own_timetable: boolean;
+  can_edit_own_timetable: boolean;
   can_view_year_group_timetables: boolean;
   can_view_class: boolean;
   can_view_year_group_classes: boolean;

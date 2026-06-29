@@ -62,6 +62,7 @@ const EMPTY_FORM: StaffDirectoryUpsertInput = {
   designation: "",
   system_role: "",
   can_view_own_timetable: false,
+  can_edit_own_timetable: false,
   can_view_year_group_timetables: false,
   can_view_class: false,
   can_view_year_group_classes: false,
@@ -97,6 +98,7 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
     designation: record.designation ?? "",
     system_role: record.system_role ?? "",
     can_view_own_timetable: record.can_view_own_timetable,
+    can_edit_own_timetable: record.can_edit_own_timetable,
     can_view_year_group_timetables: record.can_view_year_group_timetables,
     can_view_class: record.can_view_class,
     can_view_year_group_classes: record.can_view_year_group_classes,
@@ -972,7 +974,10 @@ export function StaffDirectory({
       return;
     }
 
-    if (formValues.can_view_own_timetable && !String(formValues.class ?? "").trim()) {
+    if (
+      (formValues.can_view_own_timetable || formValues.can_edit_own_timetable) &&
+      !String(formValues.class ?? "").trim()
+    ) {
       setFormError("Assign a class before enabling own timetable access.");
       return;
     }
@@ -1462,11 +1467,30 @@ export function StaffDirectory({
                               onChange={(event) =>
                                 setFormValues((current) => ({
                                   ...current,
-                                  can_view_own_timetable: event.target.checked
+                                  can_view_own_timetable: event.target.checked,
+                                  can_edit_own_timetable: event.target.checked
+                                    ? current.can_edit_own_timetable
+                                    : false
                                 }))
                               }
                             />
                             <span>Can view own timetable</span>
+                          </label>
+                          <label className="directory-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(formValues.can_edit_own_timetable)}
+                              onChange={(event) =>
+                                setFormValues((current) => ({
+                                  ...current,
+                                  can_edit_own_timetable: event.target.checked,
+                                  can_view_own_timetable: event.target.checked
+                                    ? true
+                                    : current.can_view_own_timetable
+                                }))
+                              }
+                            />
+                            <span>Can edit own timetable</span>
                           </label>
                           <label className="directory-checkbox-row">
                             <input

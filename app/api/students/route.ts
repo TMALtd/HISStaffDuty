@@ -11,9 +11,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const filters = toQueryFilters(new URL(request.url).searchParams);
+    const url = new URL(request.url);
+    const filters = toQueryFilters(url.searchParams);
+    const academicYear = url.searchParams.get("academicYear");
+    const session = await getCurrentStaffAccessOrNull();
     const [students, classOptions] = await Promise.all([
-      getStudents(filters),
+      getStudents(filters, session?.access.isFullAccess ? academicYear : null),
       getStaffDirectoryClassOptions()
     ]);
     return NextResponse.json({ students, classOptions });

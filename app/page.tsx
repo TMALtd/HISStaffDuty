@@ -2,10 +2,11 @@ import { requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
-import { getPortalHeroSettings } from "@/lib/data";
+import { getPortalHeroSettings, getStudentAcademicYears } from "@/lib/data";
 
 export default async function HomePage() {
   const { user, access } = await requirePortalAccess("student-filter");
+  const academicYears = access.isFullAccess ? await getStudentAcademicYears() : [];
   const heroSettings =
     (await getPortalHeroSettings()).find((setting) => setting.pageKey === "student-filter") ?? null;
 
@@ -31,7 +32,7 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-      <StaffDashboard />
+      <StaffDashboard canManageRosterYears={access.isFullAccess} academicYears={academicYears} />
     </main>
   );
 }

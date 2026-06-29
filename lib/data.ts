@@ -975,6 +975,7 @@ function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
     designation: row.designation ? String(row.designation) : null,
     system_role: row.system_role ? String(row.system_role) : null,
     can_view_own_timetable: normalizeBooleanField(row.can_view_own_timetable),
+    can_edit_own_timetable: normalizeBooleanField(row.can_edit_own_timetable),
     can_view_year_group_timetables: normalizeBooleanField(row.can_view_year_group_timetables),
     can_view_class: normalizeBooleanField(row.can_view_class),
     can_view_year_group_classes: normalizeBooleanField(row.can_view_year_group_classes),
@@ -1277,8 +1278,56 @@ async function getActiveStudentAcademicYearLabelOrNull(): Promise<string | null>
   return activeYear?.label ?? null;
 }
 
-async function getStudentRosterRowsFromView(): Promise<StudentRow[]> {
+function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRow {
+  return {
+    class_code: String(row.class_code ?? ""),
+    class_name: String(row.class_name ?? ""),
+    school: String(row.school ?? ""),
+    designation: String(row.designation ?? ""),
+    year_group: String(row.year_group ?? ""),
+    milepost: String(row.milepost ?? ""),
+    level: String(row.level ?? ""),
+    school_id: String(row.school_id ?? ""),
+    full_name: String(row.full_name ?? ""),
+    surname: row.surname ? String(row.surname) : null,
+    first_name: row.first_name ? String(row.first_name) : null,
+    preferred_name: row.preferred_name ? String(row.preferred_name) : null,
+    gender: row.gender ? String(row.gender) : null,
+    form: String(row.form ?? ""),
+    year_code: row.year_code ? String(row.year_code) : null,
+    tutor: row.tutor ? String(row.tutor) : null,
+    academic_house: row.academic_house ? String(row.academic_house) : null,
+    assigned_teacher_name: null,
+    class_assignment_source: "roster"
+  };
+}
+
+async function getStudentRosterRowsFromView(academicYearLabel?: string | null): Promise<StudentRow[]> {
   const supabase = createSupabaseAdminClient();
+
+  if (academicYearLabel) {
+    const { data, error } = await supabase
+      .from(STUDENT_ROSTER_ENTRIES_TABLE)
+      .select(
+        "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
+      )
+      .eq("academic_year_label", academicYearLabel)
+      .order("class_name")
+      .order("full_name");
+
+    if (error) {
+      if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_ROSTER_ENTRIES_TABLE)) {
+        throw new Error(
+          "Student academic years are not set up yet. Run supabase_student_roster_academic_years.sql first."
+        );
+      }
+
+      throw new Error(error.message);
+    }
+
+    return ((data ?? []) as Array<Record<string, unknown>>).map(normalizeStudentRosterEntryRow);
+  }
+
   const { data, error } = await supabase
     .from(VIEW_NAME)
     .select(
@@ -1373,6 +1422,77 @@ export async function getFilterOptions(filters: Partial<FilterState>): Promise<F
   });
 
   return result;
+}
+
+export async function getFilterOptionsForAcademicYear(
+  filters: Partial<FilterState>,
+  academicYearLabel?: string | null
+): Promise<FilterOptions> {
+  const normalized = normalizeFilterState(filters);
+  let rosterRows: StudentRow[] = [];
+
+  try {
+    rosterRows = await getStudentRosterRowsFromView(academicYearLabel);
+  } catch (error) {
+    if (!(error instanceof Error) || !/student_(class_roster|academic_years|roster_entries)/i.test(error.message)) {
+      throw error;
+    }
+  }
+
+  if (rosterRows.length > 0) {
+    const rosterResult = {} as FilterOptions;
+    const fieldValue = (row: StudentRow, field: FilterField) => {
+      switch (field) {
+        case "school":
+          return row.school;
+        case "designation":
+          return row.designation;
+        case "yearGroup":
+          return row.year_group;
+        case "milepost":
+          return row.milepost;
+        case "level":
+          return row.level;
+        case "className":
+          return row.class_name;
+      }
+    };
+
+    FILTER_FIELDS.forEach((field, index) => {
+      const options = Array.from(
+        new Set(
+          rosterRows
+            .filter((row) => {
+              if (index >= 1 && normalized.school && row.school !== normalized.school) {
+                return false;
+              }
+              if (index >= 2 && normalized.designation && row.designation !== normalized.designation) {
+                return false;
+              }
+              if (index >= 3 && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
+                return false;
+              }
+              if (index >= 4 && normalized.milepost && row.milepost !== normalized.milepost) {
+                return false;
+              }
+              if (index >= 5 && normalized.level && row.level !== normalized.level) {
+                return false;
+              }
+
+              return true;
+            })
+            .map((row) => fieldValue(row, field))
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+
+      rosterResult[field] = options;
+    });
+
+    return rosterResult;
+  }
+
+  return getFilterOptions(filters);
 }
 
 async function getStudentClassAssignmentRows(
@@ -1544,15 +1664,17 @@ async function getClassTeacherLookup(): Promise<Map<string, string>> {
   return resolved;
 }
 
-export async function getStudents(filters: Partial<FilterState>): Promise<StudentRow[]> {
+export async function getStudents(
+  filters: Partial<FilterState>,
+  academicYearLabel?: string | null
+): Promise<StudentRow[]> {
   const normalized = normalizeFilterState(filters);
-  const [activeAcademicYearLabel, data] = await Promise.all([
-    getActiveStudentAcademicYearLabelOrNull(),
-    getStudentRosterRowsFromView()
-  ]);
+  const resolvedAcademicYearLabel =
+    academicYearLabel === undefined ? await getActiveStudentAcademicYearLabelOrNull() : academicYearLabel;
+  const data = await getStudentRosterRowsFromView(resolvedAcademicYearLabel);
 
   const [assignmentRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
-    getStudentClassAssignmentRows(activeAcademicYearLabel),
+    getStudentClassAssignmentRows(resolvedAcademicYearLabel),
     getClassRecords(),
     selectClassTimetableRows(),
     getClassTeacherLookup()
@@ -2350,6 +2472,7 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
     designation: normalizeOptionalText(input.designation),
     system_role: normalizeOptionalText(input.system_role),
     can_view_own_timetable: Boolean(input.can_view_own_timetable),
+    can_edit_own_timetable: Boolean(input.can_edit_own_timetable),
     can_view_year_group_timetables: Boolean(input.can_view_year_group_timetables),
     can_view_class: Boolean(input.can_view_class),
     can_view_year_group_classes: Boolean(input.can_view_year_group_classes),

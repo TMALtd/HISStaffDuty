@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserOrNull } from "@/lib/auth";
-import { getFilterOptions } from "@/lib/data";
+import { getCurrentStaffAccessOrNull, getCurrentUserOrNull } from "@/lib/auth";
+import { getFilterOptions, getFilterOptionsForAcademicYear } from "@/lib/data";
 import { toQueryFilters } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -11,8 +11,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const filters = toQueryFilters(new URL(request.url).searchParams);
-    const options = await getFilterOptions(filters);
+    const url = new URL(request.url);
+    const filters = toQueryFilters(url.searchParams);
+    const academicYear = url.searchParams.get("academicYear");
+    const session = await getCurrentStaffAccessOrNull();
+    const options =
+      session?.access.isFullAccess && academicYear
+        ? await getFilterOptionsForAcademicYear(filters, academicYear)
+        : await getFilterOptions(filters);
     return NextResponse.json({ options });
   } catch (error) {
     return NextResponse.json(

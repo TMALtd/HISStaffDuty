@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
-import { upsertTimetableBlock } from "@/lib/data";
+import { getTimetableBuilderData, upsertTimetableBlock } from "@/lib/data";
+import { canEditTimetableClass } from "@/lib/access";
 import type { TimetableBlockType } from "@/lib/types";
 
 type TimetableRouteContext = {
@@ -15,12 +16,14 @@ export async function POST(request: Request, context: TimetableRouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!session.access.isFullAccess) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
     const classCode = decodeURIComponent(context.params.classCode);
+    const data = await getTimetableBuilderData(classCode);
+
+    if (!canEditTimetableClass(session.access, data.classSummary)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
 
     await upsertTimetableBlock({

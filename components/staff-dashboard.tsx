@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { EMPTY_FILTERS, FILTER_FIELDS, type FilterOptions, type FilterState, type StudentRow } from "@/lib/types";
+import {
+  EMPTY_FILTERS,
+  FILTER_FIELDS,
+  type FilterOptions,
+  type FilterState,
+  type StudentAcademicYear,
+  type StudentRow
+} from "@/lib/types";
 
 type FiltersResponse = {
   options: FilterOptions;
@@ -64,12 +71,23 @@ function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => 
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
-export function StaffDashboard() {
+type StaffDashboardProps = {
+  canManageRosterYears?: boolean;
+  academicYears?: StudentAcademicYear[];
+};
+
+export function StaffDashboard({
+  canManageRosterYears = false,
+  academicYears = []
+}: StaffDashboardProps) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [options, setOptions] = useState<FilterOptions>(createEmptyOptions());
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [academicYear, setAcademicYear] = useState(
+    canManageRosterYears ? academicYears.find((year) => year.is_active)?.label ?? "" : ""
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -78,7 +96,11 @@ export function StaffDashboard() {
       setIsLoading(true);
 
       try {
-        const query = buildQueryString(filters);
+        const params = new URLSearchParams(buildQueryString(filters));
+        if (canManageRosterYears && academicYear) {
+          params.set("academicYear", academicYear);
+        }
+        const query = params.toString();
         const [filtersResponse, studentsResponse] = await Promise.all([
           fetch(`/api/filters${query ? `?${query}` : ""}`, { cache: "no-store" }),
           fetch(`/api/students${query ? `?${query}` : ""}`, { cache: "no-store" })
@@ -123,7 +145,7 @@ export function StaffDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [filters]);
+  }, [filters, academicYear, canManageRosterYears]);
 
   function updateFilter(field: keyof FilterState, value: string) {
     setFilters((current) => {
@@ -158,6 +180,24 @@ export function StaffDashboard() {
       <section className="panel">
         <h2 className="panel-title">Filter roster</h2>
         <div className="filters-grid">
+          {canManageRosterYears ? (
+            <div className="field">
+              <label htmlFor="academicYear">Roster year</label>
+              <select
+                id="academicYear"
+                value={academicYear}
+                onChange={(event) => setAcademicYear(event.target.value)}
+              >
+                <option value="">Live roster</option>
+                {academicYears.map((year) => (
+                  <option key={year.id} value={year.label}>
+                    {year.label}
+                    {year.is_active ? " | Live" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="field">
             <label htmlFor="school">School</label>
             <select
@@ -266,6 +306,9 @@ export function StaffDashboard() {
             Markbook Setup
           </Link>
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
+          {canManageRosterYears && academicYear ? (
+            <span className="hint">Previewing {academicYear}</span>
+          ) : null}
         </div>
         {error ? <div className="banner error-banner">{error}</div> : null}
       </section>

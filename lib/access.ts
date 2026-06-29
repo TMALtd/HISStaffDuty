@@ -35,6 +35,7 @@ export type StaffAccess = {
   allowedViews: PortalView[];
   allowedTimetableYearGroups: string[];
   allowedTimetableClassKeys: string[];
+  canEditOwnTimetable: boolean;
   allowedStudentYearGroups: string[];
   allowedStudentClassKeys: string[];
   roleLabel: string;
@@ -56,6 +57,7 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
       allowedViews: [...ALL_PORTAL_VIEWS],
       allowedTimetableYearGroups: [],
       allowedTimetableClassKeys: [],
+      canEditOwnTimetable: true,
       allowedStudentYearGroups: [],
       allowedStudentClassKeys: [],
       roleLabel: "Full access"
@@ -71,6 +73,8 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     : [];
   const hasTimetableAccess =
     allowedTimetableClassKeys.length > 0 || allowedTimetableYearGroups.length > 0;
+  const canEditOwnTimetable =
+    Boolean(staffProfile?.can_edit_own_timetable) && allowedTimetableClassKeys.length > 0;
   const ownClassKeys = [staffProfile?.class, staffProfile?.timetable]
     .map((value) => normalize(value))
     .filter(Boolean);
@@ -95,6 +99,10 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
 
   if (allowedTimetableClassKeys.length > 0) {
     roleParts.push("Own timetable");
+  }
+
+  if (canEditOwnTimetable) {
+    roleParts.push("Own timetable editing");
   }
 
   if (allowedTimetableYearGroups.length > 0) {
@@ -128,6 +136,7 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
         : [],
     allowedTimetableYearGroups,
     allowedTimetableClassKeys,
+    canEditOwnTimetable,
     allowedStudentYearGroups,
     allowedStudentClassKeys,
     roleLabel: roleParts.join(" + ") || (hasLinkedProfile ? "Portal access" : "No timetable access")
@@ -148,6 +157,18 @@ export function canAccessTimetableClass(access: StaffAccess, classSummary: Timet
     access.allowedTimetableYearGroups.includes(NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE) ||
     access.allowedTimetableYearGroups.includes(normalize(classSummary.yearGroup)) ||
     classKeys.some((key) => access.allowedTimetableClassKeys.includes(key))
+  );
+}
+
+export function canEditTimetableClass(access: StaffAccess, classSummary: TimetableClassSummary) {
+  const classKeys = [classSummary.classCode, classSummary.className]
+    .map((value) => normalize(value))
+    .filter(Boolean);
+
+  return (
+    access.isFullAccess ||
+    (access.canEditOwnTimetable &&
+      classKeys.some((key) => access.allowedTimetableClassKeys.includes(key)))
   );
 }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
-import { resetTimetableBlock } from "@/lib/data";
+import { getTimetableBuilderData, resetTimetableBlock } from "@/lib/data";
+import { canEditTimetableClass } from "@/lib/access";
 
 type TimetableRouteContext = {
   params: {
@@ -15,13 +16,16 @@ export async function DELETE(_request: Request, context: TimetableRouteContext) 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!session.access.isFullAccess) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   try {
+    const classCode = decodeURIComponent(context.params.classCode);
+    const data = await getTimetableBuilderData(classCode);
+
+    if (!canEditTimetableClass(session.access, data.classSummary)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     await resetTimetableBlock({
-      classCode: decodeURIComponent(context.params.classCode),
+      classCode,
       blockId: decodeURIComponent(context.params.blockId)
     });
 
