@@ -1209,8 +1209,8 @@ export function GradebookWorkspace({
 
           return (
             <section className="panel" key={term.term_key}>
-              <div className="panel-heading">
-                <div>
+              <div className="panel-heading gradebook-term-heading">
+                <div className="gradebook-term-heading-copy">
                   <h3 className="panel-title" style={{ marginBottom: 0 }}>{term.term_label}</h3>
                   <span className="hint">
                     {term.start_date && term.end_date
@@ -1218,7 +1218,7 @@ export function GradebookWorkspace({
                       : "Dates not set yet"}
                   </span>
                 </div>
-                <div className="actions" style={{ marginTop: 0 }}>
+                <div className="actions gradebook-term-actions" style={{ marginTop: 0 }}>
                   <span className="hint">
                     {termAssessments.length} assignment column{termAssessments.length === 1 ? "" : "s"}
                   </span>
@@ -1239,8 +1239,8 @@ export function GradebookWorkspace({
 
               {!isCollapsed ? (
                 termAssessments.length ? (
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap gradebook-term-table-wrap">
+                    <table className="gradebook-term-table">
                       <thead>
                         <tr>
                           <th rowSpan={2}>Name</th>
@@ -1799,13 +1799,28 @@ export function GradebookWorkspace({
           <div className="breakdown-list" style={{ marginTop: "1rem" }}>
             {terms.map((term) => {
               const termCount = assessments.filter((assessment) => assessment.term_key === term.term_key).length;
+              const isCollapsed = collapsedTerms[term.term_key] ?? false;
               return (
                 <div className="breakdown-row" key={term.term_key}>
                   <span>
                     {term.term_label}
                     {term.start_date && term.end_date ? ` | ${term.start_date} to ${term.end_date}` : " | Dates not set"}
                   </span>
-                  <strong>{termCount} assignment{termCount === 1 ? "" : "s"}</strong>
+                  <div className="gradebook-term-summary-actions">
+                    <strong>{termCount} assignment{termCount === 1 ? "" : "s"}</strong>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() =>
+                        setCollapsedTerms((current) => ({
+                          ...current,
+                          [term.term_key]: !isCollapsed
+                        }))
+                      }
+                    >
+                      {isCollapsed ? "Expand" : "Collapse"}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1818,7 +1833,7 @@ export function GradebookWorkspace({
       {!linkedSubject ? (
         renderSectionEmptyState()
       ) : (
-        <section className="table-shell">
+        <section className="table-shell gradebook-table-shell">
           {selectedSection?.mode === "profile" ? (
             <div className="pastoral-shell">
               {renderProfileCards()}

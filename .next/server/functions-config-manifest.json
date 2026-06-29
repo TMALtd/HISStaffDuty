@@ -1,1 +1,1 @@
-{"version":1,"functions":{"/directory":{},"/timetables":{},"/timetables/[classCode]":{}}}
+{"version":1,"functions":{"/timetables/[classCode]":{},"/directory":{},"/timetables":{}}}

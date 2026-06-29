@@ -341,6 +341,23 @@ input {
   overflow-x: auto;
 }
 
+.gradebook-table-shell {
+  overflow: visible;
+}
+
+.gradebook-term-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 8px;
+}
+
+.gradebook-term-table {
+  width: max-content;
+  min-width: 100%;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -426,6 +443,20 @@ tr:last-child td {
   gap: 16px;
   align-items: flex-end;
   margin-bottom: 18px;
+}
+
+.gradebook-term-heading {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gradebook-term-heading-copy {
+  min-width: 240px;
+}
+
+.gradebook-term-actions {
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .gradebook-section-grid {
@@ -544,6 +575,14 @@ tr:last-child td {
   gap: 12px;
   align-items: center;
   font-size: 0.95rem;
+}
+
+.gradebook-term-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .bar-wrap {
