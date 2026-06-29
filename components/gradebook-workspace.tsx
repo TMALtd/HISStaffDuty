@@ -1614,7 +1614,9 @@ export function GradebookWorkspace({
                               </div>
                             </th>
                           ))}
-                          <th colSpan={2}>{term.term_label} Summary</th>
+                          <th colSpan={2} className="gradebook-summary-column">
+                            {term.term_label} Summary
+                          </th>
                         </tr>
                         <tr>
                           {termAssessments.flatMap((assessment) => [
@@ -1622,8 +1624,8 @@ export function GradebookWorkspace({
                             <th key={`${assessment.id}-percent`}>%</th>,
                             <th key={`${assessment.id}-grade`}>Grade</th>
                           ])}
-                          <th>%</th>
-                          <th>Grade</th>
+                          <th className="gradebook-summary-column gradebook-summary-percent">%</th>
+                          <th className="gradebook-summary-column gradebook-summary-grade">Grade</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1729,14 +1731,14 @@ export function GradebookWorkspace({
                                   </Fragment>
                                 );
                               })}
-                              <td>
+                              <td className="gradebook-summary-column gradebook-summary-percent">
                                 <div
                                   className={`gradebook-percentage-value ${getGradeToneClass(termGrade)}`}
                                 >
                                   {termPercentage === null ? "—" : `${termPercentage.toFixed(1)}%`}
                                 </div>
                               </td>
-                              <td>
+                              <td className="gradebook-summary-column gradebook-summary-grade">
                                 <div
                                   className={`gradebook-percentage-value ${getGradeToneClass(termGrade)}`}
                                 >

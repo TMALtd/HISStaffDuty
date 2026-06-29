@@ -379,6 +379,25 @@ input {
   z-index: 2;
 }
 
+.gradebook-summary-column {
+  position: sticky;
+  z-index: 3;
+  background: rgba(255, 251, 245, 0.98);
+  box-shadow: -10px 0 16px rgba(76, 38, 18, 0.05);
+}
+
+.gradebook-summary-percent {
+  right: 124px;
+  min-width: 110px;
+  width: 110px;
+}
+
+.gradebook-summary-grade {
+  right: 0;
+  min-width: 124px;
+  width: 124px;
+}
+
 .gradebook-assessment-column {
   min-width: 420px;
 }
