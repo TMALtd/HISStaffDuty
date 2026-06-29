@@ -39,7 +39,9 @@ import {
   type FilterOptions,
   type FilterState,
   type StaffDirectoryClassOption,
+  type StudentAcademicYear,
   type StudentClassAssignmentInput,
+  type StudentRosterImportSummary,
   type StaffDirectoryRecord,
   type StaffDirectoryUpsertInput,
   type StaffProfile,
@@ -60,6 +62,7 @@ type StudentClassAssignmentRow = {
   student_school_id: string;
   class_name: string;
   class_code: string | null;
+  academic_year_label: string | null;
 };
 
 type StudentClassMetadata = {
@@ -72,6 +75,44 @@ type StudentClassMetadata = {
   level: string;
 };
 
+type StudentAcademicYearRow = {
+  id: string;
+  label: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  is_active: boolean;
+  is_archived: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type StudentRosterImportRow = {
+  class_code: string;
+  class_name: string;
+  school: string;
+  designation: string;
+  year_group: string;
+  milepost: string;
+  level: string;
+  school_id: string;
+  full_name: string;
+  surname: string | null;
+  first_name: string | null;
+  preferred_name: string | null;
+  gender: string | null;
+  form: string;
+  year_code: string | null;
+  tutor: string | null;
+  academic_house: string | null;
+  nationality: string | null;
+  current_school_name: string | null;
+  choice_of_programme: string | null;
+  admission_status: string | null;
+  offer_type: string | null;
+  conditional_offer_type: string | null;
+  source_filename: string | null;
+};
+
 const DEFAULT_GRADEBOOK_TERMS: GradebookTerm[] = [
   { id: "default-term-1", term_key: "term-1", term_label: "Term 1", start_date: null, end_date: null, sort_order: 1 },
   { id: "default-term-2", term_key: "term-2", term_label: "Term 2", start_date: null, end_date: null, sort_order: 2 },
@@ -80,7 +121,10 @@ const DEFAULT_GRADEBOOK_TERMS: GradebookTerm[] = [
 
 const TABLE_NAME = "Class List";
 const VIEW_NAME = "student_class_roster";
+const LEGACY_STUDENT_ROSTER_VIEW_NAME = "student_class_roster_legacy";
 const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
+const STUDENT_ACADEMIC_YEARS_TABLE = "student_academic_years";
+const STUDENT_ROSTER_ENTRIES_TABLE = "student_roster_entries";
 const SUBJECTS_TABLE = "gradebook_subjects";
 const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
@@ -1181,8 +1225,140 @@ function findClassRecordByName(classRecords: ClassRecord[], className: string) {
   return classRecords.find((row) => row["Class Name"].trim().toLowerCase() === normalizedName) ?? null;
 }
 
+function normalizeStudentAcademicYearRow(row: Record<string, unknown>): StudentAcademicYearRow {
+  return {
+    id: String(row.id ?? ""),
+    label: String(row.label ?? ""),
+    starts_on: row.starts_on ? String(row.starts_on) : null,
+    ends_on: row.ends_on ? String(row.ends_on) : null,
+    is_active: Boolean(row.is_active),
+    is_archived: Boolean(row.is_archived),
+    created_at: row.created_at ? String(row.created_at) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : null
+  };
+}
+
+function toStudentAcademicYear(
+  year: StudentAcademicYearRow,
+  counts?: { studentCount?: number; classCount?: number }
+): StudentAcademicYear {
+  return {
+    ...year,
+    student_count: counts?.studentCount ?? 0,
+    class_count: counts?.classCount ?? 0
+  };
+}
+
+async function getStudentAcademicYearRows(): Promise<StudentAcademicYearRow[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(STUDENT_ACADEMIC_YEARS_TABLE)
+    .select("id,label,starts_on,ends_on,is_active,is_archived,created_at,updated_at")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_ACADEMIC_YEARS_TABLE)) {
+      return [];
+    }
+
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map(normalizeStudentAcademicYearRow);
+}
+
+async function getActiveStudentAcademicYearRowOrNull(): Promise<StudentAcademicYearRow | null> {
+  const years = await getStudentAcademicYearRows();
+  return years.find((year) => year.is_active) ?? null;
+}
+
+async function getActiveStudentAcademicYearLabelOrNull(): Promise<string | null> {
+  const activeYear = await getActiveStudentAcademicYearRowOrNull();
+  return activeYear?.label ?? null;
+}
+
+async function getStudentRosterRowsFromView(): Promise<StudentRow[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(VIEW_NAME)
+    .select(
+      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
+    )
+    .order("class_name")
+    .order("full_name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as StudentRow[];
+}
+
 export async function getFilterOptions(filters: Partial<FilterState>): Promise<FilterOptions> {
   const normalized = normalizeFilterState(filters);
+  let rosterRows: StudentRow[] = [];
+
+  try {
+    rosterRows = await getStudentRosterRowsFromView();
+  } catch (error) {
+    if (!(error instanceof Error) || !/student_class_roster/i.test(error.message)) {
+      throw error;
+    }
+  }
+
+  if (rosterRows.length > 0) {
+    const rosterResult = {} as FilterOptions;
+    const fieldValue = (row: StudentRow, field: FilterField) => {
+      switch (field) {
+        case "school":
+          return row.school;
+        case "designation":
+          return row.designation;
+        case "yearGroup":
+          return row.year_group;
+        case "milepost":
+          return row.milepost;
+        case "level":
+          return row.level;
+        case "className":
+          return row.class_name;
+      }
+    };
+
+    FILTER_FIELDS.forEach((field, index) => {
+      const options = Array.from(
+        new Set(
+          rosterRows
+            .filter((row) => {
+              if (index >= 1 && normalized.school && row.school !== normalized.school) {
+                return false;
+              }
+              if (index >= 2 && normalized.designation && row.designation !== normalized.designation) {
+                return false;
+              }
+              if (index >= 3 && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
+                return false;
+              }
+              if (index >= 4 && normalized.milepost && row.milepost !== normalized.milepost) {
+                return false;
+              }
+              if (index >= 5 && normalized.level && row.level !== normalized.level) {
+                return false;
+              }
+
+              return true;
+            })
+            .map((row) => fieldValue(row, field))
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+
+      rosterResult[field] = options;
+    });
+
+    return rosterResult;
+  }
+
   const rows = await getClassRecords();
 
   const result = {} as FilterOptions;
@@ -1199,25 +1375,63 @@ export async function getFilterOptions(filters: Partial<FilterState>): Promise<F
   return result;
 }
 
-async function getStudentClassAssignmentRows(): Promise<StudentClassAssignmentRow[]> {
+async function getStudentClassAssignmentRows(
+  academicYearLabel?: string | null
+): Promise<StudentClassAssignmentRow[]> {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
-    .select("student_school_id,class_name,class_code");
+  let data: Array<Record<string, unknown>> | null = null;
 
-  if (error) {
-    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+  const v2Result = await supabase
+    .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+    .select("student_school_id,class_name,class_code,academic_year_label");
+
+  if (v2Result.error) {
+    if (
+      isMissingSupabaseRelationError(new Error(v2Result.error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)
+    ) {
       return [];
     }
 
-    throw new Error(error.message);
+    if (!/academic_year_label/i.test(v2Result.error.message)) {
+      throw new Error(v2Result.error.message);
+    }
+
+    const legacyResult = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .select("student_school_id,class_name,class_code");
+
+    if (legacyResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(legacyResult.error.message),
+          STUDENT_CLASS_ASSIGNMENTS_TABLE
+        )
+      ) {
+        return [];
+      }
+
+      throw new Error(legacyResult.error.message);
+    }
+
+    data = (legacyResult.data ?? []) as Array<Record<string, unknown>>;
+  } else {
+    data = (v2Result.data ?? []) as Array<Record<string, unknown>>;
   }
 
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    student_school_id: String(row.student_school_id ?? "").trim(),
-    class_name: String(row.class_name ?? "").trim(),
-    class_code: row.class_code ? String(row.class_code).trim() : null
-  }));
+  return data
+    .map((row) => ({
+      student_school_id: String(row.student_school_id ?? "").trim(),
+      class_name: String(row.class_name ?? "").trim(),
+      class_code: row.class_code ? String(row.class_code).trim() : null,
+      academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() : null
+    }))
+    .filter((row) => {
+      if (!academicYearLabel) {
+        return row.academic_year_label === null;
+      }
+
+      return row.academic_year_label === academicYearLabel;
+    });
 }
 
 function buildStudentClassMetadataLookup(
@@ -1331,23 +1545,14 @@ async function getClassTeacherLookup(): Promise<Map<string, string>> {
 }
 
 export async function getStudents(filters: Partial<FilterState>): Promise<StudentRow[]> {
-  const supabase = createSupabaseAdminClient();
   const normalized = normalizeFilterState(filters);
-
-  const { data, error } = await supabase
-    .from(VIEW_NAME)
-    .select(
-      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
-    )
-    .order("class_name")
-    .order("full_name");
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const [activeAcademicYearLabel, data] = await Promise.all([
+    getActiveStudentAcademicYearLabelOrNull(),
+    getStudentRosterRowsFromView()
+  ]);
 
   const [assignmentRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
-    getStudentClassAssignmentRows(),
+    getStudentClassAssignmentRows(activeAcademicYearLabel),
     getClassRecords(),
     selectClassTimetableRows(),
     getClassTeacherLookup()
@@ -1358,7 +1563,7 @@ export async function getStudents(filters: Partial<FilterState>): Promise<Studen
   );
   const classMetadataLookup = buildStudentClassMetadataLookup(classRecords, timetableRows);
 
-  return ((data ?? []) as StudentRow[])
+  return data
     .map((student) => {
       const schoolId = String(student.school_id);
       const assignment = assignmentsByStudentId.get(schoolId) ?? null;
@@ -1441,45 +1646,516 @@ export async function upsertStudentClassAssignment(
   const classCode = normalizeOptionalText(input.classCode);
 
   if (!className) {
-    const { error } = await supabase
+    const activeAcademicYearLabel = await getActiveStudentAcademicYearLabelOrNull();
+    const deleteWithYearResult = await supabase
       .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
       .delete()
-      .eq("student_school_id", studentSchoolId);
+      .eq("student_school_id", studentSchoolId)
+      .eq("academic_year_label", activeAcademicYearLabel);
 
-    if (error) {
-      if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+    if (deleteWithYearResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(deleteWithYearResult.error.message),
+          STUDENT_CLASS_ASSIGNMENTS_TABLE
+        )
+      ) {
         throw new Error(
           "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
         );
       }
 
-      throw new Error(error.message);
+      if (!/academic_year_label/i.test(deleteWithYearResult.error.message)) {
+        throw new Error(deleteWithYearResult.error.message);
+      }
+
+      const legacyDeleteResult = await supabase
+        .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+        .delete()
+        .eq("student_school_id", studentSchoolId);
+
+      if (legacyDeleteResult.error) {
+        if (
+          isMissingSupabaseRelationError(
+            new Error(legacyDeleteResult.error.message),
+            STUDENT_CLASS_ASSIGNMENTS_TABLE
+          )
+        ) {
+          throw new Error(
+            "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
+          );
+        }
+
+        throw new Error(legacyDeleteResult.error.message);
+      }
     }
 
     return;
   }
 
+  const activeAcademicYearLabel = await getActiveStudentAcademicYearLabelOrNull();
   const payload = {
     student_school_id: studentSchoolId,
     class_name: className,
     class_code: classCode,
+    academic_year_label: activeAcademicYearLabel,
     assigned_by_email: normalizeOptionalText(assignedByEmail)?.toLowerCase() ?? null,
     updated_at: new Date().toISOString()
   };
 
-  const { error } = await supabase
+  const v2Result = await supabase
     .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
-    .upsert(payload, { onConflict: "student_school_id" });
+    .upsert(payload, { onConflict: "student_school_id,academic_year_label" });
 
-  if (error) {
-    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
+  if (v2Result.error) {
+    if (isMissingSupabaseRelationError(new Error(v2Result.error.message), STUDENT_CLASS_ASSIGNMENTS_TABLE)) {
       throw new Error(
         "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
       );
     }
 
+    if (!/academic_year_label/i.test(v2Result.error.message)) {
+      throw new Error(v2Result.error.message);
+    }
+
+    const legacyResult = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .upsert(
+        {
+          student_school_id: studentSchoolId,
+          class_name: className,
+          class_code: classCode,
+          assigned_by_email: normalizeOptionalText(assignedByEmail)?.toLowerCase() ?? null,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "student_school_id" }
+      );
+
+    if (legacyResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(legacyResult.error.message),
+          STUDENT_CLASS_ASSIGNMENTS_TABLE
+        )
+      ) {
+        throw new Error(
+          "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
+        );
+      }
+
+      throw new Error(legacyResult.error.message);
+    }
+  }
+}
+
+export async function getStudentAcademicYears(): Promise<StudentAcademicYear[]> {
+  const [years, counts] = await Promise.all([
+    getStudentAcademicYearRows(),
+    (async () => {
+      const supabase = createSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from(STUDENT_ROSTER_ENTRIES_TABLE)
+        .select("academic_year_id,class_name,school_id");
+
+      if (error) {
+        if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_ROSTER_ENTRIES_TABLE)) {
+          return [] as Array<Record<string, unknown>>;
+        }
+
+        throw new Error(error.message);
+      }
+
+      return (data ?? []) as Array<Record<string, unknown>>;
+    })()
+  ]);
+
+  const countsByYearId = new Map<string, { studentCount: number; classNames: Set<string> }>();
+
+  counts.forEach((row) => {
+    const yearId = String(row.academic_year_id ?? "").trim();
+    if (!yearId) {
+      return;
+    }
+
+    const current = countsByYearId.get(yearId) ?? { studentCount: 0, classNames: new Set<string>() };
+    current.studentCount += 1;
+    if (row.class_name) {
+      current.classNames.add(String(row.class_name).trim());
+    }
+    countsByYearId.set(yearId, current);
+  });
+
+  return years.map((year) =>
+    toStudentAcademicYear(year, {
+      studentCount: countsByYearId.get(year.id)?.studentCount ?? 0,
+      classCount: countsByYearId.get(year.id)?.classNames.size ?? 0
+    })
+  );
+}
+
+export async function upsertStudentAcademicYear(input: {
+  label: string;
+  startsOn?: string | null;
+  endsOn?: string | null;
+  isActive?: boolean;
+  isArchived?: boolean;
+}): Promise<StudentAcademicYear[]> {
+  const supabase = createSupabaseAdminClient();
+  const label = normalizeRequiredText(input.label, "Academic year label");
+  const payload = {
+    label,
+    starts_on: normalizeOptionalText(input.startsOn),
+    ends_on: normalizeOptionalText(input.endsOn),
+    is_active: Boolean(input.isActive),
+    is_archived: Boolean(input.isArchived),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase
+    .from(STUDENT_ACADEMIC_YEARS_TABLE)
+    .upsert(payload, { onConflict: "label" });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_ACADEMIC_YEARS_TABLE)) {
+      throw new Error(
+        "Student academic years are not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
     throw new Error(error.message);
   }
+
+  if (payload.is_active) {
+    await setActiveStudentAcademicYear(label);
+  }
+
+  return getStudentAcademicYears();
+}
+
+export async function setActiveStudentAcademicYear(label: string): Promise<StudentAcademicYear[]> {
+  const supabase = createSupabaseAdminClient();
+  const normalizedLabel = normalizeRequiredText(label, "Academic year label");
+
+  const deactivateResult = await supabase
+    .from(STUDENT_ACADEMIC_YEARS_TABLE)
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .neq("label", normalizedLabel);
+
+  if (deactivateResult.error) {
+    if (
+      isMissingSupabaseRelationError(
+        new Error(deactivateResult.error.message),
+        STUDENT_ACADEMIC_YEARS_TABLE
+      )
+    ) {
+      throw new Error(
+        "Student academic years are not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
+    throw new Error(deactivateResult.error.message);
+  }
+
+  const activateResult = await supabase
+    .from(STUDENT_ACADEMIC_YEARS_TABLE)
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq("label", normalizedLabel);
+
+  if (activateResult.error) {
+    throw new Error(activateResult.error.message);
+  }
+
+  return getStudentAcademicYears();
+}
+
+export async function archiveLegacyStudentRoster(input: {
+  academicYearLabel: string;
+  archivedByEmail?: string | null;
+}): Promise<StudentAcademicYear[]> {
+  const supabase = createSupabaseAdminClient();
+  const academicYearLabel = normalizeRequiredText(input.academicYearLabel, "Academic year label");
+
+  const existingYears = await getStudentAcademicYearRows();
+  let targetYear = existingYears.find((year) => year.label === academicYearLabel) ?? null;
+
+  if (!targetYear) {
+    const createYearResult = await supabase
+      .from(STUDENT_ACADEMIC_YEARS_TABLE)
+      .insert({
+        label: academicYearLabel,
+        is_active: false,
+        is_archived: true
+      })
+      .select("id,label,starts_on,ends_on,is_active,is_archived,created_at,updated_at")
+      .single();
+
+    if (createYearResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(createYearResult.error.message),
+          STUDENT_ACADEMIC_YEARS_TABLE
+        )
+      ) {
+        throw new Error(
+          "Student academic years are not set up yet. Run supabase_student_roster_academic_years.sql first."
+        );
+      }
+
+      throw new Error(createYearResult.error.message);
+    }
+
+    targetYear = normalizeStudentAcademicYearRow(
+      createYearResult.data as unknown as Record<string, unknown>
+    );
+  }
+
+  const legacyResult = await supabase
+    .from(LEGACY_STUDENT_ROSTER_VIEW_NAME)
+    .select(
+      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,preferred_name,gender,form,year_code,tutor,academic_house"
+    )
+    .order("class_name")
+    .order("full_name");
+
+  if (legacyResult.error) {
+    if (
+      isMissingSupabaseRelationError(
+        new Error(legacyResult.error.message),
+        LEGACY_STUDENT_ROSTER_VIEW_NAME
+      )
+    ) {
+      throw new Error(
+        "Legacy student roster view is not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
+    throw new Error(legacyResult.error.message);
+  }
+
+  const legacyRows = (legacyResult.data ?? []) as Array<Record<string, unknown>>;
+
+  const deleteExistingResult = await supabase
+    .from(STUDENT_ROSTER_ENTRIES_TABLE)
+    .delete()
+    .eq("academic_year_id", targetYear.id);
+
+  if (deleteExistingResult.error) {
+    if (
+      isMissingSupabaseRelationError(
+        new Error(deleteExistingResult.error.message),
+        STUDENT_ROSTER_ENTRIES_TABLE
+      )
+    ) {
+      throw new Error(
+        "Student roster archive table is not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
+    throw new Error(deleteExistingResult.error.message);
+  }
+
+  if (legacyRows.length > 0) {
+    const archivePayload = legacyRows.map((row) => {
+      const fullName = String(row.full_name ?? "").trim();
+      const preferredName = row.preferred_name ? String(row.preferred_name).trim() : null;
+      const [firstNameGuess, ...surnameGuess] = fullName.split(/\s+/);
+      return {
+        academic_year_id: targetYear.id,
+        class_code: String(row.class_code ?? "").trim(),
+        class_name: String(row.class_name ?? "").trim(),
+        school: String(row.school ?? "").trim(),
+        designation: String(row.designation ?? "").trim(),
+        year_group: String(row.year_group ?? "").trim(),
+        milepost: String(row.milepost ?? "").trim(),
+        level: String(row.level ?? "").trim(),
+        school_id: String(row.school_id ?? "").trim(),
+        full_name: fullName,
+        surname: surnameGuess.length ? surnameGuess.join(" ") : null,
+        first_name: firstNameGuess || null,
+        preferred_name: preferredName,
+        gender: row.gender ? String(row.gender).trim() : null,
+        form: String(row.form ?? row.class_name ?? "").trim(),
+        year_code: row.year_code ? String(row.year_code).trim() : null,
+        tutor: row.tutor ? String(row.tutor).trim() : null,
+        academic_house: row.academic_house ? String(row.academic_house).trim() : null,
+        source_filename: "Legacy roster archive",
+        imported_at: new Date().toISOString()
+      };
+    });
+
+    const insertResult = await supabase.from(STUDENT_ROSTER_ENTRIES_TABLE).insert(archivePayload);
+
+    if (insertResult.error) {
+      throw new Error(insertResult.error.message);
+    }
+  }
+
+  const updateYearResult = await supabase
+    .from(STUDENT_ACADEMIC_YEARS_TABLE)
+    .update({
+      is_archived: true,
+      updated_at: new Date().toISOString(),
+      archived_by_email: normalizeOptionalText(input.archivedByEmail)?.toLowerCase() ?? null
+    })
+    .eq("id", targetYear.id);
+
+  if (updateYearResult.error && !/archived_by_email/i.test(updateYearResult.error.message)) {
+    throw new Error(updateYearResult.error.message);
+  }
+
+  return getStudentAcademicYears();
+}
+
+export async function importStudentRosterClassCsv(input: {
+  academicYearLabel: string;
+  classCode?: string | null;
+  className?: string | null;
+  csvText: string;
+  sourceFilename?: string | null;
+}): Promise<StudentRosterImportSummary> {
+  const supabase = createSupabaseAdminClient();
+  const academicYearLabel = normalizeRequiredText(input.academicYearLabel, "Academic year label");
+  const csvText = normalizeRequiredText(input.csvText, "CSV text");
+  const sourceFilename = normalizeOptionalText(input.sourceFilename);
+  const classRecords = await getClassRecords();
+
+  const targetClass =
+    (input.classCode
+      ? findClassRecordByCode(classRecords, input.classCode)
+      : null) ??
+    (input.className ? findClassRecordByName(classRecords, input.className) : null);
+
+  if (!targetClass) {
+    throw new Error("Choose a valid class before importing a student list.");
+  }
+
+  let targetYear = (await getStudentAcademicYearRows()).find((year) => year.label === academicYearLabel) ?? null;
+
+  if (!targetYear) {
+    const createdYears = await upsertStudentAcademicYear({
+      label: academicYearLabel,
+      isActive: false,
+      isArchived: false
+    });
+    targetYear = createdYears.find((year) => year.label === academicYearLabel) ?? null;
+  }
+
+  if (!targetYear) {
+    throw new Error("Could not create the target academic year.");
+  }
+
+  const rows = parseCsvRows(csvText);
+  const headerIndex = rows.findIndex((row) =>
+    row.some((cell) => normalizeClassCsvHeader(cell) === "full report name")
+  );
+
+  if (headerIndex === -1) {
+    throw new Error("Could not find the student CSV header row.");
+  }
+
+  const headers = rows[headerIndex].map(normalizeClassCsvHeader);
+  const dataRows = rows.slice(headerIndex + 1);
+  const indexOf = (label: string) => headers.findIndex((value) => value === normalizeClassCsvHeader(label));
+  const fullNameIndex = indexOf("Full Report Name");
+  const firstNameIndex = indexOf("Forename");
+  const preferredNameIndex = indexOf("Preferred Name");
+  const surnameIndex = indexOf("Surname");
+  const genderIndex = indexOf("Gender");
+  const nationalityIndex = indexOf("Nationality");
+  const currentSchoolIndex = indexOf("Current School Name");
+  const yearCodeIndex = indexOf("Year Code On Entry");
+  const schoolCodeIndex = indexOf("School Code");
+  const programmeIndex = indexOf("Choice of Programme");
+  const admissionStatusIndex = indexOf("Admission Status");
+  const offerTypeIndex = indexOf("Offer Type");
+  const conditionalOfferTypeIndex = indexOf("Conditional Offer Type");
+
+  if (fullNameIndex === -1 || schoolCodeIndex === -1) {
+    throw new Error("The CSV needs at least Full Report Name and School Code columns.");
+  }
+
+  const payload: StudentRosterImportRow[] = [];
+  let skippedCount = 0;
+
+  dataRows.forEach((row) => {
+    const schoolId = String(row[schoolCodeIndex] ?? "").trim();
+    const fullName = String(row[fullNameIndex] ?? "").trim();
+
+    if (!schoolId || !fullName) {
+      skippedCount += 1;
+      return;
+    }
+
+    payload.push({
+      class_code: String(targetClass["Class Code"] ?? "").trim(),
+      class_name: String(targetClass["Class Name"] ?? "").trim(),
+      school: String(targetClass.School ?? "").trim(),
+      designation: String(targetClass.Designation ?? "").trim(),
+      year_group: String(targetClass["Year Group"] ?? "").trim(),
+      milepost: String(targetClass.Milepost ?? "").trim(),
+      level: String(targetClass.Level ?? "").trim(),
+      school_id: schoolId,
+      full_name: fullName,
+      surname: surnameIndex === -1 ? null : normalizeOptionalText(row[surnameIndex]),
+      first_name: firstNameIndex === -1 ? null : normalizeOptionalText(row[firstNameIndex]),
+      preferred_name: preferredNameIndex === -1 ? null : normalizeOptionalText(row[preferredNameIndex]),
+      gender: genderIndex === -1 ? null : normalizeOptionalText(row[genderIndex]),
+      form: String(targetClass["Class Name"] ?? "").trim(),
+      year_code: yearCodeIndex === -1 ? null : normalizeOptionalText(row[yearCodeIndex]),
+      tutor: null,
+      academic_house: null,
+      nationality: nationalityIndex === -1 ? null : normalizeOptionalText(row[nationalityIndex]),
+      current_school_name: currentSchoolIndex === -1 ? null : normalizeOptionalText(row[currentSchoolIndex]),
+      choice_of_programme: programmeIndex === -1 ? null : normalizeOptionalText(row[programmeIndex]),
+      admission_status: admissionStatusIndex === -1 ? null : normalizeOptionalText(row[admissionStatusIndex]),
+      offer_type: offerTypeIndex === -1 ? null : normalizeOptionalText(row[offerTypeIndex]),
+      conditional_offer_type:
+        conditionalOfferTypeIndex === -1 ? null : normalizeOptionalText(row[conditionalOfferTypeIndex]),
+      source_filename: sourceFilename
+    });
+  });
+
+  const deleteExistingResult = await supabase
+    .from(STUDENT_ROSTER_ENTRIES_TABLE)
+    .delete()
+    .eq("academic_year_id", targetYear.id)
+    .eq("class_name", String(targetClass["Class Name"] ?? "").trim());
+
+  if (deleteExistingResult.error) {
+    if (
+      isMissingSupabaseRelationError(
+        new Error(deleteExistingResult.error.message),
+        STUDENT_ROSTER_ENTRIES_TABLE
+      )
+    ) {
+      throw new Error(
+        "Student roster archive table is not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
+    throw new Error(deleteExistingResult.error.message);
+  }
+
+  if (payload.length > 0) {
+    const insertPayload = payload.map((row) => ({
+      academic_year_id: targetYear.id,
+      ...row,
+      imported_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    const insertResult = await supabase.from(STUDENT_ROSTER_ENTRIES_TABLE).insert(insertPayload);
+    if (insertResult.error) {
+      throw new Error(insertResult.error.message);
+    }
+  }
+
+  return {
+    academicYearLabel,
+    className: String(targetClass["Class Name"] ?? "").trim(),
+    importedCount: payload.length,
+    skippedCount
+  };
 }
 
 export async function getStaffProfileByEmail(email: string): Promise<StaffProfile | null> {

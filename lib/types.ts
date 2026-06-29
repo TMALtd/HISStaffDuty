@@ -207,6 +207,26 @@ export type StudentClassAssignmentInput = {
   classCode?: string | null;
 };
 
+export type StudentAcademicYear = {
+  id: string;
+  label: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  is_active: boolean;
+  is_archived: boolean;
+  student_count: number;
+  class_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type StudentRosterImportSummary = {
+  academicYearLabel: string;
+  className: string;
+  importedCount: number;
+  skippedCount: number;
+};
+
 export type StaffDirectoryUpsertInput = {
   id?: string;
   staff_id: string | null;

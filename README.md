@@ -13,9 +13,10 @@ Private staff-facing Next.js app for browsing students by school, designation, y
 ## Supabase setup
 
 1. Run the SQL in `supabase_staff_portal.sql`.
-2. In Supabase Auth, enable Email OTP / magic links for staff sign-in.
-3. Create staff users in Supabase Auth.
-4. Set the site URL and redirect URL:
+2. Run `supabase_student_roster_academic_years.sql` to enable archived academic years, class-by-class roster imports, and the live academic-year switcher in Setup.
+3. In Supabase Auth, enable Email OTP / magic links for staff sign-in.
+4. Create staff users in Supabase Auth.
+5. Set the site URL and redirect URL:
    - local: `http://localhost:3000/auth/callback`
    - production: `https://your-render-domain.onrender.com/auth/callback`
 

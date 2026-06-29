@@ -8,7 +8,9 @@ import type {
   GradebookSectionDefinition,
   GradebookSubject,
   GradebookTerm,
-  PortalHeroSettings
+  PortalHeroSettings,
+  StaffDirectoryClassOption,
+  StudentAcademicYear
 } from "@/lib/types";
 
 type SubjectsResponse = {
@@ -31,6 +33,11 @@ type PortalHeroSettingsResponse = {
   settings: PortalHeroSettings[];
 };
 
+type StudentRosterAdminResponse = {
+  academicYears: StudentAcademicYear[];
+  classOptions: StaffDirectoryClassOption[];
+};
+
 export function GradebookAdmin() {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -42,8 +49,28 @@ export function GradebookAdmin() {
   const [terms, setTerms] = useState<GradebookTerm[]>([]);
   const [sections, setSections] = useState<GradebookSectionDefinition[]>(getGradebookSectionDefinitions());
   const [portalHeroSettings, setPortalHeroSettings] = useState<PortalHeroSettings[]>([]);
+  const [academicYears, setAcademicYears] = useState<StudentAcademicYear[]>([]);
+  const [classOptions, setClassOptions] = useState<StaffDirectoryClassOption[]>([]);
+  const [archiveYearLabel, setArchiveYearLabel] = useState("AY 2025/2026");
+  const [newAcademicYearLabel, setNewAcademicYearLabel] = useState("AY 2026/2027");
+  const [newAcademicYearStart, setNewAcademicYearStart] = useState("");
+  const [newAcademicYearEnd, setNewAcademicYearEnd] = useState("");
+  const [importAcademicYearLabel, setImportAcademicYearLabel] = useState("");
+  const [importClassCode, setImportClassCode] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  async function loadStudentRosterAdmin() {
+    const response = await fetch("/api/students/admin", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("Could not load student roster setup.");
+    }
+
+    const json = (await response.json()) as StudentRosterAdminResponse;
+    setAcademicYears(json.academicYears);
+    setClassOptions(json.classOptions);
+  }
 
   async function loadSubjects() {
     const response = await fetch("/api/gradebook/subjects", { cache: "no-store" });
@@ -107,6 +134,21 @@ export function GradebookAdmin() {
       setError(loadError instanceof Error ? loadError.message : "Could not load portal card text.");
     });
   }, []);
+
+  useEffect(() => {
+    void loadStudentRosterAdmin().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : "Could not load student roster setup.");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!importAcademicYearLabel) {
+      const activeYear = academicYears.find((year) => year.is_active) ?? academicYears[0] ?? null;
+      if (activeYear) {
+        setImportAcademicYearLabel(activeYear.label);
+      }
+    }
+  }, [academicYears, importAcademicYearLabel]);
 
   useEffect(() => {
     if (!selectedSubjectId) {
@@ -329,6 +371,147 @@ export function GradebookAdmin() {
     setStatus("Portal card text updated.");
   }
 
+  async function createAcademicYear(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/students/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "create-year",
+        label: newAcademicYearLabel,
+        startsOn: newAcademicYearStart || null,
+        endsOn: newAcademicYearEnd || null,
+        isActive: false,
+        isArchived: false
+      })
+    });
+
+    const json = (await response.json()) as { academicYears?: StudentAcademicYear[]; error?: string };
+    if (!response.ok) {
+      setError(json.error ?? "Could not create the academic year.");
+      return;
+    }
+
+    setAcademicYears(json.academicYears ?? []);
+    setImportAcademicYearLabel(newAcademicYearLabel);
+    setStatus(`Academic year ${newAcademicYearLabel} is ready for imports.`);
+  }
+
+  async function activateAcademicYear(label: string) {
+    setError("");
+
+    const response = await fetch("/api/students/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "activate-year",
+        label
+      })
+    });
+
+    const json = (await response.json()) as { academicYears?: StudentAcademicYear[]; error?: string };
+    if (!response.ok) {
+      setError(json.error ?? "Could not activate that academic year.");
+      return;
+    }
+
+    setAcademicYears(json.academicYears ?? []);
+    setImportAcademicYearLabel(label);
+    setStatus(`${label} is now the live student roster.`);
+  }
+
+  async function archiveCurrentRoster(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/students/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "archive-current",
+        label: archiveYearLabel
+      })
+    });
+
+    const json = (await response.json()) as { academicYears?: StudentAcademicYear[]; error?: string };
+    if (!response.ok) {
+      setError(json.error ?? "Could not archive the current roster.");
+      return;
+    }
+
+    setAcademicYears(json.academicYears ?? []);
+    setStatus(`Current live roster archived as ${archiveYearLabel}.`);
+  }
+
+  async function importClassRoster(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (!importAcademicYearLabel) {
+      setError("Choose an academic year before importing a class list.");
+      return;
+    }
+
+    if (!importClassCode) {
+      setError("Choose a class before importing a class list.");
+      return;
+    }
+
+    if (!importFile) {
+      setError("Choose a CSV file to import.");
+      return;
+    }
+
+    const selectedClassOption =
+      classOptions.find((option) => (option.classCode || option.className) === importClassCode) ?? null;
+
+    if (!selectedClassOption) {
+      setError("Choose a valid class before importing a class list.");
+      return;
+    }
+
+    const csvText = await importFile.text();
+
+    const response = await fetch("/api/students/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        action: "import-class-csv",
+        academicYearLabel: importAcademicYearLabel,
+        classCode: selectedClassOption.classCode || null,
+        className: selectedClassOption.className,
+        csvText,
+        sourceFilename: importFile.name
+      })
+    });
+
+    const json = (await response.json()) as {
+      academicYears?: StudentAcademicYear[];
+      summary?: { className?: string; importedCount?: number; skippedCount?: number };
+      error?: string;
+    };
+
+    if (!response.ok) {
+      setError(json.error ?? "Could not import that class list.");
+      return;
+    }
+
+    setAcademicYears(json.academicYears ?? []);
+    setStatus(
+      `${json.summary?.className ?? "Class"} imported into ${importAcademicYearLabel}: ${json.summary?.importedCount ?? 0} students added${json.summary?.skippedCount ? `, ${json.summary.skippedCount} skipped` : ""}.`
+    );
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -349,6 +532,153 @@ export function GradebookAdmin() {
 
       <section className="panel">
         <div className="admin-grid">
+          <div className="mi-card">
+            <h2 className="mi-title">Student academic years</h2>
+            <p className="hero-copy compact-copy">
+              Archive the current roster as AY 2025/2026, create AY 2026/2027, then import each
+              class list against the correct class before you make that year live.
+            </p>
+
+            <form onSubmit={archiveCurrentRoster} style={{ marginBottom: "1.5rem" }}>
+              <div className="field">
+                <label htmlFor="archiveYearLabel">Archive current live roster as</label>
+                <input
+                  id="archiveYearLabel"
+                  value={archiveYearLabel}
+                  onChange={(event) => setArchiveYearLabel(event.target.value)}
+                  placeholder="AY 2025/2026"
+                />
+              </div>
+              <div className="actions">
+                <button className="button secondary" type="submit">
+                  Archive Current Roster
+                </button>
+              </div>
+            </form>
+
+            <form onSubmit={createAcademicYear} style={{ marginBottom: "1.5rem" }}>
+              <div className="field">
+                <label htmlFor="newAcademicYearLabel">New academic year</label>
+                <input
+                  id="newAcademicYearLabel"
+                  value={newAcademicYearLabel}
+                  onChange={(event) => setNewAcademicYearLabel(event.target.value)}
+                  placeholder="AY 2026/2027"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="newAcademicYearStart">Start date</label>
+                <input
+                  id="newAcademicYearStart"
+                  type="date"
+                  value={newAcademicYearStart}
+                  onChange={(event) => setNewAcademicYearStart(event.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="newAcademicYearEnd">End date</label>
+                <input
+                  id="newAcademicYearEnd"
+                  type="date"
+                  value={newAcademicYearEnd}
+                  onChange={(event) => setNewAcademicYearEnd(event.target.value)}
+                />
+              </div>
+              <div className="actions">
+                <button className="button" type="submit">
+                  Create Academic Year
+                </button>
+              </div>
+            </form>
+
+            <form onSubmit={importClassRoster}>
+              <div className="field">
+                <label htmlFor="importAcademicYearLabel">Import into academic year</label>
+                <select
+                  id="importAcademicYearLabel"
+                  value={importAcademicYearLabel}
+                  onChange={(event) => setImportAcademicYearLabel(event.target.value)}
+                >
+                  <option value="">Choose academic year</option>
+                  {academicYears.map((year) => (
+                    <option key={year.id} value={year.label}>
+                      {year.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="importClassCode">Class list</label>
+                <select
+                  id="importClassCode"
+                  value={importClassCode}
+                  onChange={(event) => setImportClassCode(event.target.value)}
+                >
+                  <option value="">Choose class</option>
+                  {classOptions.map((option) => (
+                    <option
+                      key={option.classCode || option.className}
+                      value={option.classCode || option.className}
+                    >
+                      {option.className} | {option.yearGroup}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="importRosterFile">CSV file</label>
+                <input
+                  id="importRosterFile"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+                />
+              </div>
+              <p className="hint">
+                Upload one class at a time. The selected class decides where those students go in
+                the live roster.
+              </p>
+              <div className="actions">
+                <button className="button" type="submit">
+                  Import Class CSV
+                </button>
+              </div>
+            </form>
+
+            <div className="breakdown-list" style={{ marginTop: "1.5rem" }}>
+              {academicYears.length ? (
+                academicYears.map((year) => (
+                  <div className="breakdown-row" key={year.id} style={{ alignItems: "flex-start" }}>
+                    <div>
+                      <strong>{year.label}</strong>
+                      <div className="hint">
+                        {year.student_count} students | {year.class_count} classes
+                        {year.starts_on || year.ends_on
+                          ? ` | ${year.starts_on ?? "Start TBC"} to ${year.ends_on ?? "End TBC"}`
+                          : ""}
+                      </div>
+                    </div>
+                    <div className="actions" style={{ justifyContent: "flex-end" }}>
+                      {year.is_active ? <span className="hint">Live year</span> : null}
+                      {year.is_archived ? <span className="hint">Archived</span> : null}
+                      {!year.is_active ? (
+                        <button
+                          className="button secondary"
+                          type="button"
+                          onClick={() => void activateAcademicYear(year.label)}
+                        >
+                          Make Live
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="hint">No academic years saved yet.</div>
+              )}
+            </div>
+          </div>
+
           <form className="mi-card" onSubmit={saveTerms}>
             <h2 className="mi-title">School terms</h2>
             <p className="hero-copy compact-copy">
