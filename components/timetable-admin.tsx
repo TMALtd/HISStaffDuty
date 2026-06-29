@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { TimetableClassSummary, TimetableTemplate } from "@/lib/types";
+import type { PortalHeroSettings, TimetableClassSummary, TimetableTemplate } from "@/lib/types";
 
 type TimetableAdminProps = {
   initialClasses: TimetableClassSummary[];
   templates: TimetableTemplate[];
   setupMessage?: string | null;
   canManageClasses?: boolean;
+  heroSettings?: PortalHeroSettings | null;
 };
 
 export function TimetableAdmin({
   initialClasses,
   templates,
   setupMessage,
-  canManageClasses = false
+  canManageClasses = false,
+  heroSettings
 }: TimetableAdminProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -390,16 +392,20 @@ export function TimetableAdmin({
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
-        <p className="eyebrow">{canManageClasses ? "Timetable administration" : "Timetable access"}</p>
+        <p className="eyebrow">
+          {heroSettings?.eyebrow ?? (canManageClasses ? "Timetable administration" : "Timetable access")}
+        </p>
         <div className="topbar">
           <div>
             <h1 className="hero-title">
-              {canManageClasses ? "Build and manage class timetables" : "View class timetables"}
+              {heroSettings?.title ??
+                (canManageClasses ? "Build and manage class timetables" : "View class timetables")}
             </h1>
             <p className="hero-copy">
-              {canManageClasses
-                ? "Create one weekly timetable per class, attach it to a reusable period template, and then fill each block with lessons and teachers."
-                : "Open the timetable cards you have access to and review the class schedules in a cleaner read-only view."}
+              {heroSettings?.description ??
+                (canManageClasses
+                  ? "Create one weekly timetable per class, attach it to a reusable period template, and then fill each block with lessons and teachers."
+                  : "Open the timetable cards you have access to and review the class schedules in a cleaner read-only view.")}
             </p>
           </div>
           {canManageClasses ? (

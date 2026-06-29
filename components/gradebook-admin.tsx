@@ -7,7 +7,8 @@ import type {
   GradebookFieldDefinition,
   GradebookSectionDefinition,
   GradebookSubject,
-  GradebookTerm
+  GradebookTerm,
+  PortalHeroSettings
 } from "@/lib/types";
 
 type SubjectsResponse = {
@@ -26,6 +27,10 @@ type SectionsResponse = {
   sections: GradebookSectionDefinition[];
 };
 
+type PortalHeroSettingsResponse = {
+  settings: PortalHeroSettings[];
+};
+
 export function GradebookAdmin() {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -36,6 +41,7 @@ export function GradebookAdmin() {
   const [fieldType, setFieldType] = useState<GradebookFieldDefinition["field_type"]>("text");
   const [terms, setTerms] = useState<GradebookTerm[]>([]);
   const [sections, setSections] = useState<GradebookSectionDefinition[]>(getGradebookSectionDefinitions());
+  const [portalHeroSettings, setPortalHeroSettings] = useState<PortalHeroSettings[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -85,6 +91,20 @@ export function GradebookAdmin() {
       setError(
         loadError instanceof Error ? loadError.message : "Could not load markbook section text."
       );
+    });
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const response = await fetch("/api/portal/hero-settings", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Could not load portal card text.");
+      }
+
+      const json = (await response.json()) as PortalHeroSettingsResponse;
+      setPortalHeroSettings(json.settings);
+    })().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : "Could not load portal card text.");
     });
   }, []);
 
@@ -235,6 +255,23 @@ export function GradebookAdmin() {
     );
   }
 
+  function updatePortalHeroSetting(
+    pageKey: PortalHeroSettings["pageKey"],
+    field: keyof Pick<PortalHeroSettings, "label" | "eyebrow" | "title" | "description">,
+    value: string
+  ) {
+    setPortalHeroSettings((current) =>
+      current.map((setting) =>
+        setting.pageKey === pageKey
+          ? {
+              ...setting,
+              [field]: value
+            }
+          : setting
+      )
+    );
+  }
+
   async function saveSections(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -265,6 +302,31 @@ export function GradebookAdmin() {
     const json = (await response.json()) as SectionsResponse;
     setSections(json.sections);
     setStatus("Markbook card text updated.");
+  }
+
+  async function savePortalHeroSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/portal/hero-settings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        settings: portalHeroSettings
+      })
+    });
+
+    if (!response.ok) {
+      const json = (await response.json()) as { error?: string };
+      setError(json.error ?? "Could not save portal card text.");
+      return;
+    }
+
+    const json = (await response.json()) as PortalHeroSettingsResponse;
+    setPortalHeroSettings(json.settings);
+    setStatus("Portal card text updated.");
   }
 
   return (
@@ -386,6 +448,65 @@ export function GradebookAdmin() {
             <div className="actions">
               <button className="button" type="submit">
                 Save Markbook Card Text
+              </button>
+            </div>
+          </form>
+
+          <form className="mi-card" onSubmit={savePortalHeroSettings}>
+            <h2 className="mi-title">Portal card text</h2>
+            <p className="hero-copy compact-copy">
+              Update the main header cards shown on Student Filter, Markbook, and Timetables.
+            </p>
+            <div className="dashboard-grid" style={{ gap: "1rem" }}>
+              {portalHeroSettings.map((setting) => (
+                <div key={setting.pageKey} className="panel" style={{ padding: "1rem" }}>
+                  <strong style={{ display: "block", marginBottom: "0.75rem" }}>{setting.label}</strong>
+                  <div className="field">
+                    <label htmlFor={`${setting.pageKey}-label`}>Internal label</label>
+                    <input
+                      id={`${setting.pageKey}-label`}
+                      value={setting.label}
+                      onChange={(event) =>
+                        updatePortalHeroSetting(setting.pageKey, "label", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${setting.pageKey}-eyebrow`}>Eyebrow</label>
+                    <input
+                      id={`${setting.pageKey}-eyebrow`}
+                      value={setting.eyebrow}
+                      onChange={(event) =>
+                        updatePortalHeroSetting(setting.pageKey, "eyebrow", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${setting.pageKey}-title`}>Title</label>
+                    <input
+                      id={`${setting.pageKey}-title`}
+                      value={setting.title}
+                      onChange={(event) =>
+                        updatePortalHeroSetting(setting.pageKey, "title", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${setting.pageKey}-description`}>Description</label>
+                    <textarea
+                      id={`${setting.pageKey}-description`}
+                      value={setting.description}
+                      onChange={(event) =>
+                        updatePortalHeroSetting(setting.pageKey, "description", event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="actions">
+              <button className="button" type="submit">
+                Save Portal Card Text
               </button>
             </div>
           </form>

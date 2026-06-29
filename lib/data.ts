@@ -33,6 +33,8 @@ import {
   type GradebookSectionDefinition,
   type GradebookSectionSettingsInput,
   type GradebookSubject,
+  type PortalHeroPageKey,
+  type PortalHeroSettings,
   type FilterField,
   type FilterOptions,
   type FilterState,
@@ -85,6 +87,7 @@ const ENTRIES_TABLE = "gradebook_entries";
 const ASSESSMENTS_TABLE = "gradebook_assessments";
 const TERMS_TABLE = "gradebook_terms";
 const SECTION_SETTINGS_TABLE = "gradebook_section_settings";
+const PORTAL_HERO_SETTINGS_TABLE = "portal_hero_settings";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
 const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
@@ -106,6 +109,40 @@ const TIMETABLE_DEFAULT_COLORS: Record<TimetableBlockType, string> = {
 const TIMETABLE_SETUP_MESSAGE =
   "Timetable database tables are not set up yet. Run supabase_timetable_setup.sql in Supabase before using the timetable builder.";
 const TIMETABLE_STREAM_TYPES = ["mainstream", "bilingual"] as const;
+const DEFAULT_PORTAL_HERO_SETTINGS: PortalHeroSettings[] = [
+  {
+    pageKey: "student-filter",
+    label: "Student Filter",
+    eyebrow: "Render-ready staff workspace",
+    title: "Student filter portal",
+    description:
+      "Narrow the roster from school all the way down to class, then review the matching students in one place."
+  },
+  {
+    pageKey: "markbook",
+    label: "Markbook",
+    eyebrow: "Markbook workspace",
+    title: "Build the class markbook around real teaching sections",
+    description:
+      "This new workspace is organised the same way your class markbook works in practice: student profiles, parent meeting notes, and subject assessment areas such as Phonics, Reading, Writing, Maths, and IPC."
+  },
+  {
+    pageKey: "timetables-admin",
+    label: "Timetables Admin",
+    eyebrow: "Timetable administration",
+    title: "Build and manage class timetables",
+    description:
+      "Create one weekly timetable per class, attach it to a reusable period template, and then fill each block with lessons and teachers."
+  },
+  {
+    pageKey: "timetables-view",
+    label: "Timetables View",
+    eyebrow: "Timetable access",
+    title: "View class timetables",
+    description:
+      "Open the timetable cards you have access to and review the class schedules in a cleaner read-only view."
+  }
+];
 const DEFAULT_TIMETABLE_SUBJECT_TARGETS: TimetableSubjectTarget[] = [
   { id: "default-preschool-1-mainstream-bm", milepost: "Preschool 1", streamType: "mainstream", subjectName: "BM", requiredMinutes: 75, sortOrder: 1, isActive: true },
   { id: "default-preschool-1-mainstream-pe", milepost: "Preschool 1", streamType: "mainstream", subjectName: "P.E.", requiredMinutes: 60, sortOrder: 2, isActive: true },
@@ -3458,6 +3495,76 @@ export async function upsertGradebookSectionSettings(
   }
 
   return getGradebookSectionSettings();
+}
+
+export async function getPortalHeroSettings(): Promise<PortalHeroSettings[]> {
+  const supabase = createSupabaseAdminClient();
+  const defaults = DEFAULT_PORTAL_HERO_SETTINGS;
+  const { data, error } = await supabase
+    .from(PORTAL_HERO_SETTINGS_TABLE)
+    .select("page_key,label,eyebrow,title,description")
+    .order("page_key", { ascending: true });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), PORTAL_HERO_SETTINGS_TABLE)) {
+      return defaults;
+    }
+
+    throw new Error(error.message);
+  }
+
+  const overrideLookup = new Map(
+    ((data ?? []) as Array<Record<string, unknown>>)
+      .map((row) => {
+        const pageKey = String(row.page_key ?? "").trim() as PortalHeroPageKey;
+        const defaultSetting = defaults.find((setting) => setting.pageKey === pageKey);
+        if (!defaultSetting) {
+          return null;
+        }
+
+        return [
+          pageKey,
+          {
+            pageKey,
+            label: String(row.label ?? defaultSetting.label),
+            eyebrow: String(row.eyebrow ?? defaultSetting.eyebrow),
+            title: String(row.title ?? defaultSetting.title),
+            description: String(row.description ?? defaultSetting.description)
+          } satisfies PortalHeroSettings
+        ] as const;
+      })
+      .filter((entry): entry is readonly [PortalHeroPageKey, PortalHeroSettings] => Boolean(entry))
+  );
+
+  return defaults.map((setting) => overrideLookup.get(setting.pageKey) ?? setting);
+}
+
+export async function upsertPortalHeroSettings(
+  input: PortalHeroSettings[]
+): Promise<PortalHeroSettings[]> {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from(PORTAL_HERO_SETTINGS_TABLE).upsert(
+    input.map((setting) => ({
+      page_key: normalizeRequiredText(setting.pageKey, "Portal page key"),
+      label: normalizeRequiredText(setting.label, "Portal card label"),
+      eyebrow: normalizeRequiredText(setting.eyebrow, "Portal card eyebrow"),
+      title: normalizeRequiredText(setting.title, "Portal card title"),
+      description: normalizeRequiredText(setting.description, "Portal card description")
+    })),
+    { onConflict: "page_key" }
+  );
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), PORTAL_HERO_SETTINGS_TABLE)) {
+      throw new Error(
+        "Portal hero settings table is not set up yet. Run supabase_portal_hero_settings.sql first."
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
+  return getPortalHeroSettings();
 }
 
 function inferGradebookTermKey(assessmentDate: string, terms: GradebookTerm[]) {

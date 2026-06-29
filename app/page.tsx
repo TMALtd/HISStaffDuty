@@ -2,9 +2,12 @@ import { requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
+import { getPortalHeroSettings } from "@/lib/data";
 
 export default async function HomePage() {
   const { user, access } = await requirePortalAccess("student-filter");
+  const heroSettings =
+    (await getPortalHeroSettings()).find((setting) => setting.pageKey === "student-filter") ?? null;
 
   return (
     <main className="page-shell">
@@ -17,13 +20,13 @@ export default async function HomePage() {
       </section>
       <PortalNav allowedViews={access.allowedViews} />
       <section className="hero-card">
-        <p className="eyebrow">Render-ready staff workspace</p>
+        <p className="eyebrow">{heroSettings?.eyebrow ?? "Render-ready staff workspace"}</p>
         <div className="topbar">
           <div>
-            <h1 className="hero-title">Student filter portal</h1>
+            <h1 className="hero-title">{heroSettings?.title ?? "Student filter portal"}</h1>
             <p className="hero-copy">
-              Narrow the roster from school all the way down to class, then review the
-              matching students in one place.
+              {heroSettings?.description ??
+                "Narrow the roster from school all the way down to class, then review the matching students in one place."}
             </p>
           </div>
         </div>

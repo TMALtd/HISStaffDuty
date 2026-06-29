@@ -16,6 +16,7 @@ import type {
   GradebookWorkspaceSection,
   FilterOptions,
   FilterState,
+  PortalHeroSettings,
   StaffDirectoryClassOption,
   StudentRow
 } from "@/lib/types";
@@ -25,6 +26,7 @@ type GradebookWorkspaceProps = {
   canManageSetup: boolean;
   initialFilters: FilterState;
   previewEmail?: string | null;
+  heroSettings?: PortalHeroSettings | null;
 };
 
 type EntriesResponse = {
@@ -235,9 +237,9 @@ function orderFields(section: GradebookWorkspaceSection, fields: GradebookFieldD
 export function GradebookWorkspace({
   canManageAssignments,
   canManageSetup,
-  initialFilters
-  ,
-  previewEmail
+  initialFilters,
+  previewEmail,
+  heroSettings
 }: GradebookWorkspaceProps) {
   const isAdminView = canManageAssignments || canManageSetup;
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilters);
@@ -1788,14 +1790,15 @@ export function GradebookWorkspace({
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
-        <p className="eyebrow">Markbook workspace</p>
+        <p className="eyebrow">{heroSettings?.eyebrow ?? "Markbook workspace"}</p>
         <div className="topbar">
           <div>
-            <h1 className="hero-title">Build the class markbook around real teaching sections</h1>
+            <h1 className="hero-title">
+              {heroSettings?.title ?? "Build the class markbook around real teaching sections"}
+            </h1>
             <p className="hero-copy">
-              This new workspace is organised the same way your class markbook works in practice:
-              student profiles, parent meeting notes, and subject assessment areas such as
-              Phonics, Reading, Writing, Maths, and IPC.
+              {heroSettings?.description ??
+                "This new workspace is organised the same way your class markbook works in practice: student profiles, parent meeting notes, and subject assessment areas such as Phonics, Reading, Writing, Maths, and IPC."}
             </p>
           </div>
           <div className="actions" style={{ marginTop: 0 }}>

@@ -126,6 +126,20 @@ export type GradebookSectionSettingsInput = {
   emptyStateCopy: string;
 };
 
+export type PortalHeroPageKey =
+  | "student-filter"
+  | "markbook"
+  | "timetables-admin"
+  | "timetables-view";
+
+export type PortalHeroSettings = {
+  pageKey: PortalHeroPageKey;
+  label: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+};
+
 export type GradebookWorkspaceSection = GradebookSectionDefinition & {
   subject: GradebookSubject | null;
   isConfigured: boolean;

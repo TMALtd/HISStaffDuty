@@ -1,11 +1,16 @@
 import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
-import { getTimetableAdminData, getTimetablePreviewStaffOptions } from "@/lib/data";
+import {
+  getPortalHeroSettings,
+  getTimetableAdminData,
+  getTimetablePreviewStaffOptions
+} from "@/lib/data";
 import { filterTimetableClassesForAccess } from "@/lib/access";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TimetableAdmin } from "@/components/timetable-admin";
 import type {
+  PortalHeroSettings,
   TimetableClassSummary,
   TimetablePreviewStaffOption,
   TimetableTemplate
@@ -28,16 +33,22 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
   let templates: TimetableTemplate[] = [];
   let setupMessage: string | null = null;
   let previewOptions: TimetablePreviewStaffOption[] = [];
+  let activeHero: PortalHeroSettings | null = null;
 
   try {
-    const [data, staffOptions] = await Promise.all([
+    const [data, staffOptions, heroSettings] = await Promise.all([
       getTimetableAdminData(),
-      access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([])
+      access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+      getPortalHeroSettings()
     ]);
     classes = data.classes;
     templates = data.templates;
     setupMessage = data.setupMessage;
     previewOptions = staffOptions;
+    activeHero =
+      heroSettings.find((setting) =>
+        setting.pageKey === (access.isFullAccess && !preview.isPreviewing ? "timetables-admin" : "timetables-view")
+      ) ?? null;
   } catch (error) {
     setupMessage =
       error instanceof Error
@@ -70,6 +81,7 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
         templates={templates}
         setupMessage={setupMessage}
         canManageClasses={access.isFullAccess && !preview.isPreviewing}
+        heroSettings={activeHero}
       />
     </main>
   );
