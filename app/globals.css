@@ -176,7 +176,7 @@ input {
 
 .hero-copy {
   margin: 12px 0 0;
-  max-width: 70ch;
+  max-width: 110ch;
   color: var(--muted);
   font-size: 1.02rem;
 }

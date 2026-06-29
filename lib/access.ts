@@ -17,12 +17,12 @@ export const PORTAL_NAV_ITEMS: Array<{
   label: string;
   view: PortalView;
 }> = [
-  { href: "/", label: "Student Filter", view: "student-filter" },
+  { href: "/", label: "Students", view: "student-filter" },
   { href: "/gradebook", label: "Markbook", view: "gradebook" },
-  { href: "/duties", label: "Duty", view: "duty" },
+  { href: "/duties", label: "Duties", view: "duty" },
   { href: "/duties/roster", label: "Duty Roster", view: "duty-roster" },
   { href: "/timetables", label: "Timetables", view: "timetables" },
-  { href: "/directory", label: "Directory", view: "directory" },
+  { href: "/directory", label: "Staff Directory", view: "directory" },
   { href: "/admin/gradebook", label: "Setup", view: "setup" }
 ];
 
