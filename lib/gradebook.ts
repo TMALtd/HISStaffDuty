@@ -1,5 +1,6 @@
 import type {
   GradebookSectionDefinition,
+  GradebookSectionSettingsInput,
   GradebookSectionSlug,
   GradebookSubject,
   GradebookWorkspaceSection
@@ -106,6 +107,28 @@ export function getGradebookSectionDefinitions(): GradebookSectionDefinition[] {
   return SECTION_DEFINITIONS;
 }
 
+export function mergeGradebookSectionDefinitions(
+  overrides: GradebookSectionSettingsInput[] = []
+): GradebookSectionDefinition[] {
+  const overrideLookup = new Map(overrides.map((override) => [override.slug, override]));
+
+  return SECTION_DEFINITIONS.map((definition) => {
+    const override = overrideLookup.get(definition.slug);
+    if (!override) {
+      return definition;
+    }
+
+    return {
+      ...definition,
+      name: override.name,
+      description: override.description,
+      recommendedPageName: override.recommendedPageName,
+      emptyStateTitle: override.emptyStateTitle,
+      emptyStateCopy: override.emptyStateCopy
+    };
+  });
+}
+
 export function resolveGradebookSectionSlug(
   subject: Pick<GradebookSubject, "slug" | "name">
 ): GradebookSectionSlug | null {
@@ -142,7 +165,8 @@ export function resolveGradebookSectionSlug(
 }
 
 export function buildGradebookWorkspaceSections(
-  subjects: GradebookSubject[]
+  subjects: GradebookSubject[],
+  definitions: GradebookSectionDefinition[] = SECTION_DEFINITIONS
 ): GradebookWorkspaceSection[] {
   const firstSubjectBySection = new Map<GradebookSectionSlug, GradebookSubject>();
 
@@ -154,7 +178,7 @@ export function buildGradebookWorkspaceSections(
     firstSubjectBySection.set(sectionSlug, subject);
   }
 
-  return SECTION_DEFINITIONS.map((section) => {
+  return definitions.map((section) => {
     const subject = firstSubjectBySection.get(section.slug) ?? null;
     return {
       ...section,

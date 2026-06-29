@@ -117,6 +117,15 @@ export type GradebookSectionDefinition = {
   fieldOrder?: string[];
 };
 
+export type GradebookSectionSettingsInput = {
+  slug: GradebookSectionSlug;
+  name: string;
+  description: string;
+  recommendedPageName: string;
+  emptyStateTitle: string;
+  emptyStateCopy: string;
+};
+
 export type GradebookWorkspaceSection = GradebookSectionDefinition & {
   subject: GradebookSubject | null;
   isConfigured: boolean;

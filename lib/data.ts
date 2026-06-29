@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { randomUUID } from "node:crypto";
+import { getGradebookSectionDefinitions, mergeGradebookSectionDefinitions } from "@/lib/gradebook";
 import {
   type CreateTimetableClassInput,
   type ClassTimetable,
@@ -29,6 +30,8 @@ import {
   type GradebookAssessment,
   type GradebookTerm,
   type GradebookFieldDefinition,
+  type GradebookSectionDefinition,
+  type GradebookSectionSettingsInput,
   type GradebookSubject,
   type FilterField,
   type FilterOptions,
@@ -81,6 +84,7 @@ const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
 const ASSESSMENTS_TABLE = "gradebook_assessments";
 const TERMS_TABLE = "gradebook_terms";
+const SECTION_SETTINGS_TABLE = "gradebook_section_settings";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
 const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
@@ -1578,6 +1582,15 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = String(value ?? "").trim();
   return trimmed ? trimmed : null;
+}
+
+function applyNullableTextFilter<T extends { eq: (column: string, value: string) => T; is: (column: string, value: null) => T }>(
+  query: T,
+  column: string,
+  value: string | null | undefined
+) {
+  const normalized = normalizeOptionalText(value);
+  return normalized === null ? query.is(column, null) : query.eq(column, normalized);
 }
 
 function normalizeRequiredText(value: string | null | undefined, fieldLabel: string) {
@@ -3375,6 +3388,78 @@ export async function upsertGradebookTerms(
   return ((data ?? []) as GradebookTerm[]).sort((left, right) => left.sort_order - right.sort_order);
 }
 
+export async function getGradebookSectionSettings(): Promise<GradebookSectionDefinition[]> {
+  const supabase = createSupabaseAdminClient();
+  const defaults = getGradebookSectionDefinitions();
+  const { data, error } = await supabase
+    .from(SECTION_SETTINGS_TABLE)
+    .select("slug,name,description,recommended_page_name,empty_state_title,empty_state_copy")
+    .order("slug", { ascending: true });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SECTION_SETTINGS_TABLE)) {
+      return defaults;
+    }
+
+    throw new Error(error.message);
+  }
+
+  const overrides: GradebookSectionSettingsInput[] = ((data ?? []) as Array<Record<string, unknown>>)
+    .map((row) => {
+      const slug = String(row.slug ?? "").trim();
+      const defaultSection = defaults.find((section) => section.slug === slug);
+      if (!defaultSection) {
+        return null;
+      }
+
+      return {
+        slug: defaultSection.slug,
+        name: String(row.name ?? defaultSection.name),
+        description: String(row.description ?? defaultSection.description),
+        recommendedPageName: String(
+          row.recommended_page_name ?? defaultSection.recommendedPageName
+        ),
+        emptyStateTitle: String(row.empty_state_title ?? defaultSection.emptyStateTitle),
+        emptyStateCopy: String(row.empty_state_copy ?? defaultSection.emptyStateCopy)
+      } satisfies GradebookSectionSettingsInput;
+    })
+    .filter((section): section is GradebookSectionSettingsInput => Boolean(section));
+
+  return mergeGradebookSectionDefinitions(overrides);
+}
+
+export async function upsertGradebookSectionSettings(
+  input: GradebookSectionSettingsInput[]
+): Promise<GradebookSectionDefinition[]> {
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from(SECTION_SETTINGS_TABLE).upsert(
+    input.map((section) => ({
+      slug: normalizeRequiredText(section.slug, "Section slug"),
+      name: normalizeRequiredText(section.name, "Section name"),
+      description: normalizeRequiredText(section.description, "Section description"),
+      recommended_page_name: normalizeRequiredText(
+        section.recommendedPageName,
+        "Recommended page name"
+      ),
+      empty_state_title: normalizeRequiredText(section.emptyStateTitle, "Empty state title"),
+      empty_state_copy: normalizeRequiredText(section.emptyStateCopy, "Empty state copy")
+    })),
+    { onConflict: "slug" }
+  );
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SECTION_SETTINGS_TABLE)) {
+      throw new Error(
+        "Gradebook section settings table is not set up yet. Run supabase_gradebook_section_settings.sql first."
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
+  return getGradebookSectionSettings();
+}
+
 function inferGradebookTermKey(assessmentDate: string, terms: GradebookTerm[]) {
   if (!assessmentDate) {
     return null;
@@ -3573,6 +3658,145 @@ export async function createGradebookAssessment(input: {
         ? ((data as Record<string, unknown>).term_key as string | null)
         : inferGradebookTermKey(input.assessmentDate, await getGradebookTerms())
   } as GradebookAssessment;
+}
+
+export async function updateGradebookAssessment(input: {
+  subjectId: string;
+  className: string | null;
+  currentAssessmentName: string;
+  currentAssessmentDate: string;
+  nextAssessmentName: string;
+  nextAssessmentDate: string;
+  maxScore: number | null;
+  termKey?: string | null;
+  includeInTerm?: boolean;
+  weightingPercent?: number | null;
+}): Promise<GradebookAssessment> {
+  const supabase = createSupabaseAdminClient();
+  const nextAssessmentName = normalizeRequiredText(input.nextAssessmentName, "Assessment name");
+  const nextAssessmentDate = normalizeRequiredText(input.nextAssessmentDate, "Assessment date");
+
+  let assessmentUpdate = await applyNullableTextFilter(
+    supabase
+      .from(ASSESSMENTS_TABLE)
+      .update({
+        assessment_name: nextAssessmentName,
+        assessment_date: nextAssessmentDate,
+        max_score: input.maxScore,
+        term_key: normalizeOptionalText(input.termKey),
+        include_in_term: input.includeInTerm ?? false,
+        weighting_percent: input.weightingPercent ?? null
+      })
+      .eq("subject_id", input.subjectId)
+      .eq("assessment_name", input.currentAssessmentName)
+      .eq("assessment_date", input.currentAssessmentDate),
+    "class_name",
+    input.className
+  )
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,term_key,include_in_term,weighting_percent")
+    .single();
+
+  if (
+    assessmentUpdate.error &&
+    isMissingSupabaseColumnError(new Error(assessmentUpdate.error.message), ASSESSMENTS_TABLE, "term_key")
+  ) {
+    assessmentUpdate = await applyNullableTextFilter(
+      supabase
+        .from(ASSESSMENTS_TABLE)
+        .update({
+          assessment_name: nextAssessmentName,
+          assessment_date: nextAssessmentDate,
+          max_score: input.maxScore,
+          include_in_term: input.includeInTerm ?? false,
+          weighting_percent: input.weightingPercent ?? null
+        })
+        .eq("subject_id", input.subjectId)
+        .eq("assessment_name", input.currentAssessmentName)
+        .eq("assessment_date", input.currentAssessmentDate),
+      "class_name",
+      input.className
+    )
+      .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
+      .single();
+  }
+
+  if (assessmentUpdate.error) {
+    if (isMissingSupabaseRelationError(new Error(assessmentUpdate.error.message), ASSESSMENTS_TABLE)) {
+      throw new Error(
+        "Gradebook assessments table is not set up yet. Run supabase_gradebook_assessments.sql first."
+      );
+    }
+
+    throw new Error(assessmentUpdate.error.message);
+  }
+
+  const entryUpdate = await applyNullableTextFilter(
+    supabase
+      .from(ENTRIES_TABLE)
+      .update({
+        assessment_name: nextAssessmentName,
+        assessment_date: nextAssessmentDate
+      })
+      .eq("subject_id", input.subjectId)
+      .eq("assessment_name", input.currentAssessmentName)
+      .eq("assessment_date", input.currentAssessmentDate),
+    "class_name",
+    input.className
+  );
+
+  if (entryUpdate.error) {
+    throw new Error(entryUpdate.error.message);
+  }
+
+  return {
+    ...(assessmentUpdate.data as Omit<GradebookAssessment, "term_key"> & { term_key?: string | null }),
+    term_key:
+      "term_key" in (assessmentUpdate.data as Record<string, unknown>)
+        ? ((assessmentUpdate.data as Record<string, unknown>).term_key as string | null)
+        : inferGradebookTermKey(nextAssessmentDate, await getGradebookTerms())
+  } as GradebookAssessment;
+}
+
+export async function deleteGradebookAssessment(input: {
+  subjectId: string;
+  className: string | null;
+  assessmentName: string;
+  assessmentDate: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const assessmentDelete = await applyNullableTextFilter(
+    supabase
+      .from(ASSESSMENTS_TABLE)
+      .delete()
+      .eq("subject_id", input.subjectId)
+      .eq("assessment_name", input.assessmentName)
+      .eq("assessment_date", input.assessmentDate),
+    "class_name",
+    input.className
+  );
+
+  if (
+    assessmentDelete.error &&
+    !isMissingSupabaseRelationError(new Error(assessmentDelete.error.message), ASSESSMENTS_TABLE)
+  ) {
+    throw new Error(assessmentDelete.error.message);
+  }
+
+  const entriesDelete = await applyNullableTextFilter(
+    supabase
+      .from(ENTRIES_TABLE)
+      .delete()
+      .eq("subject_id", input.subjectId)
+      .eq("assessment_name", input.assessmentName)
+      .eq("assessment_date", input.assessmentDate),
+    "class_name",
+    input.className
+  );
+
+  if (entriesDelete.error) {
+    throw new Error(entriesDelete.error.message);
+  }
 }
 
 export async function createGradebookSubject(input: {

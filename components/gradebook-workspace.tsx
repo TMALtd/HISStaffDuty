@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { buildGradebookWorkspaceSections } from "@/lib/gradebook";
+import {
+  buildGradebookWorkspaceSections,
+  getGradebookSectionDefinitions
+} from "@/lib/gradebook";
 import type {
   GradebookAssessment,
   GradebookEntry,
   GradebookFieldDefinition,
+  GradebookSectionDefinition,
   GradebookSubject,
   GradebookTerm,
   GradebookWorkspaceSection,
@@ -37,6 +41,10 @@ type SubjectsResponse = {
   subjects: GradebookSubject[];
 };
 
+type SectionsResponse = {
+  sections: GradebookSectionDefinition[];
+};
+
 type DraftRow = {
   grade: string;
   score: string;
@@ -61,6 +69,10 @@ function getGradeOptionsForYearGroup(yearGroup: string) {
 }
 
 function formatPercentage(score: string, maxScore: number | null) {
+  if (!score.trim()) {
+    return "—";
+  }
+
   const numericScore = Number(score);
   if (!Number.isFinite(numericScore) || numericScore < 0 || !maxScore || maxScore <= 0) {
     return "—";
@@ -70,6 +82,10 @@ function formatPercentage(score: string, maxScore: number | null) {
 }
 
 function computePercentageNumber(score: string, maxScore: number | null) {
+  if (!score.trim()) {
+    return null;
+  }
+
   const numericScore = Number(score);
   if (!Number.isFinite(numericScore) || numericScore < 0 || !maxScore || maxScore <= 0) {
     return null;
@@ -78,25 +94,52 @@ function computePercentageNumber(score: string, maxScore: number | null) {
   return (numericScore / maxScore) * 100;
 }
 
-function deriveTermGrade(yearGroup: string, percentage: number | null) {
+function deriveGradeFromPercentage(yearGroup: string, percentage: number | null) {
   if (percentage === null) {
-    return "—";
+    return "";
   }
 
   const normalized = yearGroup.trim().toLowerCase();
 
   if (normalized === "year 1" || normalized === "year 2") {
-    if (percentage >= 85) return "Above";
-    if (percentage >= 65) return "At";
-    if (percentage >= 45) return "Below";
+    if (percentage >= 80) return "Above";
+    if (percentage >= 50) return "At";
+    if (percentage >= 30) return "Below";
     return "Well Below";
   }
 
   if (percentage >= 80) return "A";
-  if (percentage >= 70) return "B";
-  if (percentage >= 60) return "C";
-  if (percentage >= 50) return "D";
+  if (percentage >= 65) return "B";
+  if (percentage >= 50) return "C";
+  if (percentage >= 25) return "D";
   return "E";
+}
+
+function deriveTermGrade(yearGroup: string, percentage: number | null) {
+  return deriveGradeFromPercentage(yearGroup, percentage) || "—";
+}
+
+function getGradeToneClass(grade: string) {
+  const normalized = grade.trim().toLowerCase();
+
+  switch (normalized) {
+    case "a":
+    case "above":
+      return "grade-tone-a";
+    case "b":
+    case "at":
+      return "grade-tone-b";
+    case "c":
+      return "grade-tone-c";
+    case "d":
+    case "below":
+      return "grade-tone-d";
+    case "e":
+    case "well below":
+      return "grade-tone-e";
+    default:
+      return "";
+  }
 }
 
 function formatClassOptionLabel(option: StaffDirectoryClassOption) {
@@ -199,6 +242,9 @@ export function GradebookWorkspace({
   const isAdminView = canManageAssignments || canManageSetup;
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilters);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(makeEmptyFilterOptions());
+  const [sectionDefinitions, setSectionDefinitions] = useState<GradebookSectionDefinition[]>(
+    getGradebookSectionDefinitions()
+  );
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSectionSlug, setSelectedSectionSlug] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
@@ -208,6 +254,7 @@ export function GradebookWorkspace({
   const [newAssessmentTermKey, setNewAssessmentTermKey] = useState("");
   const [newAssessmentIncludeInTerm, setNewAssessmentIncludeInTerm] = useState(false);
   const [newAssessmentWeightingPercent, setNewAssessmentWeightingPercent] = useState("");
+  const [editingAssessmentKey, setEditingAssessmentKey] = useState("");
   const [assessments, setAssessments] = useState<GradebookAssessment[]>([]);
   const [terms, setTerms] = useState<GradebookTerm[]>(buildDefaultTerms());
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -226,7 +273,10 @@ export function GradebookWorkspace({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
-  const sections = useMemo(() => buildGradebookWorkspaceSections(subjects), [subjects]);
+  const sections = useMemo(
+    () => buildGradebookWorkspaceSections(subjects, sectionDefinitions),
+    [sectionDefinitions, subjects]
+  );
   const selectedSection = useMemo(
     () => sections.find((section) => section.slug === selectedSectionSlug) ?? sections[0] ?? null,
     [sections, selectedSectionSlug]
@@ -265,6 +315,32 @@ export function GradebookWorkspace({
       setNewAssessmentTermKey(inferred);
     }
   }, [newAssessmentDate, newAssessmentTermKey, terms]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const response = await fetch("/api/gradebook/sections", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Could not load Markbook section text.");
+      }
+
+      const json = (await response.json()) as SectionsResponse;
+      if (isMounted) {
+        setSectionDefinitions(json.sections);
+      }
+    })().catch((loadError) => {
+      if (isMounted) {
+        setError(
+          loadError instanceof Error ? loadError.message : "Could not load Markbook section text."
+        );
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -566,16 +642,144 @@ export function GradebookWorkspace({
     field: keyof DraftRow,
     value: string
   ) {
+    const linkedAssessment = assessments.find(
+      (assessment) => assessmentKey(assessment.assessment_name, assessment.assessment_date) === columnKey
+    );
+    const nextScore =
+      field === "score"
+        ? value
+        : (assessmentDrafts[studentId]?.[columnKey]?.score ?? makeEmptyDraft().score);
+    const autoGrade =
+      linkedAssessment && (field === "score" || field === "grade")
+        ? deriveGradeFromPercentage(
+            students.find((student) => student.school_id === studentId)?.year_group ?? "",
+            computePercentageNumber(nextScore, linkedAssessment.max_score)
+          )
+        : null;
+
     setAssessmentDrafts((current) => ({
       ...current,
       [studentId]: {
         ...(current[studentId] ?? {}),
         [columnKey]: {
           ...(current[studentId]?.[columnKey] ?? makeEmptyDraft()),
-          [field]: value
+          [field]: value,
+          ...(field === "score" && autoGrade !== null ? { grade: autoGrade } : {})
         }
       }
     }));
+  }
+
+  function resetAssessmentBuilderForm() {
+    setEditingAssessmentKey("");
+    setNewAssessmentName("");
+    setNewAssessmentDate("");
+    setNewAssessmentMaxScore("");
+    setNewAssessmentTermKey("");
+    setNewAssessmentIncludeInTerm(false);
+    setNewAssessmentWeightingPercent("");
+  }
+
+  function beginEditingAssessment(assessment: GradebookAssessment) {
+    setEditingAssessmentKey(assessmentKey(assessment.assessment_name, assessment.assessment_date));
+    setNewAssessmentName(assessment.assessment_name);
+    setNewAssessmentDate(assessment.assessment_date);
+    setNewAssessmentMaxScore(assessment.max_score === null ? "" : String(assessment.max_score));
+    setNewAssessmentTermKey(assessment.term_key ?? "");
+    setNewAssessmentIncludeInTerm(assessment.include_in_term);
+    setNewAssessmentWeightingPercent(
+      assessment.weighting_percent === null ? "" : String(assessment.weighting_percent)
+    );
+  }
+
+  function replaceAssessmentLocally(previousKey: string, nextAssessment: GradebookAssessment) {
+    const nextKey = assessmentKey(nextAssessment.assessment_name, nextAssessment.assessment_date);
+
+    setAssessments((current) =>
+      current
+        .map((assessment) =>
+          assessmentKey(assessment.assessment_name, assessment.assessment_date) === previousKey
+            ? nextAssessment
+            : assessment
+        )
+        .sort(
+          (left, right) =>
+            left.assessment_date.localeCompare(right.assessment_date) ||
+            left.assessment_name.localeCompare(right.assessment_name, undefined, { numeric: true })
+        )
+    );
+
+    setAssessmentDrafts((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((studentId) => {
+        const row = next[studentId];
+        if (!row?.[previousKey]) {
+          return;
+        }
+        next[studentId] = {
+          ...row,
+          [nextKey]: {
+            ...row[previousKey],
+            assessmentName: nextAssessment.assessment_name,
+            assessmentDate: nextAssessment.assessment_date
+          }
+        };
+        if (nextKey !== previousKey) {
+          delete next[studentId][previousKey];
+        }
+      });
+      return next;
+    });
+
+    setEntryIndex((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((studentId) => {
+        const row = next[studentId];
+        if (!row?.[previousKey]) {
+          return;
+        }
+        next[studentId] = {
+          ...row,
+          [nextKey]: {
+            ...row[previousKey],
+            assessment_name: nextAssessment.assessment_name,
+            assessment_date: nextAssessment.assessment_date
+          }
+        };
+        if (nextKey !== previousKey) {
+          delete next[studentId][previousKey];
+        }
+      });
+      return next;
+    });
+  }
+
+  function removeAssessmentLocally(columnKey: string) {
+    setAssessments((current) =>
+      current.filter(
+        (assessment) => assessmentKey(assessment.assessment_name, assessment.assessment_date) !== columnKey
+      )
+    );
+
+    setAssessmentDrafts((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((studentId) => {
+        if (next[studentId]?.[columnKey]) {
+          delete next[studentId][columnKey];
+        }
+      });
+      return next;
+    });
+
+    setEntryIndex((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((studentId) => {
+        if (next[studentId]?.[columnKey]) {
+          delete next[studentId][columnKey];
+        }
+      });
+      return next;
+    });
   }
 
   function updateAssessmentMetadata(
@@ -710,24 +914,40 @@ export function GradebookWorkspace({
     const nextColumnKey = assessmentKey(newAssessmentName.trim(), newAssessmentDate);
 
     if (
-      assessments.some(
-        (assessment) =>
-          assessmentKey(assessment.assessment_name, assessment.assessment_date) === nextColumnKey
-      )
+      assessments.some((assessment) => {
+        const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+        return key === nextColumnKey && key !== editingAssessmentKey;
+      })
     ) {
       setError("This assignment column already exists.");
       return;
     }
 
     try {
+      const isEditing = Boolean(editingAssessmentKey);
+      const currentAssessment = isEditing
+        ? assessments.find(
+            (assessment) =>
+              assessmentKey(assessment.assessment_name, assessment.assessment_date) === editingAssessmentKey
+          ) ?? null
+        : null;
+
+      if (isEditing && !currentAssessment) {
+        throw new Error("The selected assignment could not be found.");
+      }
+
       const response = await fetch("/api/gradebook/assessments", {
-        method: "POST",
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subjectId: linkedSubject.id,
           className: activeFilters.className || null,
           assessmentName: newAssessmentName.trim(),
           assessmentDate: newAssessmentDate,
+          currentAssessmentName: currentAssessment?.assessment_name,
+          currentAssessmentDate: currentAssessment?.assessment_date,
+          nextAssessmentName: newAssessmentName.trim(),
+          nextAssessmentDate: newAssessmentDate,
           termKey: newAssessmentTermKey || null,
           maxScore: parsedMaxScore,
           includeInTerm: newAssessmentIncludeInTerm,
@@ -740,18 +960,58 @@ export function GradebookWorkspace({
         throw new Error(json.error ?? "Could not create the assignment column.");
       }
 
-      seedAssessmentColumn(json.assessment);
-      setNewAssessmentName("");
-      setNewAssessmentDate("");
-      setNewAssessmentMaxScore("");
-      setNewAssessmentTermKey("");
-      setNewAssessmentIncludeInTerm(false);
-      setNewAssessmentWeightingPercent("");
+      if (isEditing && editingAssessmentKey) {
+        replaceAssessmentLocally(editingAssessmentKey, json.assessment);
+      } else {
+        seedAssessmentColumn(json.assessment);
+      }
+      resetAssessmentBuilderForm();
       setError("");
-      setStatus(`Added ${json.assessment.assessment_name} as a new assignment column.`);
+      setStatus(
+        isEditing
+          ? `Updated ${json.assessment.assessment_name}.`
+          : `Added ${json.assessment.assessment_name} as a new assignment column.`
+      );
     } catch (saveError) {
       setError(
-        saveError instanceof Error ? saveError.message : "Could not create the assignment column."
+        saveError instanceof Error ? saveError.message : "Could not save the assignment column."
+      );
+    }
+  }
+
+  async function deleteAssessmentColumn(assessment: GradebookAssessment) {
+    if (!linkedSubject) {
+      setError("Choose a configured markbook section before deleting.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/gradebook/assessments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId: linkedSubject.id,
+          className: activeFilters.className || null,
+          assessmentName: assessment.assessment_name,
+          assessmentDate: assessment.assessment_date
+        })
+      });
+
+      if (!response.ok) {
+        const json = (await response.json()) as { error?: string };
+        throw new Error(json.error ?? "Could not delete assignment column.");
+      }
+
+      const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+      removeAssessmentLocally(key);
+      if (editingAssessmentKey === key) {
+        resetAssessmentBuilderForm();
+      }
+      setStatus(`Deleted ${assessment.assessment_name}.`);
+      setError("");
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error ? deleteError.message : "Could not delete assignment column."
       );
     }
   }
@@ -1243,18 +1503,38 @@ export function GradebookWorkspace({
                     <table className="gradebook-term-table">
                       <thead>
                         <tr>
-                          <th rowSpan={2}>Name</th>
+                          <th rowSpan={2} className="gradebook-name-column">Name</th>
                           {termAssessments.map((assessment) => (
                             <th
                               colSpan={3}
+                              className="gradebook-assessment-column"
                               key={assessmentKey(assessment.assessment_name, assessment.assessment_date)}
                             >
                               <div className="gradebook-assessment-column-title">{assessment.assessment_name}</div>
                               <div className="gradebook-assessment-column-date">{assessment.assessment_date}</div>
+                              {canManageAssignments ? (
+                                <div className="gradebook-assessment-header-actions">
+                                  <button
+                                    className="button secondary"
+                                    type="button"
+                                    onClick={() => beginEditingAssessment(assessment)}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="button secondary"
+                                    type="button"
+                                    onClick={() => void deleteAssessmentColumn(assessment)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              ) : null}
                               <div className="gradebook-assessment-column-date">
                                 <label style={{ display: "block" }}>
                                   <span style={{ display: "block" }}>Term</span>
                                   <select
+                                    className="gradebook-assessment-meta-input"
                                     value={assessment.term_key ?? ""}
                                     onChange={(event) =>
                                       updateAssessmentMetadata(
@@ -1276,7 +1556,7 @@ export function GradebookWorkspace({
                                 <label style={{ display: "block" }}>
                                   <span style={{ display: "block" }}>Out of</span>
                                   <input
-                                    className="cell-input"
+                                    className="cell-input gradebook-assessment-meta-input"
                                     type="number"
                                     min="1"
                                     step="0.01"
@@ -1314,7 +1594,7 @@ export function GradebookWorkspace({
                                 <label style={{ display: "block" }}>
                                   <span style={{ display: "block" }}>Weighting %</span>
                                   <input
-                                    className="cell-input"
+                                    className="cell-input gradebook-assessment-meta-input"
                                     type="number"
                                     min="0"
                                     max="100"
@@ -1395,7 +1675,7 @@ export function GradebookWorkspace({
 
                           return (
                             <tr key={`${term.term_key}-${student.school_id}`}>
-                              <td>
+                              <td className="gradebook-name-column gradebook-name-cell">
                                 <div className="gradebook-student-name">{student.full_name}</div>
                                 <div className="gradebook-student-meta">
                                   {student.class_name}
@@ -1414,7 +1694,7 @@ export function GradebookWorkspace({
                                   <Fragment key={`${term.term_key}-${student.school_id}-${key}`}>
                                     <td>
                                       <input
-                                        className="cell-input"
+                                        className="cell-input gradebook-score-input"
                                         inputMode="decimal"
                                         placeholder="Score"
                                         value={draft.score}
@@ -1424,12 +1704,15 @@ export function GradebookWorkspace({
                                       />
                                     </td>
                                     <td>
-                                      <div className="gradebook-percentage-value">
+                                      <div
+                                        className={`gradebook-percentage-value ${getGradeToneClass(draft.grade)}`}
+                                      >
                                         {formatPercentage(draft.score, assessment.max_score)}
                                       </div>
                                     </td>
                                     <td>
                                       <select
+                                        className={`gradebook-grade-select ${getGradeToneClass(draft.grade)}`}
                                         value={draft.grade}
                                         onChange={(event) =>
                                           updateAssessmentDraft(student.school_id, key, "grade", event.target.value)
@@ -1447,12 +1730,18 @@ export function GradebookWorkspace({
                                 );
                               })}
                               <td>
-                                <div className="gradebook-percentage-value">
+                                <div
+                                  className={`gradebook-percentage-value ${getGradeToneClass(termGrade)}`}
+                                >
                                   {termPercentage === null ? "—" : `${termPercentage.toFixed(1)}%`}
                                 </div>
                               </td>
                               <td>
-                                <div className="gradebook-percentage-value">{termGrade}</div>
+                                <div
+                                  className={`gradebook-percentage-value ${getGradeToneClass(termGrade)}`}
+                                >
+                                  {termGrade}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1752,6 +2041,11 @@ export function GradebookWorkspace({
               </div>
               <div className="field">
                 <label>Assessment sheet</label>
+                {editingAssessmentKey ? (
+                  <div className="banner compact-banner" style={{ marginBottom: "0.75rem" }}>
+                    Editing this assignment column. Save to apply the changes or cancel to go back to adding a new assignment.
+                  </div>
+                ) : null}
                 <div className="actions" style={{ marginTop: 0 }}>
                   {canManageSetup ? (
                     <Link className="button secondary" href="/admin/gradebook">
@@ -1763,8 +2057,17 @@ export function GradebookWorkspace({
                     type="button"
                     onClick={() => void createAssessmentColumn()}
                   >
-                    Add Assignment Column
+                    {editingAssessmentKey ? "Update Assignment Column" : "Add Assignment Column"}
                   </button>
+                  {editingAssessmentKey ? (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => resetAssessmentBuilderForm()}
+                    >
+                      Cancel Edit
+                    </button>
+                  ) : null}
                   <button
                     className="button"
                     type="button"

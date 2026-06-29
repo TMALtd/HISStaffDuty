@@ -356,6 +356,99 @@ input {
 .gradebook-term-table {
   width: max-content;
   min-width: 100%;
+  table-layout: fixed;
+}
+
+.gradebook-term-table th,
+.gradebook-term-table td {
+  padding: 10px 12px;
+  vertical-align: top;
+}
+
+.gradebook-name-column {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 260px;
+  width: 260px;
+  background: rgba(255, 251, 245, 0.98);
+  box-shadow: 10px 0 16px rgba(76, 38, 18, 0.05);
+}
+
+.gradebook-name-cell {
+  z-index: 2;
+}
+
+.gradebook-assessment-column {
+  min-width: 420px;
+}
+
+.gradebook-assessment-meta-input {
+  width: min(180px, 100%);
+}
+
+.gradebook-score-input {
+  min-width: 96px;
+  max-width: 120px;
+}
+
+.gradebook-grade-select {
+  min-width: 110px;
+}
+
+.gradebook-assessment-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.gradebook-assessment-header-actions .button {
+  padding: 8px 12px;
+}
+
+.gradebook-percentage-value {
+  font-weight: 700;
+}
+
+.grade-tone-a {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.grade-tone-b {
+  color: #3f6212;
+  background: rgba(132, 204, 22, 0.12);
+}
+
+.grade-tone-c {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.grade-tone-d {
+  color: #b45309;
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.grade-tone-e {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.gradebook-percentage-value.grade-tone-a,
+.gradebook-percentage-value.grade-tone-b,
+.gradebook-percentage-value.grade-tone-c,
+.gradebook-percentage-value.grade-tone-d,
+.gradebook-percentage-value.grade-tone-e,
+.gradebook-grade-select.grade-tone-a,
+.gradebook-grade-select.grade-tone-b,
+.gradebook-grade-select.grade-tone-c,
+.gradebook-grade-select.grade-tone-d,
+.gradebook-grade-select.grade-tone-e {
+  border-radius: 10px;
+  padding: 6px 10px;
 }
 
 table {

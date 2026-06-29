@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { GradebookFieldDefinition, GradebookSubject, GradebookTerm } from "@/lib/types";
+import { getGradebookSectionDefinitions } from "@/lib/gradebook";
+import type {
+  GradebookFieldDefinition,
+  GradebookSectionDefinition,
+  GradebookSubject,
+  GradebookTerm
+} from "@/lib/types";
 
 type SubjectsResponse = {
   subjects: GradebookSubject[];
@@ -16,6 +22,10 @@ type TermsResponse = {
   terms: GradebookTerm[];
 };
 
+type SectionsResponse = {
+  sections: GradebookSectionDefinition[];
+};
+
 export function GradebookAdmin() {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -25,6 +35,7 @@ export function GradebookAdmin() {
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<GradebookFieldDefinition["field_type"]>("text");
   const [terms, setTerms] = useState<GradebookTerm[]>([]);
+  const [sections, setSections] = useState<GradebookSectionDefinition[]>(getGradebookSectionDefinitions());
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -58,6 +69,22 @@ export function GradebookAdmin() {
       setTerms(json.terms);
     })().catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : "Could not load markbook terms.");
+    });
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const response = await fetch("/api/gradebook/sections", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Could not load markbook section text.");
+      }
+
+      const json = (await response.json()) as SectionsResponse;
+      setSections(json.sections);
+    })().catch((loadError) => {
+      setError(
+        loadError instanceof Error ? loadError.message : "Could not load markbook section text."
+      );
     });
   }, []);
 
@@ -188,6 +215,58 @@ export function GradebookAdmin() {
     );
   }
 
+  function updateSection(
+    slug: string,
+    field: keyof Pick<
+      GradebookSectionDefinition,
+      "name" | "description" | "recommendedPageName" | "emptyStateTitle" | "emptyStateCopy"
+    >,
+    value: string
+  ) {
+    setSections((current) =>
+      current.map((section) =>
+        section.slug === slug
+          ? {
+              ...section,
+              [field]: value
+            }
+          : section
+      )
+    );
+  }
+
+  async function saveSections(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/gradebook/sections", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sections: sections.map((section) => ({
+          slug: section.slug,
+          name: section.name,
+          description: section.description,
+          recommendedPageName: section.recommendedPageName,
+          emptyStateTitle: section.emptyStateTitle,
+          emptyStateCopy: section.emptyStateCopy
+        }))
+      })
+    });
+
+    if (!response.ok) {
+      const json = (await response.json()) as { error?: string };
+      setError(json.error ?? "Could not save markbook section text.");
+      return;
+    }
+
+    const json = (await response.json()) as SectionsResponse;
+    setSections(json.sections);
+    setStatus("Markbook card text updated.");
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -242,6 +321,71 @@ export function GradebookAdmin() {
             <div className="actions">
               <button className="button" type="submit">
                 Save Terms
+              </button>
+            </div>
+          </form>
+
+          <form className="mi-card" onSubmit={saveSections}>
+            <h2 className="mi-title">Markbook card text</h2>
+            <p className="hero-copy compact-copy">
+              Update the section names, descriptions, and empty-state guidance shown on the class Markbook cards.
+            </p>
+            <div className="dashboard-grid" style={{ gap: "1rem" }}>
+              {sections.map((section) => (
+                <div key={section.slug} className="panel" style={{ padding: "1rem" }}>
+                  <strong style={{ display: "block", marginBottom: "0.75rem" }}>{section.slug}</strong>
+                  <div className="field">
+                    <label htmlFor={`${section.slug}-name`}>Card title</label>
+                    <input
+                      id={`${section.slug}-name`}
+                      value={section.name}
+                      onChange={(event) => updateSection(section.slug, "name", event.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${section.slug}-description`}>Card description</label>
+                    <input
+                      id={`${section.slug}-description`}
+                      value={section.description}
+                      onChange={(event) => updateSection(section.slug, "description", event.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${section.slug}-recommended`}>Recommended page name</label>
+                    <input
+                      id={`${section.slug}-recommended`}
+                      value={section.recommendedPageName}
+                      onChange={(event) =>
+                        updateSection(section.slug, "recommendedPageName", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${section.slug}-empty-title`}>Empty state title</label>
+                    <input
+                      id={`${section.slug}-empty-title`}
+                      value={section.emptyStateTitle}
+                      onChange={(event) =>
+                        updateSection(section.slug, "emptyStateTitle", event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`${section.slug}-empty-copy`}>Empty state copy</label>
+                    <input
+                      id={`${section.slug}-empty-copy`}
+                      value={section.emptyStateCopy}
+                      onChange={(event) =>
+                        updateSection(section.slug, "emptyStateCopy", event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="actions">
+              <button className="button" type="submit">
+                Save Markbook Card Text
               </button>
             </div>
           </form>

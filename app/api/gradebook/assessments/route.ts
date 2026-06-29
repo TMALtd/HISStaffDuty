@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserOrNull } from "@/lib/auth";
-import { createGradebookAssessment, getGradebookAssessments } from "@/lib/data";
+import {
+  createGradebookAssessment,
+  deleteGradebookAssessment,
+  getGradebookAssessments,
+  updateGradebookAssessment
+} from "@/lib/data";
 
 export async function GET(request: Request) {
   const user = await getCurrentUserOrNull();
@@ -57,6 +62,66 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to save assessment." },
+      { status: 400 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  const user = await getCurrentUserOrNull();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const assessment = await updateGradebookAssessment({
+      subjectId: body.subjectId,
+      className: body.className ?? null,
+      currentAssessmentName: body.currentAssessmentName,
+      currentAssessmentDate: body.currentAssessmentDate,
+      nextAssessmentName: body.nextAssessmentName,
+      nextAssessmentDate: body.nextAssessmentDate,
+      termKey: body.termKey ?? null,
+      maxScore:
+        body.maxScore === null || body.maxScore === undefined || body.maxScore === ""
+          ? null
+          : Number(body.maxScore),
+      includeInTerm: Boolean(body.includeInTerm),
+      weightingPercent:
+        body.weightingPercent === null ||
+        body.weightingPercent === undefined ||
+        body.weightingPercent === ""
+          ? null
+          : Number(body.weightingPercent)
+    });
+    return NextResponse.json({ assessment });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to update assessment." },
+      { status: 400 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  const user = await getCurrentUserOrNull();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    await deleteGradebookAssessment({
+      subjectId: body.subjectId,
+      className: body.className ?? null,
+      assessmentName: body.assessmentName,
+      assessmentDate: body.assessmentDate
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to delete assessment." },
       { status: 400 }
     );
   }
