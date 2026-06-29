@@ -144,7 +144,7 @@ select
   legacy.year_group,
   legacy.milepost,
   legacy.level,
-  legacy.school_id,
+  legacy.school_id::text as school_id,
   legacy.full_name,
   legacy.surname,
   legacy.first_name,
