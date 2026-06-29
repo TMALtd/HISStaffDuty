@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       className: body.className ?? null,
       assessmentName: body.assessmentName,
       assessmentDate: body.assessmentDate,
+      termKey: body.termKey ?? null,
       maxScore:
         body.maxScore === null || body.maxScore === undefined || body.maxScore === ""
           ? null

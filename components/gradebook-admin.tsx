@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { GradebookFieldDefinition, GradebookSubject } from "@/lib/types";
+import type { GradebookFieldDefinition, GradebookSubject, GradebookTerm } from "@/lib/types";
 
 type SubjectsResponse = {
   subjects: GradebookSubject[];
@@ -10,6 +10,10 @@ type SubjectsResponse = {
 
 type FieldsResponse = {
   fields: GradebookFieldDefinition[];
+};
+
+type TermsResponse = {
+  terms: GradebookTerm[];
 };
 
 export function GradebookAdmin() {
@@ -20,6 +24,7 @@ export function GradebookAdmin() {
   const [subjectClassName, setSubjectClassName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<GradebookFieldDefinition["field_type"]>("text");
+  const [terms, setTerms] = useState<GradebookTerm[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -39,6 +44,20 @@ export function GradebookAdmin() {
   useEffect(() => {
     void loadSubjects().catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : "Could not load subjects.");
+    });
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const response = await fetch("/api/gradebook/terms", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Could not load markbook terms.");
+      }
+
+      const json = (await response.json()) as TermsResponse;
+      setTerms(json.terms);
+    })().catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : "Could not load markbook terms.");
     });
   }, []);
 
@@ -125,6 +144,50 @@ export function GradebookAdmin() {
     setFields(fieldsJson.fields);
   }
 
+  async function saveTerms(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    const response = await fetch("/api/gradebook/terms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        terms: terms.map((term) => ({
+          termKey: term.term_key,
+          termLabel: term.term_label,
+          startDate: term.start_date,
+          endDate: term.end_date,
+          sortOrder: term.sort_order
+        }))
+      })
+    });
+
+    if (!response.ok) {
+      const json = (await response.json()) as { error?: string };
+      setError(json.error ?? "Could not save markbook terms.");
+      return;
+    }
+
+    const json = (await response.json()) as TermsResponse;
+    setTerms(json.terms);
+    setStatus("Markbook terms updated.");
+  }
+
+  function updateTerm(termKey: string, field: "start_date" | "end_date", value: string) {
+    setTerms((current) =>
+      current.map((term) =>
+        term.term_key === termKey
+          ? {
+              ...term,
+              [field]: value || null
+            }
+          : term
+      )
+    );
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
@@ -145,6 +208,41 @@ export function GradebookAdmin() {
 
       <section className="panel">
         <div className="admin-grid">
+          <form className="mi-card" onSubmit={saveTerms}>
+            <h2 className="mi-title">School terms</h2>
+            <p className="hero-copy compact-copy">
+              Set the date range for each term so assignments can be grouped correctly in the Markbook.
+            </p>
+            {terms.map((term) => (
+              <div key={term.term_key} style={{ marginBottom: "1rem" }}>
+                <strong style={{ display: "block", marginBottom: "0.5rem" }}>{term.term_label}</strong>
+                <div className="field">
+                  <label htmlFor={`${term.term_key}-start`}>Start date</label>
+                  <input
+                    id={`${term.term_key}-start`}
+                    type="date"
+                    value={term.start_date ?? ""}
+                    onChange={(event) => updateTerm(term.term_key, "start_date", event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor={`${term.term_key}-end`}>End date</label>
+                  <input
+                    id={`${term.term_key}-end`}
+                    type="date"
+                    value={term.end_date ?? ""}
+                    onChange={(event) => updateTerm(term.term_key, "end_date", event.target.value)}
+                  />
+                </div>
+              </div>
+            ))}
+            <div className="actions">
+              <button className="button" type="submit">
+                Save Terms
+              </button>
+            </div>
+          </form>
+
           <form className="mi-card" onSubmit={createSubject}>
             <h2 className="mi-title">Create subject page</h2>
             <div className="field">

@@ -3,6 +3,7 @@ import {
   deleteGradebookEntry,
   getGradebookAssessments,
   getGradebookSubjectById,
+  getGradebookTerms,
   getGradebookEntries,
   getGradebookFieldDefinitions,
   getStaffDirectoryClassOptions,
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
     const infoOnly = subject?.slug === "student-pastoral";
     const students = preview ? filterStudentsForAccess(await getStudents(filters), preview.activeAccess) : await getStudents(filters);
     const fields = await getGradebookFieldDefinitions(subjectId);
-    const [entries, classOptions, assessments] = await Promise.all([
+    const [entries, classOptions, assessments, terms] = await Promise.all([
       getGradebookEntries({
         subjectId,
         studentIds: students.map((student) => student.school_id),
@@ -47,10 +48,11 @@ export async function GET(request: Request) {
         infoOnly
       }),
       getStaffDirectoryClassOptions(),
-      infoOnly ? Promise.resolve([]) : getGradebookAssessments({ subjectId, className: filters.className || undefined })
+      infoOnly ? Promise.resolve([]) : getGradebookAssessments({ subjectId, className: filters.className || undefined }),
+      getGradebookTerms()
     ]);
 
-    return NextResponse.json({ students, fields, entries, subject, classOptions, assessments });
+    return NextResponse.json({ students, fields, entries, subject, classOptions, assessments, terms });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load gradebook entries." },

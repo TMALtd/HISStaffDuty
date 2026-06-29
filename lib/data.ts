@@ -27,6 +27,7 @@ import {
   FILTER_FIELDS,
   type GradebookEntry,
   type GradebookAssessment,
+  type GradebookTerm,
   type GradebookFieldDefinition,
   type GradebookSubject,
   type FilterField,
@@ -66,6 +67,12 @@ type StudentClassMetadata = {
   level: string;
 };
 
+const DEFAULT_GRADEBOOK_TERMS: GradebookTerm[] = [
+  { id: "default-term-1", term_key: "term-1", term_label: "Term 1", start_date: null, end_date: null, sort_order: 1 },
+  { id: "default-term-2", term_key: "term-2", term_label: "Term 2", start_date: null, end_date: null, sort_order: 2 },
+  { id: "default-term-3", term_key: "term-3", term_label: "Term 3", start_date: null, end_date: null, sort_order: 3 }
+];
+
 const TABLE_NAME = "Class List";
 const VIEW_NAME = "student_class_roster";
 const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
@@ -73,6 +80,7 @@ const SUBJECTS_TABLE = "gradebook_subjects";
 const FIELDS_TABLE = "gradebook_field_definitions";
 const ENTRIES_TABLE = "gradebook_entries";
 const ASSESSMENTS_TABLE = "gradebook_assessments";
+const TERMS_TABLE = "gradebook_terms";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
 const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
@@ -3313,14 +3321,96 @@ export async function getGradebookEntries(params: {
   });
 }
 
+export async function getGradebookTerms(): Promise<GradebookTerm[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TERMS_TABLE)
+    .select("id,term_key,term_label,start_date,end_date,sort_order")
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), TERMS_TABLE)) {
+      return DEFAULT_GRADEBOOK_TERMS;
+    }
+
+    throw new Error(error.message);
+  }
+
+  const terms = ((data ?? []) as GradebookTerm[]).sort((left, right) => left.sort_order - right.sort_order);
+  return terms.length ? terms : DEFAULT_GRADEBOOK_TERMS;
+}
+
+export async function upsertGradebookTerms(
+  input: Array<{
+    termKey: string;
+    termLabel: string;
+    startDate: string | null;
+    endDate: string | null;
+    sortOrder: number;
+  }>
+): Promise<GradebookTerm[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TERMS_TABLE)
+    .upsert(
+      input.map((term) => ({
+        term_key: normalizeRequiredText(term.termKey, "Term key"),
+        term_label: normalizeRequiredText(term.termLabel, "Term label"),
+        start_date: normalizeOptionalText(term.startDate),
+        end_date: normalizeOptionalText(term.endDate),
+        sort_order: term.sortOrder
+      })),
+      { onConflict: "term_key" }
+    )
+    .select("id,term_key,term_label,start_date,end_date,sort_order");
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), TERMS_TABLE)) {
+      throw new Error("Gradebook terms table is not set up yet. Run supabase_gradebook_terms.sql first.");
+    }
+
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as GradebookTerm[]).sort((left, right) => left.sort_order - right.sort_order);
+}
+
+function inferGradebookTermKey(assessmentDate: string, terms: GradebookTerm[]) {
+  if (!assessmentDate) {
+    return null;
+  }
+
+  const assessmentTime = Date.parse(assessmentDate);
+  if (Number.isNaN(assessmentTime)) {
+    return null;
+  }
+
+  const match = terms.find((term) => {
+    if (!term.start_date || !term.end_date) {
+      return false;
+    }
+
+    const start = Date.parse(term.start_date);
+    const end = Date.parse(term.end_date);
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      return false;
+    }
+
+    return assessmentTime >= start && assessmentTime <= end;
+  });
+
+  return match?.term_key ?? null;
+}
+
 export async function getGradebookAssessments(params: {
   subjectId: string;
   className?: string;
 }): Promise<GradebookAssessment[]> {
   const supabase = createSupabaseAdminClient();
+  const terms = await getGradebookTerms();
   let query = supabase
     .from(ASSESSMENTS_TABLE)
-    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,term_key,include_in_term,weighting_percent")
     .eq("subject_id", params.subjectId)
     .order("assessment_date", { ascending: false })
     .order("assessment_name");
@@ -3370,6 +3460,7 @@ export async function getGradebookAssessments(params: {
       assessment_name: item.assessment_name,
       assessment_date: item.assessment_date,
       max_score: null,
+      term_key: inferGradebookTermKey(item.assessment_date, terms),
       include_in_term: false,
       weighting_percent: null
     }));
@@ -3394,6 +3485,7 @@ export async function createGradebookAssessment(input: {
   assessmentName: string;
   assessmentDate: string;
   maxScore: number | null;
+  termKey?: string | null;
   includeInTerm?: boolean;
   weightingPercent?: number | null;
 }): Promise<GradebookAssessment> {
@@ -3407,6 +3499,7 @@ export async function createGradebookAssessment(input: {
         assessment_name: input.assessmentName,
         assessment_date: input.assessmentDate,
         max_score: input.maxScore,
+        term_key: normalizeOptionalText(input.termKey),
         include_in_term: input.includeInTerm ?? false,
         weighting_percent: input.weightingPercent ?? null
       },
@@ -3414,7 +3507,7 @@ export async function createGradebookAssessment(input: {
         onConflict: "subject_id,class_name,assessment_name,assessment_date"
       }
     )
-    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,include_in_term,weighting_percent")
+    .select("id,subject_id,class_name,assessment_name,assessment_date,max_score,term_key,include_in_term,weighting_percent")
     .single();
 
   if (error) {

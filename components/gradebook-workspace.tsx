@@ -8,6 +8,7 @@ import type {
   GradebookEntry,
   GradebookFieldDefinition,
   GradebookSubject,
+  GradebookTerm,
   GradebookWorkspaceSection,
   FilterOptions,
   FilterState,
@@ -28,6 +29,7 @@ type EntriesResponse = {
   fields: GradebookFieldDefinition[];
   entries: GradebookEntry[];
   assessments?: GradebookAssessment[];
+  terms?: GradebookTerm[];
   subject: GradebookSubject | null;
 };
 
@@ -140,6 +142,39 @@ function makeEmptyDraft(): DraftRow {
   };
 }
 
+function buildDefaultTerms(): GradebookTerm[] {
+  return [
+    { id: "default-term-1", term_key: "term-1", term_label: "Term 1", start_date: null, end_date: null, sort_order: 1 },
+    { id: "default-term-2", term_key: "term-2", term_label: "Term 2", start_date: null, end_date: null, sort_order: 2 },
+    { id: "default-term-3", term_key: "term-3", term_label: "Term 3", start_date: null, end_date: null, sort_order: 3 }
+  ];
+}
+
+function inferTermKeyFromDate(assessmentDate: string, terms: GradebookTerm[]) {
+  if (!assessmentDate) {
+    return "";
+  }
+
+  const assessmentTime = Date.parse(assessmentDate);
+  if (Number.isNaN(assessmentTime)) {
+    return "";
+  }
+
+  const matched = terms.find((term) => {
+    if (!term.start_date || !term.end_date) {
+      return false;
+    }
+    const start = Date.parse(term.start_date);
+    const end = Date.parse(term.end_date);
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      return false;
+    }
+    return assessmentTime >= start && assessmentTime <= end;
+  });
+
+  return matched?.term_key ?? "";
+}
+
 function orderFields(section: GradebookWorkspaceSection, fields: GradebookFieldDefinition[]) {
   if (!section.fieldOrder?.length) {
     return fields;
@@ -170,9 +205,11 @@ export function GradebookWorkspace({
   const [newAssessmentName, setNewAssessmentName] = useState("");
   const [newAssessmentDate, setNewAssessmentDate] = useState("");
   const [newAssessmentMaxScore, setNewAssessmentMaxScore] = useState("");
+  const [newAssessmentTermKey, setNewAssessmentTermKey] = useState("");
   const [newAssessmentIncludeInTerm, setNewAssessmentIncludeInTerm] = useState(false);
   const [newAssessmentWeightingPercent, setNewAssessmentWeightingPercent] = useState("");
   const [assessments, setAssessments] = useState<GradebookAssessment[]>([]);
+  const [terms, setTerms] = useState<GradebookTerm[]>(buildDefaultTerms());
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [classOptions, setClassOptions] = useState<StaffDirectoryClassOption[]>([]);
   const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
@@ -181,6 +218,7 @@ export function GradebookWorkspace({
   const [assessmentDrafts, setAssessmentDrafts] = useState<Record<string, Record<string, DraftRow>>>({});
   const [entryIndex, setEntryIndex] = useState<Record<string, Record<string, GradebookEntry>>>({});
   const [subjectMeta, setSubjectMeta] = useState<GradebookSubject | null>(null);
+  const [collapsedTerms, setCollapsedTerms] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [assignmentSavingId, setAssignmentSavingId] = useState("");
   const [isSavingAssessmentGrid, setIsSavingAssessmentGrid] = useState(false);
@@ -205,10 +243,28 @@ export function GradebookWorkspace({
         : students,
     [selectedStudentId, students]
   );
+  const assessmentsByTerm = useMemo(() => {
+    const orderedTerms = terms.length ? terms : buildDefaultTerms();
+    return orderedTerms.map((term) => ({
+      term,
+      assessments: assessments.filter((assessment) => assessment.term_key === term.term_key)
+    }));
+  }, [assessments, terms]);
 
   useEffect(() => {
     setActiveFilters(initialFilters);
   }, [initialFilters]);
+
+  useEffect(() => {
+    if (!newAssessmentDate) {
+      return;
+    }
+
+    const inferred = inferTermKeyFromDate(newAssessmentDate, terms);
+    if (inferred && !newAssessmentTermKey) {
+      setNewAssessmentTermKey(inferred);
+    }
+  }, [newAssessmentDate, newAssessmentTermKey, terms]);
 
   useEffect(() => {
     let isMounted = true;
@@ -296,6 +352,7 @@ export function GradebookWorkspace({
     setNewAssessmentName("");
     setNewAssessmentDate("");
     setNewAssessmentMaxScore("");
+    setNewAssessmentTermKey("");
     setNewAssessmentIncludeInTerm(false);
     setNewAssessmentWeightingPercent("");
     setAssessments([]);
@@ -346,6 +403,10 @@ export function GradebookWorkspace({
         }
 
         setSubjectMeta(json.subject);
+        const nextTerms = (json.terms?.length ? json.terms : buildDefaultTerms()).slice().sort(
+          (left, right) => left.sort_order - right.sort_order
+        );
+        setTerms(nextTerms);
         setClassOptions(json.classOptions);
         const assessmentSet = new Map<string, GradebookAssessment>();
 
@@ -369,6 +430,7 @@ export function GradebookWorkspace({
             assessment_name: entry.assessment_name,
             assessment_date: entry.assessment_date,
             max_score: null,
+            term_key: inferTermKeyFromDate(entry.assessment_date, nextTerms) || null,
             include_in_term: false,
             weighting_percent: null
           });
@@ -518,7 +580,9 @@ export function GradebookWorkspace({
 
   function updateAssessmentMetadata(
     columnKey: string,
-    updates: Partial<Pick<GradebookAssessment, "max_score" | "include_in_term" | "weighting_percent">>
+    updates: Partial<
+      Pick<GradebookAssessment, "max_score" | "term_key" | "include_in_term" | "weighting_percent">
+    >
   ) {
     setAssessments((current) =>
       current.map((assessment) =>
@@ -664,6 +728,7 @@ export function GradebookWorkspace({
           className: activeFilters.className || null,
           assessmentName: newAssessmentName.trim(),
           assessmentDate: newAssessmentDate,
+          termKey: newAssessmentTermKey || null,
           maxScore: parsedMaxScore,
           includeInTerm: newAssessmentIncludeInTerm,
           weightingPercent: newAssessmentIncludeInTerm ? parsedWeightingPercent : null
@@ -679,6 +744,7 @@ export function GradebookWorkspace({
       setNewAssessmentName("");
       setNewAssessmentDate("");
       setNewAssessmentMaxScore("");
+      setNewAssessmentTermKey("");
       setNewAssessmentIncludeInTerm(false);
       setNewAssessmentWeightingPercent("");
       setError("");
@@ -705,6 +771,7 @@ export function GradebookWorkspace({
         className: activeFilters.className || null,
         assessmentName: assessment.assessment_name,
         assessmentDate: assessment.assessment_date,
+        termKey: assessment.term_key,
         maxScore: assessment.max_score,
         includeInTerm: assessment.include_in_term,
         weightingPercent: assessment.include_in_term ? assessment.weighting_percent : null
@@ -1115,201 +1182,291 @@ export function GradebookWorkspace({
   }
 
   function renderAssessmentSpreadsheet() {
+    const unassignedAssessments = assessments.filter((assessment) => !assessment.term_key);
+    const groupedTerms = [
+      ...assessmentsByTerm,
+      ...(unassignedAssessments.length
+        ? [
+            {
+              term: {
+                id: "unassigned-term",
+                term_key: "unassigned",
+                term_label: "Unassigned",
+                start_date: null,
+                end_date: null,
+                sort_order: 999
+              },
+              assessments: unassignedAssessments
+            }
+          ]
+        : [])
+    ];
+
     return (
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th rowSpan={2}>Name</th>
-              {assessments.map((assessment) => (
-                <th
-                  colSpan={3}
-                  key={assessmentKey(assessment.assessment_name, assessment.assessment_date)}
-                >
-                  <div className="gradebook-assessment-column-title">{assessment.assessment_name}</div>
-                  <div className="gradebook-assessment-column-date">{assessment.assessment_date}</div>
-                  <div className="gradebook-assessment-column-date">
-                    <label style={{ display: "block" }}>
-                      <span style={{ display: "block" }}>Out of</span>
-                      <input
-                        className="cell-input"
-                        type="number"
-                        min="1"
-                        step="0.01"
-                        value={assessment.max_score ?? ""}
-                        onChange={(event) =>
-                          updateAssessmentMetadata(
-                            assessmentKey(assessment.assessment_name, assessment.assessment_date),
-                            {
-                              max_score: event.target.value ? Number(event.target.value) : null
-                            }
-                          )
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="gradebook-assessment-column-date">
-                    <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", justifyContent: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={assessment.include_in_term}
-                        onChange={(event) => {
-                          const checked = event.target.checked;
-                          saveAssessmentMetadataLocally(
-                            assessment.assessment_name,
-                            assessment.assessment_date,
-                            checked,
-                            checked ? assessment.weighting_percent : null
+      <div className="dashboard-grid" style={{ gap: "1rem" }}>
+        {groupedTerms.map(({ term, assessments: termAssessments }) => {
+          const isCollapsed = collapsedTerms[term.term_key] ?? false;
+
+          return (
+            <section className="panel" key={term.term_key}>
+              <div className="panel-heading">
+                <div>
+                  <h3 className="panel-title" style={{ marginBottom: 0 }}>{term.term_label}</h3>
+                  <span className="hint">
+                    {term.start_date && term.end_date
+                      ? `${term.start_date} to ${term.end_date}`
+                      : "Dates not set yet"}
+                  </span>
+                </div>
+                <div className="actions" style={{ marginTop: 0 }}>
+                  <span className="hint">
+                    {termAssessments.length} assignment column{termAssessments.length === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() =>
+                      setCollapsedTerms((current) => ({
+                        ...current,
+                        [term.term_key]: !isCollapsed
+                      }))
+                    }
+                  >
+                    {isCollapsed ? "Expand" : "Collapse"}
+                  </button>
+                </div>
+              </div>
+
+              {!isCollapsed ? (
+                termAssessments.length ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th rowSpan={2}>Name</th>
+                          {termAssessments.map((assessment) => (
+                            <th
+                              colSpan={3}
+                              key={assessmentKey(assessment.assessment_name, assessment.assessment_date)}
+                            >
+                              <div className="gradebook-assessment-column-title">{assessment.assessment_name}</div>
+                              <div className="gradebook-assessment-column-date">{assessment.assessment_date}</div>
+                              <div className="gradebook-assessment-column-date">
+                                <label style={{ display: "block" }}>
+                                  <span style={{ display: "block" }}>Term</span>
+                                  <select
+                                    value={assessment.term_key ?? ""}
+                                    onChange={(event) =>
+                                      updateAssessmentMetadata(
+                                        assessmentKey(assessment.assessment_name, assessment.assessment_date),
+                                        { term_key: event.target.value || null }
+                                      )
+                                    }
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {terms.map((termOption) => (
+                                      <option key={termOption.term_key} value={termOption.term_key}>
+                                        {termOption.term_label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <div className="gradebook-assessment-column-date">
+                                <label style={{ display: "block" }}>
+                                  <span style={{ display: "block" }}>Out of</span>
+                                  <input
+                                    className="cell-input"
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    value={assessment.max_score ?? ""}
+                                    onChange={(event) =>
+                                      updateAssessmentMetadata(
+                                        assessmentKey(assessment.assessment_name, assessment.assessment_date),
+                                        {
+                                          max_score: event.target.value ? Number(event.target.value) : null
+                                        }
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                              <div className="gradebook-assessment-column-date">
+                                <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", justifyContent: "center" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={assessment.include_in_term}
+                                    onChange={(event) => {
+                                      const checked = event.target.checked;
+                                      saveAssessmentMetadataLocally(
+                                        assessment.assessment_name,
+                                        assessment.assessment_date,
+                                        checked,
+                                        checked ? assessment.weighting_percent : null
+                                      );
+                                    }}
+                                  />
+                                  <span>Include in term</span>
+                                </label>
+                              </div>
+                              <div className="gradebook-assessment-column-date">
+                                <label style={{ display: "block" }}>
+                                  <span style={{ display: "block" }}>Weighting %</span>
+                                  <input
+                                    className="cell-input"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={assessment.weighting_percent ?? ""}
+                                    onChange={(event) =>
+                                      updateAssessmentMetadata(
+                                        assessmentKey(assessment.assessment_name, assessment.assessment_date),
+                                        {
+                                          weighting_percent: event.target.value ? Number(event.target.value) : null
+                                        }
+                                      )
+                                    }
+                                    disabled={!assessment.include_in_term}
+                                  />
+                                </label>
+                              </div>
+                            </th>
+                          ))}
+                          <th colSpan={2}>{term.term_label} Summary</th>
+                        </tr>
+                        <tr>
+                          {termAssessments.flatMap((assessment) => [
+                            <th key={`${assessment.id}-score`}>Score</th>,
+                            <th key={`${assessment.id}-percent`}>%</th>,
+                            <th key={`${assessment.id}-grade`}>Grade</th>
+                          ])}
+                          <th>%</th>
+                          <th>Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredStudents.map((student) => {
+                          const gradeOptions = getGradeOptionsForYearGroup(student.year_group);
+                          const includedAssessments = termAssessments.filter((assessment) => assessment.include_in_term);
+                          const explicitWeightingTotal = includedAssessments.reduce(
+                            (total, assessment) => total + (assessment.weighting_percent ?? 0),
+                            0
                           );
-                        }}
-                      />
-                      <span>Include in term</span>
-                    </label>
+                          const unspecifiedWeightingCount = includedAssessments.filter(
+                            (assessment) => assessment.weighting_percent === null
+                          ).length;
+                          const remainingWeighting =
+                            unspecifiedWeightingCount > 0
+                              ? Math.max(100 - explicitWeightingTotal, 0) / unspecifiedWeightingCount
+                              : 0;
+                          const weightedPercentages = includedAssessments
+                            .map((assessment) => {
+                              const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+                              const draft = assessmentDrafts[student.school_id]?.[key] ?? {
+                                ...makeEmptyDraft(),
+                                assessmentName: assessment.assessment_name,
+                                assessmentDate: assessment.assessment_date
+                              };
+                              const percentage = computePercentageNumber(draft.score, assessment.max_score);
+                              if (percentage === null) {
+                                return null;
+                              }
+
+                              return {
+                                percentage,
+                                weight:
+                                  assessment.weighting_percent !== null
+                                    ? assessment.weighting_percent
+                                    : remainingWeighting
+                              };
+                            })
+                            .filter(Boolean) as Array<{ percentage: number; weight: number }>;
+                          const termWeightTotal = weightedPercentages.reduce((total, item) => total + item.weight, 0);
+                          const termPercentage =
+                            termWeightTotal > 0
+                              ? weightedPercentages.reduce(
+                                  (total, item) => total + item.percentage * (item.weight / termWeightTotal),
+                                  0
+                                )
+                              : null;
+                          const termGrade = deriveTermGrade(student.year_group, termPercentage);
+
+                          return (
+                            <tr key={`${term.term_key}-${student.school_id}`}>
+                              <td>
+                                <div className="gradebook-student-name">{student.full_name}</div>
+                                <div className="gradebook-student-meta">
+                                  {student.class_name}
+                                  {student.assigned_teacher_name ? ` | ${student.assigned_teacher_name}` : ""}
+                                </div>
+                              </td>
+                              {termAssessments.map((assessment) => {
+                                const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
+                                const draft = assessmentDrafts[student.school_id]?.[key] ?? {
+                                  ...makeEmptyDraft(),
+                                  assessmentName: assessment.assessment_name,
+                                  assessmentDate: assessment.assessment_date
+                                };
+
+                                return (
+                                  <Fragment key={`${term.term_key}-${student.school_id}-${key}`}>
+                                    <td>
+                                      <input
+                                        className="cell-input"
+                                        inputMode="decimal"
+                                        placeholder="Score"
+                                        value={draft.score}
+                                        onChange={(event) =>
+                                          updateAssessmentDraft(student.school_id, key, "score", event.target.value)
+                                        }
+                                      />
+                                    </td>
+                                    <td>
+                                      <div className="gradebook-percentage-value">
+                                        {formatPercentage(draft.score, assessment.max_score)}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <select
+                                        value={draft.grade}
+                                        onChange={(event) =>
+                                          updateAssessmentDraft(student.school_id, key, "grade", event.target.value)
+                                        }
+                                      >
+                                        <option value="">Select</option>
+                                        {gradeOptions.map((option) => (
+                                          <option key={option} value={option}>
+                                            {option}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  </Fragment>
+                                );
+                              })}
+                              <td>
+                                <div className="gradebook-percentage-value">
+                                  {termPercentage === null ? "—" : `${termPercentage.toFixed(1)}%`}
+                                </div>
+                              </td>
+                              <td>
+                                <div className="gradebook-percentage-value">{termGrade}</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="gradebook-assessment-column-date">
-                    <label style={{ display: "block" }}>
-                      <span style={{ display: "block" }}>Weighting %</span>
-                      <input
-                        className="cell-input"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={assessment.weighting_percent ?? ""}
-                        onChange={(event) =>
-                          updateAssessmentMetadata(
-                            assessmentKey(assessment.assessment_name, assessment.assessment_date),
-                            {
-                              weighting_percent: event.target.value ? Number(event.target.value) : null
-                            }
-                          )
-                        }
-                        disabled={!assessment.include_in_term}
-                      />
-                    </label>
-                  </div>
-                </th>
-              ))}
-              <th colSpan={2}>Term Summary</th>
-            </tr>
-            <tr>
-              {assessments.flatMap((assessment) => [
-                <th key={`${assessment.id}-score`}>Score</th>,
-                <th key={`${assessment.id}-percent`}>%</th>,
-                <th key={`${assessment.id}-grade`}>Grade</th>
-              ])}
-              <th>Term %</th>
-              <th>Term Grade</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.map((student) => {
-              const gradeOptions = getGradeOptionsForYearGroup(student.year_group);
-              const includedAssessments = assessments.filter((assessment) => assessment.include_in_term);
-              const explicitWeightingTotal = includedAssessments.reduce(
-                (total, assessment) => total + (assessment.weighting_percent ?? 0),
-                0
-              );
-              const unspecifiedWeightingCount = includedAssessments.filter(
-                (assessment) => assessment.weighting_percent === null
-              ).length;
-              const remainingWeighting =
-                unspecifiedWeightingCount > 0 ? Math.max(100 - explicitWeightingTotal, 0) / unspecifiedWeightingCount : 0;
-              const weightedPercentages = includedAssessments
-                .map((assessment) => {
-                  const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
-                  const draft = assessmentDrafts[student.school_id]?.[key] ?? {
-                    ...makeEmptyDraft(),
-                    assessmentName: assessment.assessment_name,
-                    assessmentDate: assessment.assessment_date
-                  };
-                  const percentage = computePercentageNumber(draft.score, assessment.max_score);
-                  if (percentage === null) {
-                    return null;
-                  }
-
-                  const appliedWeight =
-                    assessment.weighting_percent !== null ? assessment.weighting_percent : remainingWeighting;
-
-                  return {
-                    percentage,
-                    weight: appliedWeight
-                  };
-                })
-                .filter(Boolean) as Array<{ percentage: number; weight: number }>;
-              const termWeightTotal = weightedPercentages.reduce((total, item) => total + item.weight, 0);
-              const termPercentage =
-                termWeightTotal > 0
-                  ? weightedPercentages.reduce((total, item) => total + item.percentage * (item.weight / termWeightTotal), 0)
-                  : null;
-              const termGrade = deriveTermGrade(student.year_group, termPercentage);
-
-              return (
-                <tr key={student.school_id}>
-                  <td>
-                    <div className="gradebook-student-name">{student.full_name}</div>
-                    <div className="gradebook-student-meta">
-                      {student.class_name}
-                      {student.assigned_teacher_name ? ` | ${student.assigned_teacher_name}` : ""}
-                    </div>
-                  </td>
-                  {assessments.map((assessment) => {
-                    const key = assessmentKey(assessment.assessment_name, assessment.assessment_date);
-                    const draft = assessmentDrafts[student.school_id]?.[key] ?? {
-                      ...makeEmptyDraft(),
-                      assessmentName: assessment.assessment_name,
-                      assessmentDate: assessment.assessment_date
-                    };
-
-                    return (
-                      <Fragment key={`${student.school_id}-${key}`}>
-                        <td key={`${student.school_id}-${key}-score`}>
-                          <input
-                            className="cell-input"
-                            inputMode="decimal"
-                            placeholder="Score"
-                            value={draft.score}
-                            onChange={(event) =>
-                              updateAssessmentDraft(student.school_id, key, "score", event.target.value)
-                            }
-                          />
-                        </td>
-                        <td key={`${student.school_id}-${key}-percent`}>
-                          <div className="gradebook-percentage-value">
-                            {formatPercentage(draft.score, assessment.max_score)}
-                          </div>
-                        </td>
-                        <td key={`${student.school_id}-${key}-grade`}>
-                          <select
-                            value={draft.grade}
-                            onChange={(event) =>
-                              updateAssessmentDraft(student.school_id, key, "grade", event.target.value)
-                            }
-                          >
-                            <option value="">Select</option>
-                            {gradeOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </Fragment>
-                    );
-                  })}
-                  <td>
-                    <div className="gradebook-percentage-value">
-                      {termPercentage === null ? "—" : `${termPercentage.toFixed(1)}%`}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="gradebook-percentage-value">{termGrade}</div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                ) : (
+                  <div className="empty-state">No assignments in {term.term_label} yet.</div>
+                )
+              ) : null}
+            </section>
+          );
+        })}
       </div>
     );
   }
@@ -1551,6 +1708,22 @@ export function GradebookWorkspace({
                 />
               </div>
               <div className="field">
+                <label htmlFor="assessmentTerm">Assignment term</label>
+                <select
+                  id="assessmentTerm"
+                  value={newAssessmentTermKey}
+                  onChange={(event) => setNewAssessmentTermKey(event.target.value)}
+                  disabled={!linkedSubject}
+                >
+                  <option value="">Choose term</option>
+                  {terms.map((term) => (
+                    <option key={term.term_key} value={term.term_key}>
+                      {term.term_label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
                 <label htmlFor="assessmentIncludeInTerm">Include in term grade?</label>
                 <div className="hint" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                   <input
@@ -1617,6 +1790,22 @@ export function GradebookWorkspace({
               : " | Student: Whole class"}
           </span>
         </div>
+        {selectedSection?.mode === "assessment" ? (
+          <div className="breakdown-list" style={{ marginTop: "1rem" }}>
+            {terms.map((term) => {
+              const termCount = assessments.filter((assessment) => assessment.term_key === term.term_key).length;
+              return (
+                <div className="breakdown-row" key={term.term_key}>
+                  <span>
+                    {term.term_label}
+                    {term.start_date && term.end_date ? ` | ${term.start_date} to ${term.end_date}` : " | Dates not set"}
+                  </span>
+                  <strong>{termCount} assignment{termCount === 1 ? "" : "s"}</strong>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         {status ? <div className="banner">{status}</div> : null}
         {error ? <div className="banner error-banner">{error}</div> : null}
       </section>

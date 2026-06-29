@@ -80,8 +80,18 @@ export type GradebookAssessment = {
   assessment_name: string;
   assessment_date: string;
   max_score: number | null;
+  term_key: string | null;
   include_in_term: boolean;
   weighting_percent: number | null;
+};
+
+export type GradebookTerm = {
+  id: string;
+  term_key: string;
+  term_label: string;
+  start_date: string | null;
+  end_date: string | null;
+  sort_order: number;
 };
 
 export type GradebookSectionMode = "profile" | "assessment";
