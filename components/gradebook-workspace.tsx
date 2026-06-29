@@ -1101,7 +1101,7 @@ export function GradebookWorkspace({
         <div className="actions">
           {canManageSetup ? (
             <Link className="button" href="/admin/gradebook">
-              Open Gradebook Setup
+              Open Markbook Setup
             </Link>
           ) : null}
           <span className="hint">
@@ -1115,7 +1115,7 @@ export function GradebookWorkspace({
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
-        <p className="eyebrow">Gradebook workspace</p>
+        <p className="eyebrow">Markbook workspace</p>
         <div className="topbar">
           <div>
             <h1 className="hero-title">Build the class markbook around real teaching sections</h1>
@@ -1134,7 +1134,7 @@ export function GradebookWorkspace({
             </Link>
             {canManageSetup ? (
               <Link className="button" href="/admin/gradebook">
-                Gradebook Setup
+                Markbook Setup
               </Link>
             ) : null}
           </div>
@@ -1146,7 +1146,7 @@ export function GradebookWorkspace({
           <div>
             <p className="eyebrow compact-eyebrow">Class Markbook</p>
             <h2 className="panel-title" style={{ marginBottom: 0 }}>
-              {activeFilters.className || "Whole-school gradebook"}
+              {activeFilters.className || "Whole-school markbook"}
             </h2>
           </div>
           <span className="hint">

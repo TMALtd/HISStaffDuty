@@ -260,10 +260,10 @@ export function StaffDashboard() {
             Open Duty
           </Link>
           <Link className="button" href={gradebookHref}>
-            Enter Gradebook
+            Enter Markbook
           </Link>
           <Link className="button secondary" href="/admin/gradebook">
-            Gradebook Setup
+            Markbook Setup
           </Link>
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
         </div>

@@ -18,7 +18,7 @@ export const PORTAL_NAV_ITEMS: Array<{
   view: PortalView;
 }> = [
   { href: "/", label: "Student Filter", view: "student-filter" },
-  { href: "/gradebook", label: "Gradebook", view: "gradebook" },
+  { href: "/gradebook", label: "Markbook", view: "gradebook" },
   { href: "/duties", label: "Duty", view: "duty" },
   { href: "/duties/roster", label: "Duty Roster", view: "duty-roster" },
   { href: "/timetables", label: "Timetables", view: "timetables" },
@@ -71,20 +71,25 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     : [];
   const hasTimetableAccess =
     allowedTimetableClassKeys.length > 0 || allowedTimetableYearGroups.length > 0;
+  const ownClassKeys = [staffProfile?.class, staffProfile?.timetable]
+    .map((value) => normalize(value))
+    .filter(Boolean);
   const usesDedicatedStudentAccess =
     Boolean(staffProfile?.can_view_class) || Boolean(staffProfile?.can_view_year_group_classes);
   const allowedStudentClassKeys = usesDedicatedStudentAccess
     ? staffProfile?.can_view_class
-      ? [staffProfile.class, staffProfile.timetable]
-          .map((value) => normalize(value))
-          .filter(Boolean)
+      ? ownClassKeys
       : []
-    : [...allowedTimetableClassKeys];
+    : ownClassKeys.length > 0
+      ? [...ownClassKeys]
+      : [...allowedTimetableClassKeys];
   const allowedStudentYearGroups = usesDedicatedStudentAccess
     ? staffProfile?.can_view_year_group_classes
       ? [staffProfile.timetable_access_year_group].map((value) => normalize(value)).filter(Boolean)
       : []
     : [...allowedTimetableYearGroups];
+  const hasStudentAccess =
+    allowedStudentClassKeys.length > 0 || allowedStudentYearGroups.length > 0;
   const hasLinkedProfile = Boolean(staffProfile);
   const roleParts: string[] = [];
 
@@ -100,7 +105,7 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     }
   }
 
-  if (usesDedicatedStudentAccess) {
+  if (usesDedicatedStudentAccess || (!hasTimetableAccess && hasStudentAccess)) {
     if (allowedStudentClassKeys.length > 0) {
       roleParts.push("Class view");
     }
@@ -118,7 +123,7 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
     isFullAccess: false,
     allowedViews: hasTimetableAccess
       ? [...TIMETABLE_PORTAL_VIEWS]
-      : hasLinkedProfile
+      : hasStudentAccess || hasLinkedProfile
         ? [...BASE_LINKED_PORTAL_VIEWS]
         : [],
     allowedTimetableYearGroups,

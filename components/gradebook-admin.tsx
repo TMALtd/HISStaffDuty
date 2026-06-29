@@ -128,12 +128,12 @@ export function GradebookAdmin() {
   return (
     <div className="dashboard-grid">
       <section className="hero-card">
-        <p className="eyebrow">Gradebook administration</p>
+        <p className="eyebrow">Markbook administration</p>
         <div className="topbar">
           <div>
             <h1 className="hero-title">Configure subject pages and bespoke fields</h1>
             <p className="hero-copy">
-              Core gradebook fields remain fixed. Use this page to add new subject pages and
+              Core markbook fields remain fixed. Use this page to add new subject pages and
               class-specific extra fields whenever a team needs them.
             </p>
           </div>
