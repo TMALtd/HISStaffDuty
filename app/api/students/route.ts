@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentStaffAccessOrNull, getCurrentUserOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull, getCurrentUserOrNull } from "@/lib/auth";
+import { filterStudentsForAccess } from "@/lib/access";
 import { getStaffDirectoryClassOptions, getStudents, upsertStudentClassAssignment } from "@/lib/data";
 import { toQueryFilters } from "@/lib/types";
 
@@ -15,11 +16,17 @@ export async function GET(request: Request) {
     const filters = toQueryFilters(url.searchParams);
     const academicYear = url.searchParams.get("academicYear");
     const session = await getCurrentStaffAccessOrNull();
+    const preview = session
+      ? await getAccessPreviewSession(session, url.searchParams.get("viewAs"))
+      : null;
     const [students, classOptions] = await Promise.all([
-      getStudents(filters, session?.access.isFullAccess ? academicYear : null),
+      getStudents(filters, session?.access.isFullAccess && !preview?.isPreviewing ? academicYear : null),
       getStaffDirectoryClassOptions()
     ]);
-    return NextResponse.json({ students, classOptions });
+    return NextResponse.json({
+      students: preview ? filterStudentsForAccess(students, preview.activeAccess) : students,
+      classOptions
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load students." },

@@ -542,6 +542,10 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     return query ? `${path}?${query}` : path;
   }
 
+  function withCurrentApiQuery(path: string) {
+    return withCurrentQuery(path);
+  }
+
   useEffect(() => {
     setData(initialData);
     setSelectedTemplateId(initialData.timetable?.template_id ?? initialData.templates[0]?.id ?? "");
@@ -963,7 +967,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
 
   async function refreshBuilderData() {
     const response = await fetch(
-      `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`,
+      withCurrentApiQuery(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`),
       { cache: "no-store" }
     );
 
@@ -991,7 +995,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     setError("");
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`, {
+      const response = await fetch(withCurrentApiQuery(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1025,7 +1029,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     setError("");
 
     try {
-      const response = await fetch(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`, {
+      const response = await fetch(withCurrentApiQuery(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}`), {
         method: "DELETE"
       });
 
@@ -1070,7 +1074,7 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     try {
       for (const targetBlockId of draft.targetBlockIds) {
         const response = await fetch(
-          `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks`,
+          withCurrentApiQuery(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks`),
           {
             method: "POST",
             headers: {
@@ -1115,7 +1119,9 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
     try {
       for (const targetBlockId of draft.targetBlockIds) {
         const response = await fetch(
-          `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks/${encodeURIComponent(targetBlockId)}`,
+          withCurrentApiQuery(
+            `/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks/${encodeURIComponent(targetBlockId)}`
+          ),
           {
             method: "DELETE"
           }

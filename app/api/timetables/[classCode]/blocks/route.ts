@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentStaffAccessOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { getTimetableBuilderData, upsertTimetableBlock } from "@/lib/data";
 import { canEditTimetableClass } from "@/lib/access";
 import type { TimetableBlockType } from "@/lib/types";
@@ -17,10 +17,11 @@ export async function POST(request: Request, context: TimetableRouteContext) {
   }
 
   try {
+    const preview = await getAccessPreviewSession(session, new URL(request.url).searchParams.get("viewAs"));
     const classCode = decodeURIComponent(context.params.classCode);
     const data = await getTimetableBuilderData(classCode);
 
-    if (!canEditTimetableClass(session.access, data.classSummary)) {
+    if (!canEditTimetableClass(preview.activeAccess, data.classSummary)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

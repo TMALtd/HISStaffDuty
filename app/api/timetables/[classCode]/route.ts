@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClassTimetable, deleteClassTimetable, getTimetableBuilderData } from "@/lib/data";
-import { getCurrentStaffAccessOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { canAccessTimetableClass, canEditTimetableClass } from "@/lib/access";
 
 type TimetableRouteContext = {
@@ -16,10 +16,11 @@ export async function GET(_request: Request, context: TimetableRouteContext) {
   }
 
   try {
+    const preview = await getAccessPreviewSession(session, new URL(_request.url).searchParams.get("viewAs"));
     const classCode = decodeURIComponent(context.params.classCode);
     const data = await getTimetableBuilderData(classCode);
 
-    if (!canAccessTimetableClass(session.access, data.classSummary)) {
+    if (!canAccessTimetableClass(preview.activeAccess, data.classSummary)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -43,10 +44,11 @@ export async function POST(request: Request, context: TimetableRouteContext) {
   }
 
   try {
+    const preview = await getAccessPreviewSession(session, new URL(request.url).searchParams.get("viewAs"));
     const classCode = decodeURIComponent(context.params.classCode);
     const data = await getTimetableBuilderData(classCode);
 
-    if (!canEditTimetableClass(session.access, data.classSummary)) {
+    if (!canEditTimetableClass(preview.activeAccess, data.classSummary)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

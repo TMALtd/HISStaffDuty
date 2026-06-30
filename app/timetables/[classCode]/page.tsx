@@ -25,8 +25,7 @@ export default async function TimetableBuilderPage({ params, searchParams }: Tim
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
   const data = await getTimetableBuilderData(decodeURIComponent(params.classCode));
   const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
-  const canEdit =
-    !preview.isPreviewing && canEditTimetableClass(preview.activeAccess, data.classSummary);
+  const canEdit = canEditTimetableClass(preview.activeAccess, data.classSummary);
 
   if (!canAccessTimetableClass(preview.activeAccess, data.classSummary)) {
     redirect(preview.previewEmail ? `/timetables?viewAs=${encodeURIComponent(preview.previewEmail)}` : "/timetables");

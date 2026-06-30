@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentStaffAccessOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentStaffAccessOrNull } from "@/lib/auth";
 import { getTimetableBuilderData, resetTimetableBlock } from "@/lib/data";
 import { canEditTimetableClass } from "@/lib/access";
 
@@ -10,17 +10,18 @@ type TimetableRouteContext = {
   };
 };
 
-export async function DELETE(_request: Request, context: TimetableRouteContext) {
+export async function DELETE(request: Request, context: TimetableRouteContext) {
   const session = await getCurrentStaffAccessOrNull();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const preview = await getAccessPreviewSession(session, new URL(request.url).searchParams.get("viewAs"));
     const classCode = decodeURIComponent(context.params.classCode);
     const data = await getTimetableBuilderData(classCode);
 
-    if (!canEditTimetableClass(session.access, data.classSummary)) {
+    if (!canEditTimetableClass(preview.activeAccess, data.classSummary)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

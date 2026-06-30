@@ -13,10 +13,12 @@ import {
 
 type FiltersResponse = {
   options: FilterOptions;
+  error?: string;
 };
 
 type StudentsResponse = {
   students: StudentRow[];
+  error?: string;
 };
 
 function buildQueryString(filters: FilterState) {
@@ -74,11 +76,13 @@ function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => 
 type StaffDashboardProps = {
   canManageRosterYears?: boolean;
   academicYears?: StudentAcademicYear[];
+  previewEmail?: string | null;
 };
 
 export function StaffDashboard({
   canManageRosterYears = false,
-  academicYears = []
+  academicYears = [],
+  previewEmail = null
 }: StaffDashboardProps) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [options, setOptions] = useState<FilterOptions>(createEmptyOptions());
@@ -100,6 +104,9 @@ export function StaffDashboard({
         if (canManageRosterYears && academicYear) {
           params.set("academicYear", academicYear);
         }
+        if (previewEmail) {
+          params.set("viewAs", previewEmail);
+        }
         const query = params.toString();
         const [filtersResponse, studentsResponse] = await Promise.all([
           fetch(`/api/filters${query ? `?${query}` : ""}`, { cache: "no-store" }),
@@ -111,16 +118,16 @@ export function StaffDashboard({
           return;
         }
 
+        const filtersJson = (await filtersResponse.json()) as FiltersResponse;
+        const studentsJson = (await studentsResponse.json()) as StudentsResponse;
+
         if (!filtersResponse.ok) {
-          throw new Error("Could not load filter options.");
+          throw new Error(filtersJson.error || "Could not load filter options.");
         }
 
         if (!studentsResponse.ok) {
-          throw new Error("Could not load students.");
+          throw new Error(studentsJson.error || "Could not load students.");
         }
-
-        const filtersJson = (await filtersResponse.json()) as FiltersResponse;
-        const studentsJson = (await studentsResponse.json()) as StudentsResponse;
 
         if (!isMounted) {
           return;
@@ -145,7 +152,7 @@ export function StaffDashboard({
     return () => {
       isMounted = false;
     };
-  }, [filters, academicYear, canManageRosterYears]);
+  }, [filters, academicYear, canManageRosterYears, previewEmail]);
 
   function updateFilter(field: keyof FilterState, value: string) {
     setFilters((current) => {
@@ -173,7 +180,12 @@ export function StaffDashboard({
   const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
   const maleCount = students.filter((student) => (student.gender || "").toUpperCase() === "M").length;
   const averageClassSize = classCount ? (students.length / classCount).toFixed(1) : "0.0";
-  const gradebookHref = `/gradebook${buildQueryString(filters) ? `?${buildQueryString(filters)}` : ""}`;
+  const gradebookParams = new URLSearchParams(buildQueryString(filters));
+  if (previewEmail) {
+    gradebookParams.set("viewAs", previewEmail);
+  }
+  const gradebookQuery = gradebookParams.toString();
+  const gradebookHref = `/gradebook${gradebookQuery ? `?${gradebookQuery}` : ""}`;
 
   return (
     <div className="dashboard-grid">

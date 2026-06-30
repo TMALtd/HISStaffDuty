@@ -1,12 +1,28 @@
-import { requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
-import { getPortalHeroSettings, getStudentAcademicYears } from "@/lib/data";
+import {
+  getPortalHeroSettings,
+  getStudentAcademicYears,
+  getTimetablePreviewStaffOptions
+} from "@/lib/data";
+import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 
-export default async function HomePage() {
-  const { user, access } = await requirePortalAccess("student-filter");
-  const academicYears = access.isFullAccess ? await getStudentAcademicYears() : [];
+type HomePageProps = {
+  searchParams?: {
+    viewAs?: string;
+  };
+};
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const session = await requirePortalAccess("student-filter");
+  const { user, access } = session;
+  const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
+  const [academicYears, previewOptions] = await Promise.all([
+    access.isFullAccess && !preview.isPreviewing ? getStudentAcademicYears() : Promise.resolve([]),
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([])
+  ]);
   const heroSettings =
     (await getPortalHeroSettings()).find((setting) => setting.pageKey === "student-filter") ?? null;
 
@@ -16,10 +32,18 @@ export default async function HomePage() {
         <div>
           <p className="eyebrow">HELP staff workspace</p>
           <p className="meta">Signed in as {user.email ?? "staff user"}</p>
+          {preview.isPreviewing ? (
+            <p className="meta">
+              Viewing as {preview.activeProfile?.name ?? preview.previewEmail} ({preview.activeAccess.roleLabel})
+            </p>
+          ) : null}
         </div>
+        {access.isFullAccess ? (
+          <AccessPreviewSwitcher options={previewOptions} selectedEmail={preview.previewEmail} />
+        ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={access.allowedViews} />
+      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
       <section className="hero-card">
         <p className="eyebrow">{heroSettings?.eyebrow ?? "Render-ready staff workspace"}</p>
         <div className="topbar">
@@ -32,7 +56,11 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-      <StaffDashboard canManageRosterYears={access.isFullAccess} academicYears={academicYears} />
+      <StaffDashboard
+        canManageRosterYears={access.isFullAccess && !preview.isPreviewing}
+        academicYears={academicYears}
+        previewEmail={preview.previewEmail}
+      />
     </main>
   );
 }

@@ -1306,12 +1306,18 @@ async function getStudentRosterRowsFromView(academicYearLabel?: string | null): 
   const supabase = createSupabaseAdminClient();
 
   if (academicYearLabel) {
+    const matchingYear = (await getStudentAcademicYearRows()).find((year) => year.label === academicYearLabel) ?? null;
+
+    if (!matchingYear) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from(STUDENT_ROSTER_ENTRIES_TABLE)
       .select(
         "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
       )
-      .eq("academic_year_label", academicYearLabel)
+      .eq("academic_year_id", matchingYear.id)
       .order("class_name")
       .order("full_name");
 
