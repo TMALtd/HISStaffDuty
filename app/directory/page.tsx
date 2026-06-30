@@ -36,6 +36,7 @@ export default async function DirectoryPage() {
         staff={staff}
         classOptions={classOptions}
         showAdminGuidance={access.isFullAccess}
+        canManageStaff={access.isFullAccess}
         heroSettings={activeHero}
       />
     </main>

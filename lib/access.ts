@@ -27,8 +27,8 @@ export const PORTAL_NAV_ITEMS: Array<{
 ];
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
-const BASE_LINKED_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook"];
-const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook", "timetables"];
+const BASE_LINKED_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook", "directory"];
+const TIMETABLE_PORTAL_VIEWS: PortalView[] = ["student-filter", "gradebook", "timetables", "directory"];
 
 export type StaffAccess = {
   isFullAccess: boolean;

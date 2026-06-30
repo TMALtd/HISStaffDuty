@@ -21,6 +21,7 @@ type StaffDirectoryProps = {
   staff: StaffDirectoryRecord[];
   classOptions: StaffDirectoryClassOption[];
   showAdminGuidance?: boolean;
+  canManageStaff?: boolean;
   heroSettings?: PortalHeroSettings | null;
 };
 
@@ -806,6 +807,7 @@ export function StaffDirectory({
   staff,
   classOptions,
   showAdminGuidance = false,
+  canManageStaff = true,
   heroSettings
 }: StaffDirectoryProps) {
   const router = useRouter();
@@ -897,6 +899,10 @@ export function StaffDirectory({
   }
 
   function openCreateModal() {
+    if (!canManageStaff) {
+      return;
+    }
+
     setSelectedStaffId(null);
     setModalMode("create");
     setFormValues(EMPTY_FORM);
@@ -915,6 +921,10 @@ export function StaffDirectory({
   }
 
   function openEditModal(staffMember: StaffDirectoryRecord) {
+    if (!canManageStaff) {
+      return;
+    }
+
     setSelectedStaffId(staffMember.id);
     setModalMode("edit");
     setFormValues(toFormValues(staffMember));
@@ -967,6 +977,10 @@ export function StaffDirectory({
   }
 
   async function handleSave() {
+    if (!canManageStaff) {
+      return;
+    }
+
     setFormError(null);
 
     if (!String(formValues.name ?? "").trim()) {
@@ -991,7 +1005,7 @@ export function StaffDirectory({
       (formValues.can_view_year_group_timetables || formValues.can_view_year_group_classes) &&
       !String(formValues.timetable_access_year_group ?? "").trim()
     ) {
-      setFormError("Choose a year group before enabling year group access.");
+      setFormError("Choose a year group or select All Timetables before enabling year group access.");
       return;
     }
 
@@ -1030,6 +1044,10 @@ export function StaffDirectory({
   }
 
   async function handleDelete(staffMember: StaffDirectoryRecord) {
+    if (!canManageStaff) {
+      return;
+    }
+
     const confirmed = window.confirm(`Delete ${staffMember.name}? This cannot be undone.`);
     if (!confirmed) {
       return;
@@ -1065,12 +1083,17 @@ export function StaffDirectory({
           <p className="eyebrow">{heroSettings?.eyebrow ?? "HELP Staff Workspace"}</p>
           <h1 className="directory-page-title">{heroSettings?.title ?? "Staff Directory"}</h1>
           <p className="directory-page-copy">
-            {heroSettings?.description ?? "Manage teaching staff profiles and information"}
+            {heroSettings?.description ??
+              (canManageStaff
+                ? "Manage teaching staff profiles and information"
+                : "Browse teaching staff profiles and contact information")}
           </p>
         </div>
-        <button className="directory-add-button" type="button" onClick={openCreateModal}>
-          + Add Staff Member
-        </button>
+        {canManageStaff ? (
+          <button className="directory-add-button" type="button" onClick={openCreateModal}>
+            + Add Staff Member
+          </button>
+        ) : null}
       </section>
 
       <section className="directory-search-panel">
@@ -1181,13 +1204,15 @@ export function StaffDirectory({
                     </div>
 
                     <div className="staff-card-actions">
-                      <button
-                        className={`directory-action edit${actionStateClass(person.id, "edit")}`}
-                        type="button"
-                        onClick={() => openEditModal(person)}
-                      >
-                        Edit
-                      </button>
+                      {canManageStaff ? (
+                        <button
+                          className={`directory-action edit${actionStateClass(person.id, "edit")}`}
+                          type="button"
+                          onClick={() => openEditModal(person)}
+                        >
+                          Edit
+                        </button>
+                      ) : null}
                       <button
                         className={`directory-action view${actionStateClass(person.id, "view")}`}
                         type="button"
@@ -1195,13 +1220,15 @@ export function StaffDirectory({
                       >
                         View
                       </button>
-                      <button
-                        className="directory-action danger"
-                        type="button"
-                        onClick={() => handleDelete(person)}
-                      >
-                        Delete
-                      </button>
+                      {canManageStaff ? (
+                        <button
+                          className="directory-action danger"
+                          type="button"
+                          onClick={() => handleDelete(person)}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
@@ -1313,12 +1340,16 @@ export function StaffDirectory({
                 </div>
 
                 <div className="directory-modal-actions">
-                  <button className="directory-action edit" type="button" onClick={() => openEditModal(activeStaff)}>
-                    Edit
-                  </button>
-                  <button className="directory-action danger" type="button" onClick={() => handleDelete(activeStaff)}>
-                    Delete
-                  </button>
+                  {canManageStaff ? (
+                    <button className="directory-action edit" type="button" onClick={() => openEditModal(activeStaff)}>
+                      Edit
+                    </button>
+                  ) : null}
+                  {canManageStaff ? (
+                    <button className="directory-action danger" type="button" onClick={() => handleDelete(activeStaff)}>
+                      Delete
+                    </button>
+                  ) : null}
                   <button className="directory-action close" type="button" onClick={closeModal}>
                     Close
                   </button>
@@ -1501,7 +1532,7 @@ export function StaffDirectory({
                                   ...current,
                                   can_view_year_group_timetables: event.target.checked,
                                   timetable_access_year_group: event.target.checked
-                                    ? current.timetable_access_year_group
+                                    ? current.timetable_access_year_group || ALL_TIMETABLES_ACCESS_VALUE
                                     : ""
                                 }))
                               }
@@ -1530,7 +1561,7 @@ export function StaffDirectory({
                                   ...current,
                                   can_view_year_group_classes: event.target.checked,
                                   timetable_access_year_group: event.target.checked
-                                    ? current.timetable_access_year_group
+                                    ? current.timetable_access_year_group || ALL_TIMETABLES_ACCESS_VALUE
                                     : current.can_view_year_group_timetables
                                       ? current.timetable_access_year_group
                                       : ""
@@ -1554,7 +1585,7 @@ export function StaffDirectory({
                                 }))
                               }
                             >
-                              <option value="">Select year group</option>
+                              <option value="">Select year group or all timetables</option>
                               {yearGroupOptions.map((yearGroup) => (
                                 <option key={yearGroup} value={yearGroup}>
                                   {yearGroup}

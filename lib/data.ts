@@ -2506,6 +2506,42 @@ function buildLegacyStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
   };
 }
 
+function getMissingStaffAccessMigrationMessage(error: Error) {
+  const message = error.message.toLowerCase();
+
+  if (message.includes("can_edit_own_timetable")) {
+    return "The staff table is missing the can_edit_own_timetable column. Run supabase_staff_timetable_edit_access.sql first.";
+  }
+
+  if (
+    message.includes("can_view_class") ||
+    message.includes("can_view_year_group_classes")
+  ) {
+    return "The staff table is missing the class access columns. Run supabase_staff_class_access.sql first.";
+  }
+
+  if (
+    message.includes("can_view_own_timetable") ||
+    message.includes("can_view_year_group_timetables") ||
+    message.includes("timetable_access_year_group")
+  ) {
+    return "The staff table is missing the timetable access columns. Run supabase_staff_timetable_access.sql first.";
+  }
+
+  return null;
+}
+
+function requiresModernStaffAccessColumns(input: StaffDirectoryUpsertInput) {
+  return (
+    Boolean(input.can_view_own_timetable) ||
+    Boolean(input.can_edit_own_timetable) ||
+    Boolean(input.can_view_year_group_timetables) ||
+    Boolean(input.can_view_class) ||
+    Boolean(input.can_view_year_group_classes) ||
+    Boolean(normalizeOptionalText(input.timetable_access_year_group))
+  );
+}
+
 async function getNextStaffDirectoryStaffId(supabase: ReturnType<typeof createSupabaseAdminClient>) {
   const { data, error } = await supabase.from(STAFF_TABLE).select("staff_id");
 
@@ -2606,6 +2642,12 @@ export async function createStaffDirectoryRecord(
 
     if (result.error) {
       lastError = new Error(result.error.message);
+      const migrationMessage = getMissingStaffAccessMigrationMessage(lastError);
+
+      if (migrationMessage && requiresModernStaffAccessColumns(input)) {
+        throw new Error(migrationMessage);
+      }
+
       continue;
     }
 
@@ -2645,6 +2687,12 @@ export async function updateStaffDirectoryRecord(
 
     if (result.error) {
       lastError = new Error(result.error.message);
+      const migrationMessage = getMissingStaffAccessMigrationMessage(lastError);
+
+      if (migrationMessage && requiresModernStaffAccessColumns(input)) {
+        throw new Error(migrationMessage);
+      }
+
       continue;
     }
 
