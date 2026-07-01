@@ -1572,6 +1572,10 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
 
 async function getStudentRosterRowsFromView(academicYearLabel?: string | null): Promise<StudentRow[]> {
   const supabase = createSupabaseAdminClient();
+  const rosterSelect =
+    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house";
+  const legacyRosterSelect =
+    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house";
 
   if (academicYearLabel) {
     const matchingYear = (await getStudentAcademicYearRows()).find((year) => year.label === academicYearLabel) ?? null;
@@ -1582,9 +1586,7 @@ async function getStudentRosterRowsFromView(academicYearLabel?: string | null): 
 
     const { data, error } = await supabase
       .from(STUDENT_ROSTER_ENTRIES_TABLE)
-      .select(
-        "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
-      )
+      .select(rosterSelect)
       .eq("academic_year_id", matchingYear.id)
       .order("class_name")
       .order("full_name");
@@ -1602,19 +1604,36 @@ async function getStudentRosterRowsFromView(academicYearLabel?: string | null): 
     return ((data ?? []) as Array<Record<string, unknown>>).map(normalizeStudentRosterEntryRow);
   }
 
-  const { data, error } = await supabase
+  const legacyAttempt = await supabase
     .from(VIEW_NAME)
-    .select(
-      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
-    )
+    .select(rosterSelect)
     .order("class_name")
     .order("full_name");
 
-  if (error) {
-    throw new Error(error.message);
+  if (legacyAttempt.error) {
+    if (!/nationality/i.test(legacyAttempt.error.message)) {
+      throw new Error(legacyAttempt.error.message);
+    }
+
+    const fallbackAttempt = await supabase
+      .from(VIEW_NAME)
+      .select(legacyRosterSelect)
+      .order("class_name")
+      .order("full_name");
+
+    if (fallbackAttempt.error) {
+      throw new Error(fallbackAttempt.error.message);
+    }
+
+    return ((fallbackAttempt.data ?? []) as Array<Record<string, unknown>>).map((row) =>
+      normalizeStudentRosterEntryRow({
+        ...row,
+        nationality: null
+      })
+    );
   }
 
-  return (data ?? []) as StudentRow[];
+  return ((legacyAttempt.data ?? []) as Array<Record<string, unknown>>).map(normalizeStudentRosterEntryRow);
 }
 
 export async function getFilterOptions(filters: Partial<FilterState>): Promise<FilterOptions> {
