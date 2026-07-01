@@ -19,8 +19,10 @@ export async function GET(request: Request) {
     const preview = session
       ? await getAccessPreviewSession(session, url.searchParams.get("viewAs"))
       : null;
+    const academicYearForQuery =
+      session?.access.isFullAccess && !preview?.isPreviewing ? academicYear : undefined;
     const [students, classOptions] = await Promise.all([
-      getStudents(filters, session?.access.isFullAccess && !preview?.isPreviewing ? academicYear : null),
+      getStudents(filters, academicYearForQuery),
       getStaffDirectoryClassOptions()
     ]);
     return NextResponse.json({

@@ -81,10 +81,12 @@ export async function GET(request: Request) {
     const preview = session
       ? await getAccessPreviewSession(session, url.searchParams.get("viewAs"))
       : null;
+    const academicYearForQuery =
+      session?.access.isFullAccess && !preview?.isPreviewing ? academicYear : undefined;
     const options = preview && !preview.activeAccess.isFullAccess
       ? buildFilterOptionsFromStudents(
           filterStudentsForAccess(
-            await getStudents({}, session?.access.isFullAccess && !preview.isPreviewing ? academicYear : null),
+            await getStudents({}, academicYearForQuery),
             preview.activeAccess
           ),
           filters
