@@ -2228,6 +2228,14 @@ export async function importStudentRosterClassCsv(input: {
   const headers = rows[headerIndex].map(normalizeClassCsvHeader);
   const dataRows = rows.slice(headerIndex + 1);
   const indexOf = (label: string) => headers.findIndex((value) => value === normalizeClassCsvHeader(label));
+  const indexOfAny = (...labels: string[]) =>
+    labels.reduce((foundIndex, label) => {
+      if (foundIndex !== -1) {
+        return foundIndex;
+      }
+
+      return indexOf(label);
+    }, -1);
   const fullNameIndex = indexOf("Full Report Name");
   const firstNameIndex = indexOf("Forename");
   const preferredNameIndex = indexOf("Preferred Name");
@@ -2235,7 +2243,7 @@ export async function importStudentRosterClassCsv(input: {
   const genderIndex = indexOf("Gender");
   const nationalityIndex = indexOf("Nationality");
   const currentSchoolIndex = indexOf("Current School Name");
-  const yearCodeIndex = indexOf("Year Code On Entry");
+  const yearCodeIndex = indexOfAny("Year Code", "Year Code On Entry");
   const schoolCodeIndex = indexOf("School Code");
   const programmeIndex = indexOf("Choice of Programme");
   const admissionStatusIndex = indexOf("Admission Status");
