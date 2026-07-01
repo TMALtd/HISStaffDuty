@@ -463,7 +463,7 @@ export function StaffDashboard({
                 <th>Gender</th>
                 <th>Form</th>
                 <th>Year Code</th>
-                <th>Tutor</th>
+                <th>Homeroom Teacher</th>
                 <th>House</th>
               </tr>
             </thead>
@@ -476,7 +476,7 @@ export function StaffDashboard({
                   <td>{student.gender || "—"}</td>
                   <td>{student.form}</td>
                   <td>{getStudentYearLabel(student)}</td>
-                  <td>{student.tutor || "—"}</td>
+                  <td>{student.assigned_teacher_name || student.tutor || "—"}</td>
                   <td>{student.academic_house || "—"}</td>
                 </tr>
               ))}

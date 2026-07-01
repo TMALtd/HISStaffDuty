@@ -596,6 +596,26 @@ function normalizeCustomClassRow(row: Record<string, unknown>): ClassRecord {
   };
 }
 
+function buildLegacyClassListPayload(params: {
+  school: string;
+  designation: string;
+  yearGroup: string;
+  milepost: string;
+  level: string;
+  classCode: string;
+  className: string;
+}) {
+  return {
+    School: params.school,
+    Designation: params.designation,
+    "Year Group": params.yearGroup,
+    Milepost: params.milepost,
+    Level: params.level,
+    "Class Code": params.classCode,
+    "Class Name": params.className
+  };
+}
+
 function normalizeTimetableSubjectTarget(row: Record<string, unknown>): TimetableSubjectTarget {
   return {
     id: String(row.id ?? ""),
@@ -1200,6 +1220,15 @@ export async function createTimetableClass(input: CreateTimetableClassInput): Pr
       }
     }
   ];
+  const legacyClassListPayload = buildLegacyClassListPayload({
+    school,
+    designation,
+    yearGroup,
+    milepost,
+    level,
+    classCode,
+    className
+  });
 
   let lastError: Error | null = null;
 
@@ -1207,6 +1236,16 @@ export async function createTimetableClass(input: CreateTimetableClassInput): Pr
     const result = await supabase.from(TIMETABLE_CLASSES_TABLE).insert(attempt.payload).select("*").single();
 
     if (result.error) {
+      if (isMissingSupabaseRelationError(new Error(result.error.message), TIMETABLE_CLASSES_TABLE)) {
+        const legacyInsert = await supabase.from(TABLE_NAME).insert(legacyClassListPayload).select("*").single();
+
+        if (legacyInsert.error) {
+          throw new Error(legacyInsert.error.message);
+        }
+
+        return legacyInsert.data as unknown as ClassRecord;
+      }
+
       lastError = new Error(result.error.message);
       continue;
     }
@@ -1288,6 +1327,15 @@ export async function updateTimetableClass(input: UpdateTimetableClassInput): Pr
     milepost,
     level
   };
+  const legacyClassListPayload = buildLegacyClassListPayload({
+    school,
+    designation,
+    yearGroup,
+    milepost,
+    level,
+    classCode,
+    className
+  });
 
   const classUpdateByCode = async (payload: Record<string, unknown>) =>
     supabase
@@ -1305,11 +1353,39 @@ export async function updateTimetableClass(input: UpdateTimetableClassInput): Pr
       .select("*")
       .single();
 
+  const legacyClassListUpdateByCode = async () =>
+    supabase
+      .from(TABLE_NAME)
+      .update(legacyClassListPayload)
+      .eq("Class Code", currentRecord["Class Code"])
+      .select("*")
+      .single();
+
+  const legacyClassListUpdateByName = async () =>
+    supabase
+      .from(TABLE_NAME)
+      .update(legacyClassListPayload)
+      .eq("Class Name", currentRecord["Class Name"])
+      .select("*")
+      .single();
+
   let updatedClassRow: Record<string, unknown> | null = null;
 
   const currentSchemaClassUpdate = await classUpdateByCode(classPayload);
   if (!currentSchemaClassUpdate.error) {
     updatedClassRow = currentSchemaClassUpdate.data as Record<string, unknown>;
+  } else if (isMissingSupabaseRelationError(new Error(currentSchemaClassUpdate.error.message), TIMETABLE_CLASSES_TABLE)) {
+    const legacyClassListUpdate = await legacyClassListUpdateByCode();
+    if (!legacyClassListUpdate.error) {
+      updatedClassRow = legacyClassListUpdate.data as unknown as Record<string, unknown>;
+    } else {
+      const legacyClassListUpdateByNameResult = await legacyClassListUpdateByName();
+      if (legacyClassListUpdateByNameResult.error) {
+        throw new Error(legacyClassListUpdateByNameResult.error.message);
+      }
+
+      updatedClassRow = legacyClassListUpdateByNameResult.data as unknown as Record<string, unknown>;
+    }
   } else if (
     isMissingSupabaseColumnError(currentSchemaClassUpdate.error, TIMETABLE_CLASSES_TABLE, "stream_type")
   ) {
@@ -1398,6 +1474,10 @@ export async function updateTimetableClass(input: UpdateTimetableClassInput): Pr
     } else {
       throw new Error(currentSchemaTimetableUpdate.error.message);
     }
+  }
+
+  if ("School" in updatedClassRow || "Class Code" in updatedClassRow || "Class Name" in updatedClassRow) {
+    return updatedClassRow as unknown as ClassRecord;
   }
 
   return normalizeCustomClassRow(updatedClassRow);
