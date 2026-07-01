@@ -105,6 +105,78 @@ function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => 
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
+function getPieChartColor(index: number) {
+  const palette = [
+    "#9f1724",
+    "#2f7d32",
+    "#b45309",
+    "#2563eb",
+    "#7c3aed",
+    "#db2777",
+    "#0f766e",
+    "#c2410c"
+  ];
+
+  return palette[index % palette.length];
+}
+
+type BreakdownItem = {
+  label: string;
+  count: number;
+};
+
+function BreakdownPie({
+  items,
+  total,
+  emptyLabel = "No data"
+}: {
+  items: BreakdownItem[];
+  total: number;
+  emptyLabel?: string;
+}) {
+  if (!total || items.length === 0) {
+    return (
+      <div className="breakdown-pie-empty">
+        <span>{emptyLabel}</span>
+      </div>
+    );
+  }
+
+  let cumulative = 0;
+  const circumference = 2 * Math.PI * 15.9155;
+
+  return (
+    <div className="breakdown-pie-shell">
+      <svg className="breakdown-pie" viewBox="0 0 36 36" aria-hidden="true">
+        <circle className="breakdown-pie-track" cx="18" cy="18" r="15.9155" />
+        {items.map((item, index) => {
+          const slice = (item.count / total) * 100;
+          const dashArray = `${(slice / 100) * circumference} ${circumference}`;
+          const dashOffset = -((cumulative / 100) * circumference);
+          cumulative += slice;
+
+          return (
+            <circle
+              key={item.label}
+              className="breakdown-pie-slice"
+              cx="18"
+              cy="18"
+              r="15.9155"
+              stroke={getPieChartColor(index)}
+              strokeDasharray={dashArray}
+              strokeDashoffset={dashOffset}
+            />
+          );
+        })}
+      </svg>
+      <div className="breakdown-pie-total">
+        <strong>{total}</strong>
+        <span>students</span>
+      </div>
+    </div>
+  );
+}
+
 type StaffDashboardProps = {
   canManageRosterYears?: boolean;
   academicYears?: StudentAcademicYear[];
@@ -208,6 +280,7 @@ export function StaffDashboard({
   const genderBreakdown = buildCounts(students, (student) => getInitial(student.gender));
   const houseBreakdown = buildCounts(students, (student) => student.academic_house || "Unknown");
   const yearBreakdown = buildCounts(students, (student) => getStudentYearLabel(student));
+  const nationalityBreakdown = buildCounts(students, (student) => student.nationality || "Unknown");
   const classBreakdown = buildCounts(students, (student) => student.class_name);
   const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
   const maleCount = students.filter((student) => (student.gender || "").toUpperCase() === "M").length;
@@ -388,6 +461,7 @@ export function StaffDashboard({
         <div className="mi-grid">
           <article className="mi-card">
             <h3 className="mi-title">Gender split</h3>
+            <BreakdownPie items={genderBreakdown} total={students.length} />
             <div className="mini-stats">
               <div>
                 <p className="stat-label">Female</p>
@@ -410,6 +484,7 @@ export function StaffDashboard({
 
           <article className="mi-card">
             <h3 className="mi-title">House distribution</h3>
+            <BreakdownPie items={houseBreakdown.slice(0, 6)} total={students.length} />
             <div className="breakdown-list">
               {houseBreakdown.map((item) => (
                 <div className="breakdown-row" key={item.label}>
@@ -428,8 +503,22 @@ export function StaffDashboard({
 
           <article className="mi-card">
             <h3 className="mi-title">Year-group distribution</h3>
+            <BreakdownPie items={yearBreakdown} total={students.length} />
             <div className="breakdown-list">
               {yearBreakdown.map((item) => (
+                <div className="breakdown-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="mi-card">
+            <h3 className="mi-title">Nationality mix</h3>
+            <BreakdownPie items={nationalityBreakdown.slice(0, 6)} total={students.length} />
+            <div className="breakdown-list">
+              {nationalityBreakdown.slice(0, 8).map((item) => (
                 <div className="breakdown-row" key={item.label}>
                   <span>{item.label}</span>
                   <strong>{item.count}</strong>
@@ -461,6 +550,7 @@ export function StaffDashboard({
                 <th>Preferred Name</th>
                 <th>School ID</th>
                 <th>Gender</th>
+                <th>Nationality</th>
                 <th>Form</th>
                 <th>Year Code</th>
                 <th>Homeroom Teacher</th>
@@ -474,6 +564,7 @@ export function StaffDashboard({
                   <td>{student.preferred_name || "—"}</td>
                   <td>{student.school_id}</td>
                   <td>{student.gender || "—"}</td>
+                  <td>{student.nationality || "—"}</td>
                   <td>{student.form}</td>
                   <td>{getStudentYearLabel(student)}</td>
                   <td>{student.assigned_teacher_name || student.tutor || "—"}</td>

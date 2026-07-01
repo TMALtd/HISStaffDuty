@@ -34,6 +34,7 @@ export type StudentRow = {
   first_name: string | null;
   preferred_name: string | null;
   gender: string | null;
+  nationality: string | null;
   form: string;
   year_code: string | null;
   tutor: string | null;

@@ -676,6 +676,8 @@ tr:last-child td {
   border-radius: 20px;
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 252, 248, 0.95), rgba(255, 246, 240, 0.9));
+  display: grid;
+  gap: 14px;
 }
 
 .mi-title {
@@ -687,7 +689,6 @@ tr:last-child td {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
 }
 
 .mini-value {
@@ -706,6 +707,57 @@ tr:last-child td {
   gap: 12px;
   align-items: center;
   font-size: 0.95rem;
+}
+
+.breakdown-pie-shell {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.breakdown-pie {
+  width: 88px;
+  height: 88px;
+  transform: rotate(-90deg);
+  flex: 0 0 auto;
+}
+
+.breakdown-pie-track,
+.breakdown-pie-slice {
+  fill: none;
+  stroke-width: 4;
+}
+
+.breakdown-pie-track {
+  stroke: rgba(159, 23, 36, 0.08);
+}
+
+.breakdown-pie-slice {
+  stroke-linecap: butt;
+}
+
+.breakdown-pie-total {
+  display: grid;
+  gap: 2px;
+}
+
+.breakdown-pie-total strong {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.breakdown-pie-total span,
+.breakdown-pie-empty span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.breakdown-pie-empty {
+  min-height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(159, 23, 36, 0.04);
 }
 
 .gradebook-term-summary-actions {

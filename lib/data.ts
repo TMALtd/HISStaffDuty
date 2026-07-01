@@ -1560,6 +1560,7 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
     first_name: row.first_name ? String(row.first_name) : null,
     preferred_name: row.preferred_name ? String(row.preferred_name) : null,
     gender: row.gender ? String(row.gender) : null,
+    nationality: row.nationality ? String(row.nationality) : null,
     form: String(row.form ?? ""),
     year_code: row.year_code ? String(row.year_code) : null,
     tutor: row.tutor ? String(row.tutor) : null,
@@ -1582,7 +1583,7 @@ async function getStudentRosterRowsFromView(academicYearLabel?: string | null): 
     const { data, error } = await supabase
       .from(STUDENT_ROSTER_ENTRIES_TABLE)
       .select(
-        "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
+        "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
       )
       .eq("academic_year_id", matchingYear.id)
       .order("class_name")
@@ -1604,7 +1605,7 @@ async function getStudentRosterRowsFromView(academicYearLabel?: string | null): 
   const { data, error } = await supabase
     .from(VIEW_NAME)
     .select(
-      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house"
+      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
     )
     .order("class_name")
     .order("full_name");
@@ -1992,6 +1993,7 @@ export async function getStudents(
         first_name: student.first_name ?? null,
         preferred_name: student.preferred_name ?? null,
         gender: student.gender ?? null,
+        nationality: student.nationality ?? null,
         form: student.form ?? "",
         year_code: student.year_code ?? null,
         tutor: student.tutor ?? null,
