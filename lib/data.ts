@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getGradebookSectionDefinitions, mergeGradebookSectionDefinitions } from "@/lib/gradebook";
 import {
   type CreateTimetableClassInput,
+  type UpdateTimetableClassInput,
   type ClassTimetable,
   type TimetableBlock,
   type TimetableBlockStaffAssignment,
@@ -1214,6 +1215,192 @@ export async function createTimetableClass(input: CreateTimetableClassInput): Pr
   }
 
   throw lastError ?? new Error("Could not create timetable class.");
+}
+
+export async function updateTimetableClass(input: UpdateTimetableClassInput): Promise<ClassRecord> {
+  const originalClassCode = input.originalClassCode.trim();
+  const originalClassName = input.originalClassName.trim();
+  const className = input.className.trim();
+  const yearGroup = input.yearGroup.trim();
+  const school = input.school.trim() || "Primary";
+  const level = input.level.trim() || "Primary";
+  const streamType = normalizeTimetableStreamType(input.streamType) ?? "mainstream";
+  const designation = titleCaseWords(input.designation || streamType);
+  const milepost = input.milepost.trim() || inferMilepostFromYearGroup(yearGroup);
+  const classCode = (input.classCode.trim() || buildSuggestedClassCode(className, yearGroup)).replace(/\s+/g, "");
+
+  if (!originalClassCode && !originalClassName) {
+    throw new Error("Original class details are required.");
+  }
+
+  if (!className || !yearGroup || !classCode) {
+    throw new Error("Class name, year group, and class code are required.");
+  }
+
+  const existingClasses = await getClassRecords();
+  const currentRecord =
+    existingClasses.find(
+      (row) =>
+        normalizeTimetableLookupKey(row["Class Code"]) === normalizeTimetableLookupKey(originalClassCode) ||
+        normalizeTimetableLookupKey(row["Class Name"]) === normalizeTimetableLookupKey(originalClassName)
+    ) ?? null;
+
+  if (!currentRecord) {
+    throw new Error(`${originalClassName || originalClassCode} could not be found in the timetable class list.`);
+  }
+
+  const duplicate = existingClasses.find((row) => {
+    const isCurrentRecord =
+      normalizeTimetableLookupKey(row["Class Code"]) === normalizeTimetableLookupKey(currentRecord["Class Code"]) ||
+      normalizeTimetableLookupKey(row["Class Name"]) === normalizeTimetableLookupKey(currentRecord["Class Name"]);
+
+    if (isCurrentRecord) {
+      return false;
+    }
+
+    return (
+      normalizeTimetableLookupKey(row["Class Code"]) === normalizeTimetableLookupKey(classCode) ||
+      normalizeTimetableLookupKey(row["Class Name"]) === normalizeTimetableLookupKey(className)
+    );
+  });
+
+  if (duplicate) {
+    throw new Error(`${className} already exists in the timetable class list.`);
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const classPayload = {
+    class_code: classCode,
+    class_name: className,
+    school,
+    designation,
+    year_group: yearGroup,
+    milepost,
+    level,
+    stream_type: streamType
+  };
+  const legacyClassPayload = {
+    class_code: classCode,
+    class_name: className,
+    school,
+    designation,
+    year_group: yearGroup,
+    milepost,
+    level
+  };
+
+  const classUpdateByCode = async (payload: Record<string, unknown>) =>
+    supabase
+      .from(TIMETABLE_CLASSES_TABLE)
+      .update(payload)
+      .eq("class_code", currentRecord["Class Code"])
+      .select("*")
+      .single();
+
+  const classUpdateByName = async (payload: Record<string, unknown>) =>
+    supabase
+      .from(TIMETABLE_CLASSES_TABLE)
+      .update(payload)
+      .eq("class_name", currentRecord["Class Name"])
+      .select("*")
+      .single();
+
+  let updatedClassRow: Record<string, unknown> | null = null;
+
+  const currentSchemaClassUpdate = await classUpdateByCode(classPayload);
+  if (!currentSchemaClassUpdate.error) {
+    updatedClassRow = currentSchemaClassUpdate.data as Record<string, unknown>;
+  } else if (
+    isMissingSupabaseColumnError(currentSchemaClassUpdate.error, TIMETABLE_CLASSES_TABLE, "stream_type")
+  ) {
+    const legacyClassUpdate = await classUpdateByCode(legacyClassPayload);
+    if (!legacyClassUpdate.error) {
+      updatedClassRow = legacyClassUpdate.data as Record<string, unknown>;
+    } else if (isMissingSupabaseColumnError(legacyClassUpdate.error, TIMETABLE_CLASSES_TABLE, "class_code")) {
+      const legacyClassUpdateByName = await classUpdateByName(legacyClassPayload);
+      if (legacyClassUpdateByName.error) {
+        throw new Error(legacyClassUpdateByName.error.message);
+      }
+      updatedClassRow = legacyClassUpdateByName.data as Record<string, unknown>;
+    } else {
+      throw new Error(legacyClassUpdate.error.message);
+    }
+  } else if (isMissingSupabaseColumnError(currentSchemaClassUpdate.error, TIMETABLE_CLASSES_TABLE, "class_code")) {
+    const currentSchemaClassUpdateByName = await classUpdateByName(classPayload);
+    if (!currentSchemaClassUpdateByName.error) {
+      updatedClassRow = currentSchemaClassUpdateByName.data as Record<string, unknown>;
+    } else if (
+      isMissingSupabaseColumnError(currentSchemaClassUpdateByName.error, TIMETABLE_CLASSES_TABLE, "stream_type")
+    ) {
+      const legacyClassUpdateByName = await classUpdateByName(legacyClassPayload);
+      if (legacyClassUpdateByName.error) {
+        throw new Error(legacyClassUpdateByName.error.message);
+      }
+      updatedClassRow = legacyClassUpdateByName.data as Record<string, unknown>;
+    } else {
+      throw new Error(currentSchemaClassUpdateByName.error.message);
+    }
+  } else {
+    throw new Error(currentSchemaClassUpdate.error.message);
+  }
+
+  if (!updatedClassRow) {
+    throw new Error("Could not update timetable class.");
+  }
+
+  const timetablePayload = {
+    class_code: classCode,
+    class_name: className,
+    stream_type: streamType
+  };
+  const legacyTimetablePayload = {
+    class_name: className
+  };
+
+  const timetableUpdateByCode = async (payload: Record<string, unknown>) =>
+    supabase.from(CLASS_TIMETABLES_TABLE).update(payload).eq("class_code", currentRecord["Class Code"]);
+
+  const timetableUpdateByName = async (payload: Record<string, unknown>) =>
+    supabase.from(CLASS_TIMETABLES_TABLE).update(payload).eq("class_name", currentRecord["Class Name"]);
+
+  const currentSchemaTimetableUpdate = await timetableUpdateByCode(timetablePayload);
+  if (currentSchemaTimetableUpdate.error) {
+    if (
+      isMissingSupabaseColumnError(currentSchemaTimetableUpdate.error, CLASS_TIMETABLES_TABLE, "stream_type")
+    ) {
+      const fallbackByCode = await timetableUpdateByCode(legacyTimetablePayload);
+      if (fallbackByCode.error) {
+        if (isMissingSupabaseColumnError(fallbackByCode.error, CLASS_TIMETABLES_TABLE, "class_code")) {
+          const fallbackByName = await timetableUpdateByName(legacyTimetablePayload);
+          if (fallbackByName.error) {
+            throw new Error(fallbackByName.error.message);
+          }
+        } else {
+          throw new Error(fallbackByCode.error.message);
+        }
+      }
+    } else if (
+      isMissingSupabaseColumnError(currentSchemaTimetableUpdate.error, CLASS_TIMETABLES_TABLE, "class_code")
+    ) {
+      const currentSchemaByName = await timetableUpdateByName(timetablePayload);
+      if (currentSchemaByName.error) {
+        if (
+          isMissingSupabaseColumnError(currentSchemaByName.error, CLASS_TIMETABLES_TABLE, "stream_type")
+        ) {
+          const fallbackByName = await timetableUpdateByName(legacyTimetablePayload);
+          if (fallbackByName.error) {
+            throw new Error(fallbackByName.error.message);
+          }
+        } else {
+          throw new Error(currentSchemaByName.error.message);
+        }
+      }
+    } else {
+      throw new Error(currentSchemaTimetableUpdate.error.message);
+    }
+  }
+
+  return normalizeCustomClassRow(updatedClassRow);
 }
 
 function findClassRecordByCode(classRecords: ClassRecord[], classCode: string) {

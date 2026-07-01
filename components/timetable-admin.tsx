@@ -43,6 +43,8 @@ export function TimetableAdmin({
   const [newClassCode, setNewClassCode] = useState("");
   const [newClassStreamType, setNewClassStreamType] = useState<"mainstream" | "bilingual">("mainstream");
   const [isCreatingClass, setIsCreatingClass] = useState(false);
+  const [editingClassCode, setEditingClassCode] = useState("");
+  const [editingOriginalClassName, setEditingOriginalClassName] = useState("");
   const query = searchParams.toString();
 
   function withCurrentQuery(path: string) {
@@ -209,6 +211,89 @@ export function TimetableAdmin({
       setStatus(`Added ${json.classRecord?.["Class Name"] ?? "new class"} to the timetable class list.`);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Could not add timetable class.");
+    } finally {
+      setIsCreatingClass(false);
+    }
+  }
+
+  function resetClassEditor() {
+    setEditingClassCode("");
+    setEditingOriginalClassName("");
+    setNewClassName("");
+    setNewClassYearGroup(yearGroupOptions[0] ?? "Year 3");
+    setNewClassCode("");
+    setNewClassStreamType("mainstream");
+  }
+
+  function startEditingClass(entry: TimetableClassSummary) {
+    setEditingClassCode(entry.classCode);
+    setEditingOriginalClassName(entry.className);
+    setNewClassName(entry.className);
+    setNewClassYearGroup(entry.yearGroup);
+    setNewClassCode(entry.classCode);
+    setNewClassStreamType(entry.streamType === "bilingual" ? "bilingual" : "mainstream");
+    setStatus("");
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveClass(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("");
+    setError("");
+
+    if (!newClassName.trim() || !newClassYearGroup.trim()) {
+      setError("Add a class name and choose a year group.");
+      return;
+    }
+
+    const isEditing = Boolean(editingClassCode);
+    setIsCreatingClass(true);
+
+    try {
+      const response = await fetch("/api/timetables/classes", {
+        method: isEditing ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          originalClassCode: editingClassCode,
+          originalClassName: editingOriginalClassName,
+          classCode: newClassCode,
+          className: newClassName,
+          yearGroup: newClassYearGroup,
+          streamType: newClassStreamType
+        })
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        classRecord?: { ["Class Code"]?: string; ["Class Name"]?: string };
+      };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? (isEditing ? "Could not update timetable class." : "Could not add timetable class."));
+      }
+
+      await refreshClasses();
+      const savedClassCode = json.classRecord?.["Class Code"] ?? "";
+      if (savedClassCode) {
+        setSelectedClassCode(savedClassCode);
+      }
+      setStatus(
+        isEditing
+          ? `Updated ${json.classRecord?.["Class Name"] ?? "class"} successfully.`
+          : `Added ${json.classRecord?.["Class Name"] ?? "new class"} to the timetable class list.`
+      );
+      resetClassEditor();
+    } catch (createError) {
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : isEditing
+            ? "Could not update timetable class."
+            : "Could not add timetable class."
+      );
     } finally {
       setIsCreatingClass(false);
     }
@@ -420,8 +505,8 @@ export function TimetableAdmin({
         <section className="panel">
         <div className="admin-grid">
           {canManageClasses ? (
-            <form className="mi-card" onSubmit={createClass}>
-              <h2 className="mi-title">Add timetable class</h2>
+            <form className="mi-card" onSubmit={saveClass}>
+              <h2 className="mi-title">{editingClassCode ? "Edit timetable class" : "Add timetable class"}</h2>
               <div className="field">
                 <label htmlFor="newTimetableClassName">Class name</label>
                 <input
@@ -471,8 +556,13 @@ export function TimetableAdmin({
               </div>
               <div className="actions">
                 <button className="button" type="submit" disabled={isCreatingClass}>
-                  {isCreatingClass ? "Adding..." : "Add Class"}
+                  {isCreatingClass ? (editingClassCode ? "Saving..." : "Adding...") : editingClassCode ? "Save Class Changes" : "Add Class"}
                 </button>
+                {editingClassCode ? (
+                  <button className="button secondary" type="button" onClick={resetClassEditor} disabled={isCreatingClass}>
+                    Cancel
+                  </button>
+                ) : null}
               </div>
             </form>
           ) : null}
@@ -654,27 +744,45 @@ export function TimetableAdmin({
                       {canManageClasses ? "Open Builder" : "Open Timetable"}
                     </Link>
                     {canManageClasses ? (
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={deletingClassCode === entry.classCode}
-                        onClick={() => void deleteTimetable(entry.classCode, entry.className)}
-                      >
-                        {deletingClassCode === entry.classCode ? "Deleting..." : "Delete"}
-                      </button>
+                      <>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          onClick={() => startEditingClass(entry)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={deletingClassCode === entry.classCode}
+                          onClick={() => void deleteTimetable(entry.classCode, entry.className)}
+                        >
+                          {deletingClassCode === entry.classCode ? "Deleting..." : "Delete"}
+                        </button>
+                      </>
                     ) : null}
                   </>
                 ) : canManageClasses ? (
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={() => {
-                      setSelectedClassCode(entry.classCode);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                  >
-                    Create Above
-                  </button>
+                  <>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => {
+                        setSelectedClassCode(entry.classCode);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                    >
+                      Create Above
+                    </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => startEditingClass(entry)}
+                    >
+                      Edit
+                    </button>
+                  </>
                 ) : null}
               </div>
             </article>
