@@ -38,6 +38,27 @@ type StudentRosterAdminResponse = {
   classOptions: StaffDirectoryClassOption[];
 };
 
+type SetupPanelKey =
+  | "academic-years"
+  | "school-terms"
+  | "markbook-card-text"
+  | "portal-card-text"
+  | "create-subject-page"
+  | "add-bespoke-field"
+  | "current-subject-pages"
+  | "selected-subject-fields";
+
+const SETUP_PANEL_OPTIONS: Array<{ value: SetupPanelKey; label: string }> = [
+  { value: "academic-years", label: "Student Academic Years" },
+  { value: "school-terms", label: "School Terms" },
+  { value: "markbook-card-text", label: "Markbook Card Text" },
+  { value: "portal-card-text", label: "Portal Card Text" },
+  { value: "create-subject-page", label: "Create Subject Page" },
+  { value: "add-bespoke-field", label: "Add Bespoke Field" },
+  { value: "current-subject-pages", label: "Current Subject Pages" },
+  { value: "selected-subject-fields", label: "Extra Fields For Selected Subject" }
+];
+
 export function GradebookAdmin() {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -58,6 +79,7 @@ export function GradebookAdmin() {
   const [importAcademicYearLabel, setImportAcademicYearLabel] = useState("");
   const [importClassCode, setImportClassCode] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [selectedSetupPanel, setSelectedSetupPanel] = useState<SetupPanelKey>("academic-years");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -514,26 +536,10 @@ export function GradebookAdmin() {
     );
   }
 
-  return (
-    <div className="dashboard-grid">
-      <section className="hero-card">
-        <p className="eyebrow">Markbook administration</p>
-        <div className="topbar">
-          <div>
-            <h1 className="hero-title">Configure subject pages and bespoke fields</h1>
-            <p className="hero-copy">
-              Core markbook fields remain fixed. Use this page to add new subject pages and
-              class-specific extra fields whenever a team needs them.
-            </p>
-          </div>
-          <Link className="button secondary" href="/">
-            Back to Filter View
-          </Link>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="admin-grid">
+  function renderSelectedPanel() {
+    switch (selectedSetupPanel) {
+      case "academic-years":
+        return (
           <div className="mi-card">
             <h2 className="mi-title">Student academic years</h2>
             <p className="hero-copy compact-copy">
@@ -680,14 +686,17 @@ export function GradebookAdmin() {
               )}
             </div>
           </div>
-
+        );
+      case "school-terms":
+        return (
           <form className="mi-card" onSubmit={saveTerms}>
             <h2 className="mi-title">School terms</h2>
             <p className="hero-copy compact-copy">
               Set the date range for each term so assignments can be grouped correctly in the Markbook.
             </p>
             <div className="banner" style={{ marginBottom: "1rem" }}>
-              Update term dates here in the app, then return to the Markbook to assign assessments to Term 1, Term 2, or Term 3.
+              Update term dates here in the app, then return to the Markbook to assign assessments
+              to Term 1, Term 2, or Term 3.
             </div>
             {terms.map((term) => (
               <div key={term.term_key} style={{ marginBottom: "1rem" }}>
@@ -718,7 +727,9 @@ export function GradebookAdmin() {
               </button>
             </div>
           </form>
-
+        );
+      case "markbook-card-text":
+        return (
           <form className="mi-card" onSubmit={saveSections}>
             <h2 className="mi-title">Markbook card text</h2>
             <p className="hero-copy compact-copy">
@@ -783,7 +794,9 @@ export function GradebookAdmin() {
               </button>
             </div>
           </form>
-
+        );
+      case "portal-card-text":
+        return (
           <form className="mi-card" onSubmit={savePortalHeroSettings}>
             <h2 className="mi-title">Portal card text</h2>
             <p className="hero-copy compact-copy">
@@ -842,7 +855,9 @@ export function GradebookAdmin() {
               </button>
             </div>
           </form>
-
+        );
+      case "create-subject-page":
+        return (
           <form className="mi-card" onSubmit={createSubject}>
             <h2 className="mi-title">Create subject page</h2>
             <div className="field">
@@ -870,7 +885,9 @@ export function GradebookAdmin() {
               </button>
             </div>
           </form>
-
+        );
+      case "add-bespoke-field":
+        return (
           <form className="mi-card" onSubmit={createField}>
             <h2 className="mi-title">Add bespoke field</h2>
             <div className="field">
@@ -920,44 +937,112 @@ export function GradebookAdmin() {
               </button>
             </div>
           </form>
-        </div>
+        );
+      case "current-subject-pages":
+        return (
+          <section className="panel">
+            <h2 className="panel-title">Current subject pages</h2>
+            <div className="breakdown-list">
+              {subjects.map((subject) => (
+                <div className="breakdown-row" key={subject.id}>
+                  <span>
+                    {subject.name}
+                    {subject.class_name ? ` | ${subject.class_name}` : " | All classes"}
+                  </span>
+                  <strong>{subject.is_core ? "Core" : "Custom"}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      case "selected-subject-fields":
+        return (
+          <section className="panel">
+            <h2 className="panel-title">Extra fields for selected subject</h2>
+            <div className="field" style={{ marginBottom: "1rem" }}>
+              <label htmlFor="selectedSubjectFieldsPanel">Subject page</label>
+              <select
+                id="selectedSubjectFieldsPanel"
+                value={selectedSubjectId}
+                onChange={(event) => setSelectedSubjectId(event.target.value)}
+              >
+                <option value="">Select subject page</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                    {subject.class_name ? ` (${subject.class_name})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="breakdown-list">
+              {fields.map((field) => (
+                <div className="breakdown-row" key={field.id}>
+                  <span>{field.field_label}</span>
+                  <strong>{field.field_type}</strong>
+                </div>
+              ))}
+              {!fields.length ? (
+                <div className="empty-state">
+                  No bespoke fields yet for this subject page. Core fields are still available on
+                  every gradebook page.
+                </div>
+              ) : null}
+            </div>
+          </section>
+        );
+      default:
+        return null;
+    }
+  }
 
-        {status ? <div className="banner">{status}</div> : null}
-        {error ? <div className="banner error-banner">{error}</div> : null}
+  return (
+    <div className="dashboard-grid">
+      <section className="hero-card">
+        <p className="eyebrow">Markbook administration</p>
+        <div className="topbar">
+          <div>
+            <h1 className="hero-title">Configure subject pages and bespoke fields</h1>
+            <p className="hero-copy">
+              Core markbook fields remain fixed. Use this page to add new subject pages and
+              class-specific extra fields whenever a team needs them.
+            </p>
+          </div>
+          <Link className="button secondary" href="/">
+            Back to Filter View
+          </Link>
+        </div>
       </section>
 
       <section className="panel">
-        <h2 className="panel-title">Current subject pages</h2>
-        <div className="breakdown-list">
-          {subjects.map((subject) => (
-            <div className="breakdown-row" key={subject.id}>
-              <span>
-                {subject.name}
-                {subject.class_name ? ` | ${subject.class_name}` : " | All classes"}
-              </span>
-              <strong>{subject.is_core ? "Core" : "Custom"}</strong>
-            </div>
-          ))}
+        <div className="field" style={{ marginBottom: "0" }}>
+          <label htmlFor="setupPanelSelector">Setup card</label>
+          <select
+            id="setupPanelSelector"
+            value={selectedSetupPanel}
+            onChange={(event) => setSelectedSetupPanel(event.target.value as SetupPanelKey)}
+          >
+            {SETUP_PANEL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
-      <section className="panel">
-        <h2 className="panel-title">Extra fields for selected subject</h2>
-        <div className="breakdown-list">
-          {fields.map((field) => (
-            <div className="breakdown-row" key={field.id}>
-              <span>{field.field_label}</span>
-              <strong>{field.field_type}</strong>
-            </div>
-          ))}
-          {!fields.length ? (
-            <div className="empty-state">
-              No bespoke fields yet for this subject page. Core fields are still available on
-              every gradebook page.
-            </div>
-          ) : null}
-        </div>
-      </section>
+      {status ? (
+        <section className="panel">
+          <div className="banner">{status}</div>
+        </section>
+      ) : null}
+      {error ? (
+        <section className="panel">
+          <div className="banner error-banner">{error}</div>
+        </section>
+      ) : null}
+
+      {renderSelectedPanel()}
     </div>
   );
 }

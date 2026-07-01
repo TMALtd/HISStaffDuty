@@ -60,6 +60,38 @@ function getInitial(value: string | null | undefined) {
   return value;
 }
 
+function getStudentYearLabel(student: StudentRow) {
+  const explicitYearCode = String(student.year_code ?? "").trim();
+  if (explicitYearCode) {
+    return explicitYearCode;
+  }
+
+  const candidates = [
+    String(student.year_group ?? "").trim(),
+    String(student.form ?? "").trim(),
+    String(student.class_name ?? "").trim()
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const preschoolMatch = candidate.match(/preschool\s*(\d+)/i);
+    if (preschoolMatch) {
+      return `PS${preschoolMatch[1]}`;
+    }
+
+    const yearGroupMatch = candidate.match(/year\s*(\d+)/i);
+    if (yearGroupMatch) {
+      return yearGroupMatch[1];
+    }
+
+    const classLeadingNumberMatch = candidate.match(/^(\d{1,2})\b/);
+    if (classLeadingNumberMatch) {
+      return classLeadingNumberMatch[1];
+    }
+  }
+
+  return "Unknown";
+}
+
 function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => string) {
   const counts = new Map<string, number>();
 
@@ -175,7 +207,7 @@ export function StaffDashboard({
   const classCount = new Set(students.map((student) => student.class_name)).size;
   const genderBreakdown = buildCounts(students, (student) => getInitial(student.gender));
   const houseBreakdown = buildCounts(students, (student) => student.academic_house || "Unknown");
-  const yearBreakdown = buildCounts(students, (student) => student.year_code || "Unknown");
+  const yearBreakdown = buildCounts(students, (student) => getStudentYearLabel(student));
   const classBreakdown = buildCounts(students, (student) => student.class_name);
   const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
   const maleCount = students.filter((student) => (student.gender || "").toUpperCase() === "M").length;
@@ -443,7 +475,7 @@ export function StaffDashboard({
                   <td>{student.school_id}</td>
                   <td>{student.gender || "—"}</td>
                   <td>{student.form}</td>
-                  <td>{student.year_code || "—"}</td>
+                  <td>{getStudentYearLabel(student)}</td>
                   <td>{student.tutor || "—"}</td>
                   <td>{student.academic_house || "—"}</td>
                 </tr>
