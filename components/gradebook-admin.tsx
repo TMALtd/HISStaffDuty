@@ -497,6 +497,7 @@ export function GradebookAdmin() {
 
     const json = (await response.json()) as {
       academicYears?: StudentAcademicYear[];
+      classOptions?: StaffDirectoryClassOption[];
       summary?: { className?: string; importedCount?: number; skippedCount?: number };
       error?: string;
     };
@@ -507,6 +508,7 @@ export function GradebookAdmin() {
     }
 
     setAcademicYears(json.academicYears ?? []);
+    setClassOptions(json.classOptions ?? []);
     setStatus(
       `${json.summary?.className ?? "Class"} imported into ${importAcademicYearLabel}: ${json.summary?.importedCount ?? 0} students added${json.summary?.skippedCount ? `, ${json.summary.skippedCount} skipped` : ""}.`
     );

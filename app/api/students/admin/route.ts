@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
 import {
   archiveLegacyStudentRoster,
-  getStaffDirectoryClassOptions,
   getStudentAcademicYears,
+  getStudentRosterClassOptions,
   importStudentRosterClassCsv,
   setActiveStudentAcademicYear,
   upsertStudentAcademicYear
@@ -23,7 +23,7 @@ export async function GET() {
   try {
     const [academicYears, classOptions] = await Promise.all([
       getStudentAcademicYears(),
-      getStaffDirectoryClassOptions()
+      getStudentRosterClassOptions()
     ]);
 
     return NextResponse.json({ academicYears, classOptions });
@@ -83,8 +83,11 @@ export async function POST(request: Request) {
         sourceFilename: body.sourceFilename ?? null
       });
 
-      const academicYears = await getStudentAcademicYears();
-      return NextResponse.json({ summary, academicYears });
+      const [academicYears, classOptions] = await Promise.all([
+        getStudentAcademicYears(),
+        getStudentRosterClassOptions(String(body.academicYearLabel ?? ""))
+      ]);
+      return NextResponse.json({ summary, academicYears, classOptions });
     }
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });

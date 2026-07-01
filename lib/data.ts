@@ -1877,47 +1877,91 @@ export async function upsertStudentClassAssignment(
 }
 
 export async function getStudentAcademicYears(): Promise<StudentAcademicYear[]> {
-  const [years, counts] = await Promise.all([
-    getStudentAcademicYearRows(),
-    (async () => {
-      const supabase = createSupabaseAdminClient();
-      const { data, error } = await supabase
-        .from(STUDENT_ROSTER_ENTRIES_TABLE)
-        .select("academic_year_id,class_name,school_id");
+  const years = await getStudentAcademicYearRows();
 
-      if (error) {
-        if (isMissingSupabaseRelationError(new Error(error.message), STUDENT_ROSTER_ENTRIES_TABLE)) {
-          return [] as Array<Record<string, unknown>>;
-        }
+  const countsByYearLabel = new Map<string, { studentCount: number; classCount: number }>();
 
-        throw new Error(error.message);
-      }
-
-      return (data ?? []) as Array<Record<string, unknown>>;
-    })()
-  ]);
-
-  const countsByYearId = new Map<string, { studentCount: number; classNames: Set<string> }>();
-
-  counts.forEach((row) => {
-    const yearId = String(row.academic_year_id ?? "").trim();
-    if (!yearId) {
-      return;
-    }
-
-    const current = countsByYearId.get(yearId) ?? { studentCount: 0, classNames: new Set<string>() };
-    current.studentCount += 1;
-    if (row.class_name) {
-      current.classNames.add(String(row.class_name).trim());
-    }
-    countsByYearId.set(yearId, current);
-  });
+  await Promise.all(
+    years.map(async (year) => {
+      const students = await getStudents({}, year.label);
+      countsByYearLabel.set(year.label, {
+        studentCount: students.length,
+        classCount: new Set(
+          students
+            .map((student) => String(student.class_name ?? "").trim())
+            .filter(Boolean)
+        ).size
+      });
+    })
+  );
 
   return years.map((year) =>
     toStudentAcademicYear(year, {
-      studentCount: countsByYearId.get(year.id)?.studentCount ?? 0,
-      classCount: countsByYearId.get(year.id)?.classNames.size ?? 0
+      studentCount: countsByYearLabel.get(year.label)?.studentCount ?? 0,
+      classCount: countsByYearLabel.get(year.label)?.classCount ?? 0
     })
+  );
+}
+
+export async function getStudentRosterClassOptions(
+  academicYearLabel?: string | null
+): Promise<StaffDirectoryClassOption[]> {
+  const [baseOptions, rosterRows] = await Promise.all([
+    getStaffDirectoryClassOptions(),
+    (async () => {
+      try {
+        return await getStudentRosterRowsFromView(academicYearLabel);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /student_(class_roster|academic_years|roster_entries)/i.test(error.message)
+        ) {
+          return [] as StudentRow[];
+        }
+
+        throw error;
+      }
+    })()
+  ]);
+
+  const uniqueOptions = new Map<string, StaffDirectoryClassOption>();
+
+  baseOptions.forEach((option) => {
+    const key = normalizeTimetableLookupKey(option.classCode || option.className);
+    if (!key) {
+      return;
+    }
+
+    uniqueOptions.set(key, option);
+  });
+
+  rosterRows.forEach((row) => {
+    const classCode = String(row.class_code ?? "").trim();
+    const className = String(row.class_name ?? "").trim();
+    const key = normalizeTimetableLookupKey(classCode || className);
+
+    if (!key) {
+      return;
+    }
+
+    const existing = uniqueOptions.get(key);
+    uniqueOptions.set(key, {
+      classCode: classCode || existing?.classCode || "",
+      className: className || existing?.className || "",
+      yearGroup: String(row.year_group ?? "").trim() || existing?.yearGroup || "",
+      streamType:
+        normalizeTimetableStreamType(row.designation) ??
+        existing?.streamType ??
+        null
+    });
+  });
+
+  return Array.from(uniqueOptions.values()).sort((left, right) =>
+    [left.yearGroup, left.className, left.classCode]
+      .join("|")
+      .localeCompare([right.yearGroup, right.className, right.classCode].join("|"), undefined, {
+        numeric: true
+      })
   );
 }
 
