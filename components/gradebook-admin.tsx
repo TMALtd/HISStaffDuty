@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getGradebookSectionDefinitions } from "@/lib/gradebook";
 import type {
   GradebookFieldDefinition,
@@ -82,6 +82,39 @@ export function GradebookAdmin() {
   const [selectedSetupPanel, setSelectedSetupPanel] = useState<SetupPanelKey>("academic-years");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const groupedSections = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        order: number;
+        sections: GradebookSectionDefinition[];
+      }
+    >();
+
+    for (const section of sections) {
+      const current =
+        groups.get(section.groupKey) ??
+        {
+          key: section.groupKey,
+          label: section.groupLabel,
+          order: section.groupOrder,
+          sections: []
+        };
+      current.sections.push(section);
+      groups.set(section.groupKey, current);
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        sections: group.sections.sort(
+          (left, right) => left.cardOrder - right.cardOrder || left.name.localeCompare(right.name)
+        )
+      }))
+      .sort((left, right) => left.order - right.order);
+  }, [sections]);
 
   async function loadStudentRosterAdmin() {
     const response = await fetch("/api/students/admin", { cache: "no-store" });
@@ -735,57 +768,74 @@ export function GradebookAdmin() {
             <p className="hero-copy compact-copy">
               Update the section names, descriptions, and empty-state guidance shown on the class Markbook cards.
             </p>
-            <div className="dashboard-grid" style={{ gap: "1rem" }}>
-              {sections.map((section) => (
-                <div key={section.slug} className="panel" style={{ padding: "1rem" }}>
-                  <strong style={{ display: "block", marginBottom: "0.75rem" }}>{section.slug}</strong>
-                  <div className="field">
-                    <label htmlFor={`${section.slug}-name`}>Card title</label>
-                    <input
-                      id={`${section.slug}-name`}
-                      value={section.name}
-                      onChange={(event) => updateSection(section.slug, "name", event.target.value)}
-                    />
+            <div className="gradebook-admin-groups">
+              {groupedSections.map((group) => (
+                <details className="gradebook-admin-group" key={group.key} open>
+                  <summary className="gradebook-admin-group-header">
+                    <div>
+                      <p className="eyebrow compact-eyebrow">{group.label}</p>
+                      <h3 className="panel-title" style={{ marginBottom: 0 }}>
+                        {group.label}
+                      </h3>
+                    </div>
+                    <span className="hint">{group.sections.length} cards</span>
+                  </summary>
+                  <div className="gradebook-admin-group-body">
+                    <div className="dashboard-grid" style={{ gap: "1rem" }}>
+                      {group.sections.map((section) => (
+                        <div key={section.slug} className="panel" style={{ padding: "1rem" }}>
+                          <strong style={{ display: "block", marginBottom: "0.75rem" }}>{section.slug}</strong>
+                          <div className="field">
+                            <label htmlFor={`${section.slug}-name`}>Card title</label>
+                            <input
+                              id={`${section.slug}-name`}
+                              value={section.name}
+                              onChange={(event) => updateSection(section.slug, "name", event.target.value)}
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`${section.slug}-description`}>Card description</label>
+                            <input
+                              id={`${section.slug}-description`}
+                              value={section.description}
+                              onChange={(event) => updateSection(section.slug, "description", event.target.value)}
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`${section.slug}-recommended`}>Recommended page name</label>
+                            <input
+                              id={`${section.slug}-recommended`}
+                              value={section.recommendedPageName}
+                              onChange={(event) =>
+                                updateSection(section.slug, "recommendedPageName", event.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`${section.slug}-empty-title`}>Empty state title</label>
+                            <input
+                              id={`${section.slug}-empty-title`}
+                              value={section.emptyStateTitle}
+                              onChange={(event) =>
+                                updateSection(section.slug, "emptyStateTitle", event.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`${section.slug}-empty-copy`}>Empty state copy</label>
+                            <input
+                              id={`${section.slug}-empty-copy`}
+                              value={section.emptyStateCopy}
+                              onChange={(event) =>
+                                updateSection(section.slug, "emptyStateCopy", event.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="field">
-                    <label htmlFor={`${section.slug}-description`}>Card description</label>
-                    <input
-                      id={`${section.slug}-description`}
-                      value={section.description}
-                      onChange={(event) => updateSection(section.slug, "description", event.target.value)}
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`${section.slug}-recommended`}>Recommended page name</label>
-                    <input
-                      id={`${section.slug}-recommended`}
-                      value={section.recommendedPageName}
-                      onChange={(event) =>
-                        updateSection(section.slug, "recommendedPageName", event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`${section.slug}-empty-title`}>Empty state title</label>
-                    <input
-                      id={`${section.slug}-empty-title`}
-                      value={section.emptyStateTitle}
-                      onChange={(event) =>
-                        updateSection(section.slug, "emptyStateTitle", event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor={`${section.slug}-empty-copy`}>Empty state copy</label>
-                    <input
-                      id={`${section.slug}-empty-copy`}
-                      value={section.emptyStateCopy}
-                      onChange={(event) =>
-                        updateSection(section.slug, "emptyStateCopy", event.target.value)
-                      }
-                    />
-                  </div>
-                </div>
+                </details>
               ))}
             </div>
             <div className="actions">

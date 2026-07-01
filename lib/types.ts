@@ -97,18 +97,16 @@ export type GradebookTerm = {
 
 export type GradebookSectionMode = "profile" | "assessment";
 
-export type GradebookSectionSlug =
-  | "pastoral"
-  | "learning-support"
-  | "ptms"
-  | "phonics"
-  | "reading"
-  | "writing"
-  | "maths"
-  | "ipc";
+export type GradebookSectionSlug = string;
+
+export type GradebookSectionGroupKey = "student-profile" | "assessment";
 
 export type GradebookSectionDefinition = {
   slug: GradebookSectionSlug;
+  groupKey: GradebookSectionGroupKey;
+  groupLabel: string;
+  groupOrder: number;
+  cardOrder: number;
   name: string;
   mode: GradebookSectionMode;
   description: string;

@@ -4463,7 +4463,168 @@ export async function getGradebookSubjectById(subjectId: string): Promise<Gradeb
   return (data as GradebookSubject | null) ?? null;
 }
 
-export async function getGradebookSubjects(className?: string): Promise<GradebookSubject[]> {
+type GradebookSubjectContext = {
+  className?: string;
+  staffProfile?: StaffProfile | null;
+};
+
+function buildSubjectRuleTokens(subject: GradebookSubject) {
+  return buildTimetableLookupKeys(subject.name).concat(buildTimetableLookupKeys(subject.slug));
+}
+
+function subjectMatchesAliases(subject: GradebookSubject, aliases: string[]) {
+  const tokens = new Set(buildSubjectRuleTokens(subject));
+  return aliases.some((alias) => tokens.has(normalizeTimetableLookupKey(alias)));
+}
+
+function buildSpecialistRoleTokens(staffProfile: StaffProfile | null | undefined) {
+  return new Set(
+    [
+      staffProfile?.role,
+      staffProfile?.department,
+      staffProfile?.designation,
+      staffProfile?.class,
+      staffProfile?.timetable
+    ]
+      .flatMap((value) => buildTimetableLookupKeys(value))
+      .filter(Boolean)
+  );
+}
+
+function inferGradebookClassContext(className: string | undefined, classOptions: StaffDirectoryClassOption[]) {
+  if (!className) {
+    return null;
+  }
+
+  const normalizedClassName = normalizeTimetableLookupKey(className);
+  const classOption =
+    classOptions.find((option) => normalizeTimetableLookupKey(option.className) === normalizedClassName) ?? null;
+  const yearGroup = String(classOption?.yearGroup ?? "").trim();
+  const normalizedYearGroup = yearGroup.toLowerCase();
+  const isPreschool =
+    normalizedYearGroup.startsWith("preschool") || normalizeTimetableLookupKey(className).startsWith("preschool");
+  const yearMatch = normalizedYearGroup.match(/year\s*(\d+)/);
+  const yearNumber = yearMatch ? Number(yearMatch[1]) : null;
+
+  return {
+    yearGroup,
+    yearNumber,
+    isPreschool,
+    isBilingual: classOption?.streamType === "bilingual",
+    isLowerPrimary: yearNumber !== null && yearNumber >= 1 && yearNumber <= 3,
+    isUpperPrimary: yearNumber !== null && yearNumber >= 4 && yearNumber <= 6,
+    isMp2OrMp3: yearNumber !== null && yearNumber >= 3 && yearNumber <= 6,
+    isMp3: yearNumber !== null && yearNumber >= 5 && yearNumber <= 6
+  };
+}
+
+function shouldIncludeGradebookSubject(
+  subject: GradebookSubject,
+  classContext: ReturnType<typeof inferGradebookClassContext>,
+  staffProfile: StaffProfile | null | undefined
+) {
+  const specialistRoleTokens = buildSpecialistRoleTokens(staffProfile);
+  const isGenericSpecialist =
+    specialistRoleTokens.has("specialist") ||
+    specialistRoleTokens.has("support teacher") ||
+    specialistRoleTokens.has("support teachers");
+
+  const specialistCategories = [
+    {
+      aliases: ["Mandarin"],
+      roleAliases: ["mandarin"]
+    },
+    {
+      aliases: ["BM"],
+      roleAliases: ["bm", "bahasa melayu"]
+    },
+    {
+      aliases: ["P.E.", "PE", "Physical Education"],
+      roleAliases: ["p.e.", "pe", "physical education"]
+    },
+    {
+      aliases: ["Music"],
+      roleAliases: ["music"]
+    },
+    {
+      aliases: ["STEAM / Coding", "STEAM", "Coding"],
+      roleAliases: ["steam", "coding", "steam / coding"]
+    },
+    {
+      aliases: ["EAL"],
+      roleAliases: ["eal"]
+    },
+    {
+      aliases: ["Maths Support"],
+      roleAliases: ["maths support", "math support"]
+    },
+    {
+      aliases: ["Reading Support", "Remedial Reading"],
+      roleAliases: ["reading support", "remedial reading"]
+    },
+    {
+      aliases: ["SEN", "SENCo"],
+      roleAliases: ["sen", "senco", "learning support"]
+    }
+  ];
+
+  const matchedSpecialistCategory = specialistCategories.find((category) =>
+    subjectMatchesAliases(subject, category.aliases)
+  );
+
+  if (matchedSpecialistCategory) {
+    if (isGenericSpecialist) {
+      return true;
+    }
+
+    return matchedSpecialistCategory.roleAliases.some((alias) => specialistRoleTokens.has(alias));
+  }
+
+  if (!classContext) {
+    return true;
+  }
+
+  if (subjectMatchesAliases(subject, ["IEYC"])) {
+    return classContext.isPreschool;
+  }
+
+  if (subjectMatchesAliases(subject, ["Phonics"])) {
+    return classContext.isLowerPrimary;
+  }
+
+  if (subjectMatchesAliases(subject, ["Science"])) {
+    return classContext.isUpperPrimary;
+  }
+
+  if (subjectMatchesAliases(subject, ["Spelling"])) {
+    return classContext.isMp2OrMp3;
+  }
+
+  if (subjectMatchesAliases(subject, ["Design & Technology", "Design and Technology", "DT"])) {
+    return classContext.isMp3;
+  }
+
+  if (
+    subjectMatchesAliases(subject, [
+      "Mandarin Writing",
+      "Mandarin Reading",
+      "Mandarin Speaking & Listening",
+      "Mandarin Speaking and Listening"
+    ])
+  ) {
+    return classContext.isBilingual;
+  }
+
+  if (subjectMatchesAliases(subject, ["Maths", "English", "Reading", "Writing", "IPC"])) {
+    return true;
+  }
+
+  return true;
+}
+
+export async function getGradebookSubjects(
+  context: GradebookSubjectContext = {}
+): Promise<GradebookSubject[]> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from(SUBJECTS_TABLE)
@@ -4476,20 +4637,26 @@ export async function getGradebookSubjects(className?: string): Promise<Gradeboo
   }
 
   const subjects = (data ?? []) as GradebookSubject[];
+  const className = context.className;
   const filtered = subjects.filter((subject) =>
     className ? !subject.class_name || subject.class_name === className : !subject.class_name
   );
 
   if (!className) {
-    return filtered;
+    return filtered.filter((subject) => shouldIncludeGradebookSubject(subject, null, context.staffProfile));
   }
 
   const classSpecificSlugs = new Set(
     filtered.filter((subject) => subject.class_name === className).map((subject) => subject.slug)
   );
 
-  return filtered.filter(
+  const classScopedSubjects = filtered.filter(
     (subject) => subject.class_name === className || !classSpecificSlugs.has(subject.slug)
+  );
+  const classContext = inferGradebookClassContext(className, await getStaffDirectoryClassOptions());
+
+  return classScopedSubjects.filter((subject) =>
+    shouldIncludeGradebookSubject(subject, classContext, context.staffProfile)
   );
 }
 

@@ -279,6 +279,32 @@ export function GradebookWorkspace({
     () => buildGradebookWorkspaceSections(subjects, sectionDefinitions),
     [sectionDefinitions, subjects]
   );
+  const sectionGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        order: number;
+        sections: typeof sections;
+      }
+    >();
+
+    for (const section of sections) {
+      const current =
+        groups.get(section.groupKey) ??
+        {
+          key: section.groupKey,
+          label: section.groupLabel,
+          order: section.groupOrder,
+          sections: []
+        };
+      current.sections.push(section);
+      groups.set(section.groupKey, current);
+    }
+
+    return Array.from(groups.values()).sort((left, right) => left.order - right.order);
+  }, [sections]);
   const selectedSection = useMemo(
     () => sections.find((section) => section.slug === selectedSectionSlug) ?? sections[0] ?? null,
     [sections, selectedSectionSlug]
@@ -352,6 +378,9 @@ export function GradebookWorkspace({
       if (activeFilters.className) {
         params.set("className", activeFilters.className);
       }
+      if (previewEmail) {
+        params.set("viewAs", previewEmail);
+      }
 
       const response = await fetch(`/api/gradebook/subjects?${params.toString()}`, {
         cache: "no-store"
@@ -368,13 +397,18 @@ export function GradebookWorkspace({
       }
 
       setSubjects(json.subjects);
+      const workspaceSections = buildGradebookWorkspaceSections(json.subjects, sectionDefinitions);
+
       setSelectedSectionSlug((current) => {
-        if (current && sections.some((section) => section.slug === current)) {
+        if (current && workspaceSections.some((section) => section.slug === current)) {
           return current;
         }
 
-        const workspaceSections = buildGradebookWorkspaceSections(json.subjects);
-        return workspaceSections.find((section) => section.isConfigured)?.slug ?? workspaceSections[0]?.slug ?? "";
+        return (
+          workspaceSections.find((section) => section.isConfigured)?.slug ??
+          workspaceSections[0]?.slug ??
+          ""
+        );
       });
     }
 
@@ -387,7 +421,7 @@ export function GradebookWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [activeFilters.className]);
+  }, [activeFilters.className, previewEmail, sectionDefinitions]);
 
   useEffect(() => {
     if (!isAdminView) {
@@ -1283,25 +1317,40 @@ export function GradebookWorkspace({
 
   function renderSectionCards() {
     return (
-      <div className="gradebook-section-grid">
-        {sections.map((section) => (
-          <button
-            className={`gradebook-section-card${section.slug === selectedSection?.slug ? " active" : ""}`}
-            key={section.slug}
-            type="button"
-            onClick={() => setSelectedSectionSlug(section.slug)}
-          >
-            <div className="gradebook-section-card-top">
-              <p className="eyebrow compact-eyebrow">
-                {section.mode === "profile" ? "Student Profile" : "Assessment"}
-              </p>
-              <span className={`gradebook-section-status ${section.isConfigured ? "ready" : "pending"}`}>
-                {section.isConfigured ? "Ready" : "To build"}
+      <div className="gradebook-section-groups">
+        {sectionGroups.map((group) => (
+          <details className="gradebook-section-group" key={group.key} open>
+            <summary className="gradebook-section-group-header">
+              <div>
+                <p className="eyebrow compact-eyebrow">{group.label}</p>
+                <h3 className="gradebook-section-group-title">{group.label}</h3>
+              </div>
+              <span className="hint">
+                {group.sections.filter((section) => section.isConfigured).length} of {group.sections.length} ready
               </span>
+            </summary>
+            <div className="gradebook-section-group-body">
+              <div className="gradebook-section-group-grid">
+                {group.sections.map((section) => (
+                  <button
+                    className={`gradebook-section-card${section.slug === selectedSection?.slug ? " active" : ""}`}
+                    key={section.slug}
+                    type="button"
+                    onClick={() => setSelectedSectionSlug(section.slug)}
+                  >
+                    <div className="gradebook-section-card-top">
+                      <p className="eyebrow compact-eyebrow">{group.label}</p>
+                      <span className={`gradebook-section-status ${section.isConfigured ? "ready" : "pending"}`}>
+                        {section.isConfigured ? "Ready" : "To build"}
+                      </span>
+                    </div>
+                    <h3 className="gradebook-section-name">{section.name}</h3>
+                    <p className="gradebook-section-copy">{section.description}</p>
+                  </button>
+                ))}
+              </div>
             </div>
-            <h3 className="gradebook-section-name">{section.name}</h3>
-            <p className="gradebook-section-copy">{section.description}</p>
-          </button>
+          </details>
         ))}
       </div>
     );

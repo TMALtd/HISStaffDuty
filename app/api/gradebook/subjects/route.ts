@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { createGradebookSubject, getGradebookSubjects } from "@/lib/data";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getAccessPreviewSession, getCurrentUserOrNull, requirePortalAccess } from "@/lib/auth";
 
 export async function GET(request: Request) {
-  const user = await getCurrentUserOrNull();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const className = new URL(request.url).searchParams.get("className") || undefined;
-    const subjects = await getGradebookSubjects(className);
+    const session = await requirePortalAccess("gradebook");
+    const url = new URL(request.url);
+    const className = url.searchParams.get("className") || undefined;
+    const previewEmail = url.searchParams.get("viewAs");
+    const preview = await getAccessPreviewSession(session, previewEmail);
+    const subjects = await getGradebookSubjects({
+      className,
+      staffProfile: preview.activeProfile
+    });
     return NextResponse.json({ subjects });
   } catch (error) {
     return NextResponse.json(

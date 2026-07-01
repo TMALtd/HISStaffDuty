@@ -590,7 +590,47 @@ tr:last-child td {
   justify-content: flex-end;
 }
 
-.gradebook-section-grid {
+.gradebook-section-groups,
+.gradebook-admin-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.gradebook-section-group,
+.gradebook-admin-group {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 252, 248, 0.82);
+  overflow: hidden;
+}
+
+.gradebook-section-group-header,
+.gradebook-admin-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.gradebook-section-group-header::-webkit-details-marker,
+.gradebook-admin-group-header::-webkit-details-marker {
+  display: none;
+}
+
+.gradebook-section-group-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.gradebook-section-group-body,
+.gradebook-admin-group-body {
+  padding: 0 20px 20px;
+}
+
+.gradebook-section-group-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
@@ -2282,7 +2322,7 @@ tr:last-child td {
   .mini-stats,
   .admin-grid,
   .timetable-admin-grid,
-  .gradebook-section-grid,
+  .gradebook-section-group-grid,
   .identity-grid,
   .student-assignment-grid,
   .pastoral-fields-grid {
