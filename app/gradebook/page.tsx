@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import { getPortalHeroSettings, getTimetablePreviewStaffOptions } from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
@@ -44,6 +45,24 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         <SignOutButton />
       </section>
       <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <section className="panel mi-card">
+        <div>
+          <p className="eyebrow">Specialist Registers</p>
+          <h2 className="mi-title">Build specialist teaching groups by year group</h2>
+          <p className="compact-copy">
+            Specialist teachers can create their own year-group registers here before those groups are connected into
+            the markbook workflow.
+          </p>
+        </div>
+        <div className="actions">
+          <Link
+            className="button secondary"
+            href={preview.previewEmail ? `/gradebook/registers?viewAs=${encodeURIComponent(preview.previewEmail)}` : "/gradebook/registers"}
+          >
+            Open Specialist Registers
+          </Link>
+        </div>
+      </section>
       <GradebookWorkspace
         canManageAssignments={access.isFullAccess && !preview.isPreviewing}
         canManageSetup={access.isFullAccess && !preview.isPreviewing}

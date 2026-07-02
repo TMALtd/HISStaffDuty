@@ -30,6 +30,8 @@ import {
   type GradebookEntry,
   type GradebookAssessment,
   type GradebookTerm,
+  type SpecialistRegister,
+  type SpecialistRegisterStudent,
   type GradebookFieldDefinition,
   type GradebookSectionDefinition,
   type GradebookSectionSettingsInput,
@@ -132,6 +134,8 @@ const ENTRIES_TABLE = "gradebook_entries";
 const ASSESSMENTS_TABLE = "gradebook_assessments";
 const TERMS_TABLE = "gradebook_terms";
 const SECTION_SETTINGS_TABLE = "gradebook_section_settings";
+const SPECIALIST_REGISTERS_TABLE = "specialist_registers";
+const SPECIALIST_REGISTER_STUDENTS_TABLE = "specialist_register_students";
 const PORTAL_HERO_SETTINGS_TABLE = "portal_hero_settings";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
@@ -4461,6 +4465,330 @@ export async function getGradebookSubjectById(subjectId: string): Promise<Gradeb
   }
 
   return (data as GradebookSubject | null) ?? null;
+}
+
+function normalizeSpecialistRegister(row: Record<string, unknown>): SpecialistRegister {
+  return {
+    id: String(row.id ?? ""),
+    staff_profile_id: String(row.staff_profile_id ?? ""),
+    subject_id: String(row.subject_id ?? ""),
+    academic_year_label: row.academic_year_label ? String(row.academic_year_label) : null,
+    year_group: String(row.year_group ?? ""),
+    name: String(row.name ?? ""),
+    description: row.description ? String(row.description) : null,
+    student_count: Number(row.student_count ?? 0) || 0,
+    created_at: row.created_at ? String(row.created_at) : null,
+    updated_at: row.updated_at ? String(row.updated_at) : null
+  };
+}
+
+function normalizeSpecialistRegisterStudent(row: Record<string, unknown>): SpecialistRegisterStudent {
+  return {
+    id: String(row.id ?? ""),
+    register_id: String(row.register_id ?? ""),
+    student_school_id: String(row.student_school_id ?? ""),
+    sort_order: Number(row.sort_order ?? 0) || 0,
+    created_at: row.created_at ? String(row.created_at) : null
+  };
+}
+
+function specialistRegistersSetupError() {
+  return "Specialist register tables are not set up yet. Run supabase_specialist_registers.sql first.";
+}
+
+export async function getSpecialistRegisters(params: {
+  staffProfileId: string;
+  subjectId?: string | null;
+  yearGroup?: string | null;
+  academicYearLabel?: string | null;
+}): Promise<SpecialistRegister[]> {
+  const supabase = createSupabaseAdminClient();
+  const staffProfileId = normalizeRequiredText(params.staffProfileId, "Staff profile");
+  const academicYearLabel =
+    params.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : normalizeOptionalText(params.academicYearLabel);
+  let query = supabase
+    .from(SPECIALIST_REGISTERS_TABLE)
+    .select("id,staff_profile_id,subject_id,academic_year_label,year_group,name,description,created_at,updated_at")
+    .eq("staff_profile_id", staffProfileId)
+    .order("year_group")
+    .order("name");
+
+  if (params.subjectId) {
+    query = query.eq("subject_id", params.subjectId);
+  }
+  if (params.yearGroup) {
+    query = query.eq("year_group", params.yearGroup);
+  }
+  if (academicYearLabel) {
+    query = query.eq("academic_year_label", academicYearLabel);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SPECIALIST_REGISTERS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(error.message);
+  }
+
+  const registers = ((data ?? []) as Record<string, unknown>[]).map(normalizeSpecialistRegister);
+  if (!registers.length) {
+    return [];
+  }
+
+  const { data: studentRows, error: studentError } = await supabase
+    .from(SPECIALIST_REGISTER_STUDENTS_TABLE)
+    .select("register_id")
+    .in(
+      "register_id",
+      registers.map((register) => register.id)
+    );
+
+  if (studentError) {
+    if (isMissingSupabaseRelationError(new Error(studentError.message), SPECIALIST_REGISTER_STUDENTS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(studentError.message);
+  }
+
+  const counts = new Map<string, number>();
+  ((studentRows ?? []) as Array<{ register_id?: string | null }>).forEach((row) => {
+    const registerId = String(row.register_id ?? "");
+    if (!registerId) {
+      return;
+    }
+    counts.set(registerId, (counts.get(registerId) ?? 0) + 1);
+  });
+
+  return registers.map((register) => ({
+    ...register,
+    student_count: counts.get(register.id) ?? 0
+  }));
+}
+
+export async function getSpecialistRegisterDetail(params: {
+  registerId: string;
+  staffProfileId: string;
+}): Promise<{
+  register: SpecialistRegister;
+  students: SpecialistRegisterStudent[];
+} | null> {
+  const supabase = createSupabaseAdminClient();
+  const registerId = normalizeRequiredText(params.registerId, "Register");
+  const staffProfileId = normalizeRequiredText(params.staffProfileId, "Staff profile");
+  const { data, error } = await supabase
+    .from(SPECIALIST_REGISTERS_TABLE)
+    .select("id,staff_profile_id,subject_id,academic_year_label,year_group,name,description,created_at,updated_at")
+    .eq("id", registerId)
+    .eq("staff_profile_id", staffProfileId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SPECIALIST_REGISTERS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const { data: studentsData, error: studentsError } = await supabase
+    .from(SPECIALIST_REGISTER_STUDENTS_TABLE)
+    .select("id,register_id,student_school_id,sort_order,created_at")
+    .eq("register_id", registerId)
+    .order("sort_order")
+    .order("created_at");
+
+  if (studentsError) {
+    if (isMissingSupabaseRelationError(new Error(studentsError.message), SPECIALIST_REGISTER_STUDENTS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(studentsError.message);
+  }
+
+  const students = ((studentsData ?? []) as Record<string, unknown>[]).map(normalizeSpecialistRegisterStudent);
+
+  return {
+    register: {
+      ...normalizeSpecialistRegister(data as Record<string, unknown>),
+      student_count: students.length
+    },
+    students
+  };
+}
+
+export async function createSpecialistRegister(input: {
+  staffProfileId: string;
+  subjectId: string;
+  yearGroup: string;
+  name: string;
+  description?: string | null;
+  academicYearLabel?: string | null;
+  studentIds: string[];
+}) {
+  const supabase = createSupabaseAdminClient();
+  const staffProfileId = normalizeRequiredText(input.staffProfileId, "Staff profile");
+  const subjectId = normalizeRequiredText(input.subjectId, "Subject");
+  const yearGroup = normalizeRequiredText(input.yearGroup, "Year group");
+  const name = normalizeRequiredText(input.name, "Register name");
+  const description = normalizeOptionalText(input.description);
+  const academicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : normalizeOptionalText(input.academicYearLabel);
+  const uniqueStudentIds = Array.from(
+    new Set(input.studentIds.map((studentId) => normalizeOptionalText(studentId)).filter(Boolean) as string[])
+  );
+
+  const { data, error } = await supabase
+    .from(SPECIALIST_REGISTERS_TABLE)
+    .insert({
+      staff_profile_id: staffProfileId,
+      subject_id: subjectId,
+      academic_year_label: academicYearLabel,
+      year_group: yearGroup,
+      name,
+      description
+    })
+    .select("id,staff_profile_id,subject_id,academic_year_label,year_group,name,description,created_at,updated_at")
+    .single();
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SPECIALIST_REGISTERS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(error.message);
+  }
+
+  const register = normalizeSpecialistRegister(data as Record<string, unknown>);
+
+  if (uniqueStudentIds.length) {
+    const { error: studentsError } = await supabase.from(SPECIALIST_REGISTER_STUDENTS_TABLE).insert(
+      uniqueStudentIds.map((studentId, index) => ({
+        register_id: register.id,
+        student_school_id: studentId,
+        sort_order: index + 1
+      }))
+    );
+
+    if (studentsError) {
+      if (isMissingSupabaseRelationError(new Error(studentsError.message), SPECIALIST_REGISTER_STUDENTS_TABLE)) {
+        throw new Error(specialistRegistersSetupError());
+      }
+      throw new Error(studentsError.message);
+    }
+  }
+
+  return {
+    ...register,
+    student_count: uniqueStudentIds.length
+  };
+}
+
+export async function updateSpecialistRegister(input: {
+  registerId: string;
+  staffProfileId: string;
+  subjectId: string;
+  yearGroup: string;
+  name: string;
+  description?: string | null;
+  academicYearLabel?: string | null;
+  studentIds: string[];
+}) {
+  const supabase = createSupabaseAdminClient();
+  const registerId = normalizeRequiredText(input.registerId, "Register");
+  const staffProfileId = normalizeRequiredText(input.staffProfileId, "Staff profile");
+  const subjectId = normalizeRequiredText(input.subjectId, "Subject");
+  const yearGroup = normalizeRequiredText(input.yearGroup, "Year group");
+  const name = normalizeRequiredText(input.name, "Register name");
+  const description = normalizeOptionalText(input.description);
+  const academicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : normalizeOptionalText(input.academicYearLabel);
+  const uniqueStudentIds = Array.from(
+    new Set(input.studentIds.map((studentId) => normalizeOptionalText(studentId)).filter(Boolean) as string[])
+  );
+
+  const { data, error } = await supabase
+    .from(SPECIALIST_REGISTERS_TABLE)
+    .update({
+      subject_id: subjectId,
+      academic_year_label: academicYearLabel,
+      year_group: yearGroup,
+      name,
+      description
+    })
+    .eq("id", registerId)
+    .eq("staff_profile_id", staffProfileId)
+    .select("id,staff_profile_id,subject_id,academic_year_label,year_group,name,description,created_at,updated_at")
+    .single();
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SPECIALIST_REGISTERS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(error.message);
+  }
+
+  const deleteResult = await supabase
+    .from(SPECIALIST_REGISTER_STUDENTS_TABLE)
+    .delete()
+    .eq("register_id", registerId);
+
+  if (deleteResult.error) {
+    if (isMissingSupabaseRelationError(new Error(deleteResult.error.message), SPECIALIST_REGISTER_STUDENTS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(deleteResult.error.message);
+  }
+
+  if (uniqueStudentIds.length) {
+    const { error: studentsError } = await supabase.from(SPECIALIST_REGISTER_STUDENTS_TABLE).insert(
+      uniqueStudentIds.map((studentId, index) => ({
+        register_id: registerId,
+        student_school_id: studentId,
+        sort_order: index + 1
+      }))
+    );
+
+    if (studentsError) {
+      if (isMissingSupabaseRelationError(new Error(studentsError.message), SPECIALIST_REGISTER_STUDENTS_TABLE)) {
+        throw new Error(specialistRegistersSetupError());
+      }
+      throw new Error(studentsError.message);
+    }
+  }
+
+  return {
+    ...normalizeSpecialistRegister(data as Record<string, unknown>),
+    student_count: uniqueStudentIds.length
+  };
+}
+
+export async function deleteSpecialistRegister(params: {
+  registerId: string;
+  staffProfileId: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const registerId = normalizeRequiredText(params.registerId, "Register");
+  const staffProfileId = normalizeRequiredText(params.staffProfileId, "Staff profile");
+  const { error } = await supabase
+    .from(SPECIALIST_REGISTERS_TABLE)
+    .delete()
+    .eq("id", registerId)
+    .eq("staff_profile_id", staffProfileId);
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), SPECIALIST_REGISTERS_TABLE)) {
+      throw new Error(specialistRegistersSetupError());
+    }
+    throw new Error(error.message);
+  }
 }
 
 type GradebookSubjectContext = {

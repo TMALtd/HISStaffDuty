@@ -86,6 +86,27 @@ export type GradebookAssessment = {
   weighting_percent: number | null;
 };
 
+export type SpecialistRegister = {
+  id: string;
+  staff_profile_id: string;
+  subject_id: string;
+  academic_year_label: string | null;
+  year_group: string;
+  name: string;
+  description: string | null;
+  student_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type SpecialistRegisterStudent = {
+  id: string;
+  register_id: string;
+  student_school_id: string;
+  sort_order: number;
+  created_at: string | null;
+};
+
 export type GradebookTerm = {
   id: string;
   term_key: string;
