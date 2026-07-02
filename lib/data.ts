@@ -5227,6 +5227,25 @@ function shouldIncludeGradebookSubject(
     }
   ];
 
+  const studentProfileAliases = ["Student Pastoral", "Learning Support", "PTMs"];
+  const matchedRoleCategories = specialistCategories.filter((category) =>
+    category.roleAliases.some((alias) => specialistRoleTokens.has(alias))
+  );
+  const isMatchedSpecialistTeacher =
+    matchedRoleCategories.length > 0 ||
+    (isGenericSpecialist &&
+      specialistCategories.some((category) =>
+        category.roleAliases.some((alias) => specialistRoleTokens.has(alias))
+      ));
+
+  if (isMatchedSpecialistTeacher) {
+    if (subjectMatchesAliases(subject, studentProfileAliases)) {
+      return true;
+    }
+
+    return matchedRoleCategories.some((category) => subjectMatchesAliases(subject, category.aliases));
+  }
+
   const matchedSpecialistCategory = specialistCategories.find((category) =>
     subjectMatchesAliases(subject, category.aliases)
   );
