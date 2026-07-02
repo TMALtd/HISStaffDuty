@@ -1,7 +1,11 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { randomUUID } from "node:crypto";
-import { getGradebookSectionDefinitions, mergeGradebookSectionDefinitions } from "@/lib/gradebook";
-import { resolveGradebookSectionSlug } from "@/lib/gradebook";
+import {
+  deriveGradebookSubjectSlug,
+  getGradebookSectionDefinitions,
+  mergeGradebookSectionDefinitions,
+  resolveGradebookSectionSlug
+} from "@/lib/gradebook";
 import {
   type CreateTimetableClassInput,
   type UpdateTimetableClassInput,
@@ -5137,7 +5141,7 @@ function buildSubjectRuleTokens(subject: GradebookSubject) {
 
 function subjectMatchesAliases(subject: GradebookSubject, aliases: string[]) {
   const tokens = new Set(buildSubjectRuleTokens(subject));
-  return aliases.some((alias) => tokens.has(normalizeTimetableLookupKey(alias)));
+  return aliases.some((alias) => buildTimetableLookupKeys(alias).some((token) => tokens.has(token)));
 }
 
 function buildSpecialistRoleTokens(staffProfile: StaffProfile | null | undefined) {
@@ -6072,10 +6076,7 @@ export async function createGradebookSubject(input: {
   isCore?: boolean;
 }) {
   const supabase = createSupabaseAdminClient();
-  const slug = input.name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const slug = deriveGradebookSubjectSlug(input.name);
 
   const { data, error } = await supabase
     .from(SUBJECTS_TABLE)

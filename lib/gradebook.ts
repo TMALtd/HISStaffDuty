@@ -335,6 +335,10 @@ function normalizeGradebookLabel(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function compactGradebookLabel(value: string | null | undefined) {
+  return normalizeGradebookLabel(value).replace(/[^a-z0-9]+/g, "");
+}
+
 export function getGradebookSectionDefinitions(): GradebookSectionDefinition[] {
   return SECTION_DEFINITIONS;
 }
@@ -367,14 +371,22 @@ export function resolveGradebookSectionSlug(
   const slug = normalizeGradebookLabel(subject.slug);
   const name = normalizeGradebookLabel(subject.name);
   const combined = `${slug} ${name}`.trim();
+  const slugCompact = compactGradebookLabel(subject.slug);
+  const nameCompact = compactGradebookLabel(subject.name);
+  const combinedCompact = `${slugCompact} ${nameCompact}`.trim();
 
-  if (slug === "student-pastoral" || combined.includes("student pastoral")) {
+  if (
+    slug === "student-pastoral" ||
+    slugCompact === "studentpastoral" ||
+    combined.includes("student pastoral") ||
+    combinedCompact.includes("studentpastoral")
+  ) {
     return "pastoral";
   }
-  if (combined.includes("learning support")) {
+  if (combined.includes("learning support") || combinedCompact.includes("learningsupport")) {
     return "learning-support";
   }
-  if (slug === "ptms" || combined.includes("ptm")) {
+  if (slug === "ptms" || slugCompact === "ptms" || nameCompact === "ptms" || combined.includes("ptm")) {
     return "ptms";
   }
   if (combined.includes("english")) {
@@ -393,7 +405,10 @@ export function resolveGradebookSectionSlug(
     combined.includes("design & technology") ||
     combined.includes("design and technology") ||
     combined.includes("design technology") ||
-    combined === "dt"
+    combined === "dt" ||
+    slugCompact === "dt" ||
+    nameCompact === "dt" ||
+    combinedCompact.includes("designtechnology")
   ) {
     return "design-technology";
   }
@@ -432,29 +447,58 @@ export function resolveGradebookSectionSlug(
   if (combined.includes("ieyc")) {
     return "ieyc";
   }
-  if (combined === "mandarin" || name === "mandarin") {
+  if (combined === "mandarin" || name === "mandarin" || slugCompact === "mandarin" || nameCompact === "mandarin") {
     return "mandarin";
   }
-  if (combined === "bm" || combined.includes("bahasa melayu")) {
+  if (combined === "bm" || slugCompact === "bm" || nameCompact === "bm" || combined.includes("bahasa melayu")) {
     return "bm";
   }
-  if (combined === "p.e." || combined === "pe" || combined.includes("physical education")) {
+  if (
+    combined === "p.e." ||
+    combined === "pe" ||
+    slugCompact === "pe" ||
+    nameCompact === "pe" ||
+    combined.includes("physical education") ||
+    combinedCompact.includes("physicaleducation")
+  ) {
     return "pe";
   }
-  if (combined === "music" || combined.includes("music")) {
+  if (combined === "music" || slugCompact === "music" || nameCompact === "music" || combined.includes("music")) {
     return "music";
   }
-  if (combined.includes("steam") || combined.includes("coding")) {
+  if (
+    combined.includes("steam") ||
+    combined.includes("coding") ||
+    combinedCompact.includes("steam") ||
+    combinedCompact.includes("coding")
+  ) {
     return "steam-coding";
   }
-  if (combined === "eal" || combined.includes("additional language")) {
+  if (combined === "eal" || slugCompact === "eal" || nameCompact === "eal" || combined.includes("additional language")) {
     return "eal";
   }
-  if (combined === "sen" || combined === "senco" || combined.includes("special educational")) {
+  if (
+    combined === "sen" ||
+    combined === "senco" ||
+    slugCompact === "sen" ||
+    slugCompact === "senco" ||
+    nameCompact === "sen" ||
+    nameCompact === "senco" ||
+    combined.includes("special educational")
+  ) {
     return "sen";
   }
 
   return null;
+}
+
+export function deriveGradebookSubjectSlug(name: string) {
+  const fallbackSlug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return resolveGradebookSectionSlug({ slug: fallbackSlug, name }) ?? fallbackSlug;
 }
 
 export function buildGradebookWorkspaceSections(
