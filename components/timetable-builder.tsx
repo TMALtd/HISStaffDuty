@@ -231,6 +231,19 @@ function buildStandardRowSegments(
       continue;
     }
 
+    if (isYearOneTwoTemplate && segment.startTime === "14:20:00") {
+      merged.push({
+        key: "14:20:00-15:00:00",
+        startTime: "14:20:00",
+        endTime: "15:00:00"
+      });
+
+      while (index < rowSegments.length && rowSegments[index].endTime <= "15:00:00") {
+        index += 1;
+      }
+      continue;
+    }
+
     merged.push(segment);
     index += 1;
   }
@@ -464,6 +477,17 @@ function isCompactFridayMiddayBlock(block: MergedTimetableBlock, isMiddayCompact
     block.weekday === "friday" &&
     block.start_time >= "12:20:00" &&
     block.start_time < "13:00:00"
+  );
+}
+
+function isCompactYearOneTwoAfternoonBlock(
+  block: MergedTimetableBlock,
+  isYearOneTwoTemplate: boolean
+) {
+  return (
+    isYearOneTwoTemplate &&
+    block.start_time >= "14:20:00" &&
+    block.start_time < "15:00:00"
   );
 }
 
@@ -1527,9 +1551,14 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                           isCompactFridayMiddayBlock(block, isMiddayCompactTemplate)
                         )
                       : [];
+                  const compactAfternoonBlocks = day.blocks.filter((block) =>
+                    isCompactYearOneTwoAfternoonBlock(block, isYearOneTwoTemplate)
+                  );
 
                   const standardDayBlocks = day.blocks.filter(
-                    (block) => !isCompactFridayMiddayBlock(block, isMiddayCompactTemplate)
+                    (block) =>
+                      !isCompactFridayMiddayBlock(block, isMiddayCompactTemplate) &&
+                      !isCompactYearOneTwoAfternoonBlock(block, isYearOneTwoTemplate)
                   );
 
                   const renderedBlocks = standardDayBlocks.map((block) => {
@@ -1582,69 +1611,121 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                     );
                   });
 
-                  if (!specialFridayMiddayBlocks.length) {
-                    return renderedBlocks;
+                  const compositeBlocks: React.ReactNode[] = [];
+
+                  if (specialFridayMiddayBlocks.length) {
+                    const compositeRowStart = (rowLineByTime.get("12:20:00") ?? 1) + 1;
+                    const compositeRowEnd = (rowLineByTime.get("13:00:00") ?? compositeRowStart) + 1;
+                    const pastoralBlock =
+                      specialFridayMiddayBlocks.find((block) =>
+                        /pastoral/i.test(labelForBlock(block))
+                      ) ?? null;
+                    const dismissalBlock =
+                      specialFridayMiddayBlocks.find((block) => block.block_type === "dismissal") ?? null;
+
+                    compositeBlocks.push(
+                      <div
+                        className="timetable-grid-block timetable-grid-block-composite"
+                        key={`${day.key}-compact-friday-midday`}
+                        style={{
+                          gridColumn: dayIndex + 2,
+                          gridRow: `${compositeRowStart} / ${compositeRowEnd}`
+                        }}
+                      >
+                        {pastoralBlock ? (
+                          <button
+                            className="timetable-block-card timetable-grid-composite-segment is-compact"
+                            type="button"
+                            style={{
+                              background: pastoralBlock.color ?? "#111827",
+                              color: textColorForBackground(pastoralBlock.color ?? "#111827")
+                            }}
+                            onClick={() => openEditor(pastoralBlock)}
+                            disabled={isReadOnly}
+                          >
+                            <div className="timetable-block-topline">
+                              <strong>{labelForBlock(pastoralBlock)}</strong>
+                              {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
+                            </div>
+                            <div className="timetable-block-meta">12:20-12:30</div>
+                          </button>
+                        ) : null}
+
+                        {dismissalBlock ? (
+                          <button
+                            className="timetable-block-card timetable-grid-composite-segment"
+                            type="button"
+                            style={{
+                              background: dismissalBlock.color ?? "#9ca3af",
+                              color: textColorForBackground(dismissalBlock.color ?? "#9ca3af")
+                            }}
+                            onClick={() => openEditor(dismissalBlock)}
+                            disabled={isReadOnly}
+                          >
+                            <div className="timetable-block-topline">
+                              <strong>{labelForBlock(dismissalBlock)}</strong>
+                              {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
+                            </div>
+                            <div className="timetable-block-meta">12:30-13:00</div>
+                          </button>
+                        ) : null}
+                      </div>
+                    );
                   }
 
-                  const compositeRowStart = (rowLineByTime.get("12:20:00") ?? 1) + 1;
-                  const compositeRowEnd = (rowLineByTime.get("13:00:00") ?? compositeRowStart) + 1;
-                  const pastoralBlock =
-                    specialFridayMiddayBlocks.find((block) =>
-                      /pastoral/i.test(labelForBlock(block))
-                    ) ?? null;
-                  const dismissalBlock =
-                    specialFridayMiddayBlocks.find((block) => block.block_type === "dismissal") ?? null;
+                  if (compactAfternoonBlocks.length) {
+                    const compositeRowStart = (rowLineByTime.get("14:20:00") ?? 1) + 1;
+                    const compositeRowEnd = (rowLineByTime.get("15:00:00") ?? compositeRowStart) + 1;
+                    const orderedAfternoonBlocks = [...compactAfternoonBlocks].sort((left, right) =>
+                      left.start_time.localeCompare(right.start_time)
+                    );
 
-                  const compositeBlock = (
-                    <div
-                      className="timetable-grid-block timetable-grid-block-composite"
-                      key={`${day.key}-compact-friday-midday`}
-                      style={{
-                        gridColumn: dayIndex + 2,
-                        gridRow: `${compositeRowStart} / ${compositeRowEnd}`
-                      }}
-                    >
-                      {pastoralBlock ? (
-                        <button
-                          className="timetable-block-card timetable-grid-composite-segment is-compact"
-                          type="button"
-                          style={{
-                            background: pastoralBlock.color ?? "#111827",
-                            color: textColorForBackground(pastoralBlock.color ?? "#111827")
-                          }}
-                          onClick={() => openEditor(pastoralBlock)}
-                          disabled={isReadOnly}
-                        >
-                          <div className="timetable-block-topline">
-                            <strong>{labelForBlock(pastoralBlock)}</strong>
-                            {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
-                          </div>
-                          <div className="timetable-block-meta">12:20-12:30</div>
-                        </button>
-                      ) : null}
+                    compositeBlocks.push(
+                      <div
+                        className="timetable-grid-block timetable-grid-block-composite"
+                        key={`${day.key}-compact-afternoon`}
+                        style={{
+                          gridColumn: dayIndex + 2,
+                          gridRow: `${compositeRowStart} / ${compositeRowEnd}`,
+                          gridTemplateRows: orderedAfternoonBlocks
+                            .map((block) => `minmax(${Math.max(minutesBetween(block.start_time, block.end_time) * 2.2, 44)}px, auto)`)
+                            .join(" ")
+                        }}
+                      >
+                        {orderedAfternoonBlocks.map((block) => {
+                          const background = block.color ?? "#8be6a8";
+                          const foreground = textColorForBackground(background);
 
-                      {dismissalBlock ? (
-                        <button
-                          className="timetable-block-card timetable-grid-composite-segment"
-                          type="button"
-                          style={{
-                            background: dismissalBlock.color ?? "#9ca3af",
-                            color: textColorForBackground(dismissalBlock.color ?? "#9ca3af")
-                          }}
-                          onClick={() => openEditor(dismissalBlock)}
-                          disabled={isReadOnly}
-                        >
-                          <div className="timetable-block-topline">
-                            <strong>{labelForBlock(dismissalBlock)}</strong>
-                            {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
-                          </div>
-                          <div className="timetable-block-meta">12:30-13:00</div>
-                        </button>
-                      ) : null}
-                    </div>
-                  );
+                          return (
+                            <button
+                              className={`timetable-block-card timetable-grid-composite-segment ${blockDensityClass(block)}`.trim()}
+                              key={block.id}
+                              type="button"
+                              style={{
+                                background,
+                                color: foreground
+                              }}
+                              onClick={() => openEditor(block)}
+                              disabled={isReadOnly}
+                            >
+                              <div className="timetable-block-topline">
+                                <strong>{labelForBlock(block)}</strong>
+                                {!isReadOnly ? <span className="timetable-block-edit">✎</span> : null}
+                              </div>
+                              <div className="timetable-block-meta">
+                                {timeRangeLabel(block.start_time, block.end_time)}
+                              </div>
+                              <div className="timetable-block-meta muted-block-meta">
+                                {BLOCK_TYPE_LABELS[block.block_type]}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
 
-                  return [...renderedBlocks, compositeBlock];
+                  return [...renderedBlocks, ...compositeBlocks];
                 })}
               </div>
             </div>
