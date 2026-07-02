@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import {
   getPortalHeroSettings,
@@ -57,6 +58,9 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
   }
 
   classes = filterTimetableClassesForAccess(classes, preview.activeAccess);
+  const specialistScheduleHref = preview.previewEmail
+    ? `/timetables/specialist?viewAs=${encodeURIComponent(preview.previewEmail)}`
+    : "/timetables/specialist";
 
   return (
     <main className="page-shell">
@@ -76,6 +80,23 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
         <SignOutButton />
       </section>
       <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      {preview.activeProfile ? (
+        <section className="panel specialist-launch-panel">
+          <div>
+            <p className="eyebrow">Specialist teachers</p>
+            <h2 className="panel-title">Open the year-group teaching schedule</h2>
+            <p className="hero-copy specialist-launch-copy">
+              Use the specialist timetable view to see which year group this teacher is covering in each block,
+              alongside the class coverage within that slot.
+            </p>
+          </div>
+          <div className="actions">
+            <Link className="button" href={specialistScheduleHref}>
+              Open Teaching Schedule
+            </Link>
+          </div>
+        </section>
+      ) : null}
       <TimetableAdmin
         initialClasses={classes}
         templates={templates}

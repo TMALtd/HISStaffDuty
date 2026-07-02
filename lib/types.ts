@@ -468,6 +468,41 @@ export type TimetableBuilderData = {
   subjectTargets: TimetableSubjectTarget[];
 };
 
+export type SpecialistTimetableCoverage = {
+  yearGroup: string;
+  classNames: string[];
+  classCodes: string[];
+  streamTypes: TimetableStreamType[];
+  coverageLabel: string;
+};
+
+export type SpecialistTimetableSlot = {
+  id: string;
+  weekday: string;
+  periodLabel: string;
+  startTime: string;
+  endTime: string;
+  title: string;
+  blockType: TimetableBlockType;
+  color: string | null;
+  notes: string | null;
+  coverages: SpecialistTimetableCoverage[];
+};
+
+export type SpecialistTimetableDay = {
+  key: string;
+  label: string;
+  slots: SpecialistTimetableSlot[];
+};
+
+export type SpecialistTimetableViewData = {
+  staffProfileId: string;
+  staffName: string | null;
+  daySchedules: SpecialistTimetableDay[];
+  slotCount: number;
+  yearGroups: string[];
+};
+
 export const EMPTY_FILTERS: FilterState = {
   school: "",
   designation: "",

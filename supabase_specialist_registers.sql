@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.specialist_registers (
   id uuid primary key default gen_random_uuid(),
-  staff_profile_id uuid not null references public.staff(id) on delete cascade,
+  staff_profile_id text not null references public.staff(id) on delete cascade,
   subject_id uuid not null references public.gradebook_subjects(id) on delete cascade,
   academic_year_label text,
   year_group text not null,

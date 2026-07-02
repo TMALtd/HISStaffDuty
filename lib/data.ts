@@ -13,6 +13,9 @@ import {
   type TimetableClassSummary,
   type TimetablePreviewStaffOption,
   type TimetablePeriod,
+  type SpecialistTimetableCoverage,
+  type SpecialistTimetableDay,
+  type SpecialistTimetableViewData,
   type TimetableStaffOption,
   type TimetableStreamType,
   type TimetableSubjectTarget,
@@ -32,6 +35,7 @@ import {
   type GradebookTerm,
   type SpecialistRegister,
   type SpecialistRegisterStudent,
+  type SpecialistTimetableSlot,
   type GradebookFieldDefinition,
   type GradebookSectionDefinition,
   type GradebookSectionSettingsInput,
@@ -3728,6 +3732,297 @@ export async function getTimetableBuilderData(classCode: string): Promise<Timeta
     blocks,
     staffOptions,
     subjectTargets: DEFAULT_TIMETABLE_SUBJECT_TARGETS
+  };
+}
+
+export async function getSpecialistTimetableView(input: {
+  staffProfileId: string;
+  staffName?: string | null;
+}): Promise<SpecialistTimetableViewData> {
+  const staffProfileId = input.staffProfileId.trim();
+  const emptyDays: SpecialistTimetableDay[] = WEEKDAY_ORDER.map((weekday) => ({
+    key: weekday,
+    label: weekday.charAt(0).toUpperCase() + weekday.slice(1),
+    slots: []
+  }));
+
+  if (!staffProfileId) {
+    return {
+      staffProfileId: "",
+      staffName: input.staffName ?? null,
+      daySchedules: emptyDays,
+      slotCount: 0,
+      yearGroups: []
+    };
+  }
+
+  const classSummaries = (await getTimetableClassSummaries()).filter(
+    (entry) => entry.hasTimetable && entry.timetableId
+  );
+  if (classSummaries.length === 0) {
+    return {
+      staffProfileId,
+      staffName: input.staffName ?? null,
+      daySchedules: emptyDays,
+      slotCount: 0,
+      yearGroups: []
+    };
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: linkRows, error: linkError } = await supabase
+    .from(TIMETABLE_BLOCK_STAFF_TABLE)
+    .select("block_id")
+    .eq("staff_id", staffProfileId);
+
+  if (linkError) {
+    throw new Error(linkError.message);
+  }
+
+  const blockIds = Array.from(
+    new Set(
+      ((linkRows ?? []) as Array<Record<string, unknown>>)
+        .map((row) => String(row.block_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (blockIds.length === 0) {
+    return {
+      staffProfileId,
+      staffName: input.staffName ?? null,
+      daySchedules: emptyDays,
+      slotCount: 0,
+      yearGroups: []
+    };
+  }
+
+  const { data: blockRows, error: blockError } = await supabase
+    .from(TIMETABLE_BLOCKS_TABLE)
+    .select(
+      "id,class_timetable_id,period_id,title,block_type,color,notes,start_time_override,end_time_override"
+    )
+    .in("id", blockIds);
+
+  if (blockError) {
+    throw new Error(blockError.message);
+  }
+
+  if (!blockRows || blockRows.length === 0) {
+    return {
+      staffProfileId,
+      staffName: input.staffName ?? null,
+      daySchedules: emptyDays,
+      slotCount: 0,
+      yearGroups: []
+    };
+  }
+
+  const periodIds = Array.from(
+    new Set(
+      ((blockRows ?? []) as Array<Record<string, unknown>>)
+        .map((row) => String(row.period_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  if (periodIds.length === 0) {
+    return {
+      staffProfileId,
+      staffName: input.staffName ?? null,
+      daySchedules: emptyDays,
+      slotCount: 0,
+      yearGroups: []
+    };
+  }
+
+  const { data: periodRows, error: periodError } = await supabase
+    .from(TIMETABLE_PERIODS_TABLE)
+    .select("id,template_id,weekday,label,start_time,end_time,block_type,sort_order")
+    .in("id", periodIds);
+
+  if (periodError) {
+    throw new Error(periodError.message);
+  }
+
+  const periodLookup = new Map(
+    ((periodRows ?? []) as Array<Record<string, unknown>>)
+      .map(normalizeTimetablePeriod)
+      .map((period) => [period.id, period] as const)
+  );
+  const classSummaryByTimetableId = new Map(
+    classSummaries
+      .filter((entry) => entry.timetableId)
+      .map((entry) => [entry.timetableId as string, entry] as const)
+  );
+  const totalClassesByYearGroup = new Map<string, Set<string>>();
+
+  classSummaries.forEach((entry) => {
+    const current = totalClassesByYearGroup.get(entry.yearGroup) ?? new Set<string>();
+    current.add(entry.classCode);
+    totalClassesByYearGroup.set(entry.yearGroup, current);
+  });
+
+  const slotMap = new Map<
+    string,
+    SpecialistTimetableSlot & {
+      sortOrder: number;
+      coverageMap: Map<
+        string,
+        {
+          yearGroup: string;
+          classNames: Set<string>;
+          classCodes: Set<string>;
+          streamTypes: Set<TimetableStreamType>;
+        }
+      >;
+    }
+  >();
+
+  ((blockRows ?? []) as Array<Record<string, unknown>>).forEach((row) => {
+    const classSummary = classSummaryByTimetableId.get(String(row.class_timetable_id ?? ""));
+    const period = periodLookup.get(String(row.period_id ?? ""));
+
+    if (!classSummary || !period) {
+      return;
+    }
+
+    const blockType = normalizeTimetableBlockType(row.block_type ?? period.block_type);
+    const title =
+      (row.title ? String(row.title) : null) ??
+      defaultTitleForTimetableType({ blockType, periodLabel: period.label }) ??
+      period.label;
+    const startTime = row.start_time_override ? String(row.start_time_override) : period.start_time;
+    const endTime = row.end_time_override ? String(row.end_time_override) : period.end_time;
+    const slotKey = [
+      period.weekday,
+      startTime,
+      endTime,
+      blockType,
+      normalizeTimetableLookupKey(title)
+    ].join("|");
+
+    const existing = slotMap.get(slotKey);
+    const coverageEntry =
+      existing?.coverageMap.get(classSummary.yearGroup) ?? {
+        yearGroup: classSummary.yearGroup,
+        classNames: new Set<string>(),
+        classCodes: new Set<string>(),
+        streamTypes: new Set<TimetableStreamType>()
+      };
+
+    coverageEntry.classNames.add(classSummary.className);
+    coverageEntry.classCodes.add(classSummary.classCode);
+    if (classSummary.streamType) {
+      coverageEntry.streamTypes.add(classSummary.streamType);
+    }
+
+    if (existing) {
+      existing.coverageMap.set(classSummary.yearGroup, coverageEntry);
+      return;
+    }
+
+    const coverageMap = new Map<string, typeof coverageEntry>();
+    coverageMap.set(classSummary.yearGroup, coverageEntry);
+
+    slotMap.set(slotKey, {
+      id: String(row.id ?? slotKey),
+      weekday: period.weekday,
+      periodLabel: period.label,
+      startTime,
+      endTime,
+      title,
+      blockType,
+      color: resolveTimetableColor(
+        row.title ? String(row.title) : title,
+        row.color ? String(row.color) : null,
+        blockType
+      ),
+      notes: row.notes ? String(row.notes) : null,
+      coverages: [],
+      sortOrder: period.sort_order,
+      coverageMap
+    });
+  });
+
+  const slots = Array.from(slotMap.values())
+    .map((slot) => {
+      const coverages = Array.from(slot.coverageMap.values())
+        .sort(
+          (left, right) =>
+            timetableYearGroupOrderValue(left.yearGroup) - timetableYearGroupOrderValue(right.yearGroup)
+        )
+        .map((coverage): SpecialistTimetableCoverage => {
+          const classNames = Array.from(coverage.classNames).sort((left, right) =>
+            left.localeCompare(right, undefined, { numeric: true })
+          );
+          const classCodes = Array.from(coverage.classCodes).sort((left, right) =>
+            left.localeCompare(right, undefined, { numeric: true })
+          );
+          const streamTypes = Array.from(coverage.streamTypes).sort();
+          const totalClasses = totalClassesByYearGroup.get(coverage.yearGroup)?.size ?? classCodes.length;
+          const taughtClasses = classCodes.length;
+          const coverageLabel =
+            totalClasses <= 1 || taughtClasses >= totalClasses
+              ? "100% of year group"
+              : taughtClasses * 2 === totalClasses
+                ? "50% of year group"
+                : `${taughtClasses}/${totalClasses} classes`;
+
+          return {
+            yearGroup: coverage.yearGroup,
+            classNames,
+            classCodes,
+            streamTypes,
+            coverageLabel
+          };
+        });
+
+      return {
+        id: slot.id,
+        weekday: slot.weekday,
+        periodLabel: slot.periodLabel,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        title: slot.title,
+        blockType: slot.blockType,
+        color: slot.color,
+        notes: slot.notes,
+        coverages,
+        sortOrder: slot.sortOrder
+      };
+    })
+    .sort((left, right) => {
+      const daySort = weekdaySortValue(left.weekday) - weekdaySortValue(right.weekday);
+      if (daySort !== 0) {
+        return daySort;
+      }
+
+      if (left.startTime !== right.startTime) {
+        return left.startTime.localeCompare(right.startTime);
+      }
+
+      return left.sortOrder - right.sortOrder;
+    });
+
+  const yearGroups = Array.from(
+    new Set(slots.flatMap((slot) => slot.coverages.map((coverage) => coverage.yearGroup)))
+  ).sort((left, right) => timetableYearGroupOrderValue(left) - timetableYearGroupOrderValue(right));
+
+  const daySchedules = WEEKDAY_ORDER.map((weekday): SpecialistTimetableDay => ({
+    key: weekday,
+    label: weekday.charAt(0).toUpperCase() + weekday.slice(1),
+    slots: slots
+      .filter((slot) => slot.weekday === weekday)
+      .map(({ sortOrder: _sortOrder, ...slot }) => slot)
+  }));
+
+  return {
+    staffProfileId,
+    staffName: input.staffName ?? null,
+    daySchedules,
+    slotCount: slots.length,
+    yearGroups
   };
 }
 
