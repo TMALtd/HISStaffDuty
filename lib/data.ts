@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { randomUUID } from "node:crypto";
 import { getGradebookSectionDefinitions, mergeGradebookSectionDefinitions } from "@/lib/gradebook";
+import { resolveGradebookSectionSlug } from "@/lib/gradebook";
 import {
   type CreateTimetableClassInput,
   type UpdateTimetableClassInput,
@@ -5125,6 +5126,7 @@ export async function deleteSpecialistRegister(params: {
 type GradebookSubjectContext = {
   className?: string;
   staffProfile?: StaffProfile | null;
+  specialistSectionSlug?: string | null;
 };
 
 const SPECIALIST_STUDENT_PROFILE_ALIASES = ["Student Pastoral", "Learning Support", "PTMs"];
@@ -5173,6 +5175,56 @@ export function getMatchedSpecialistRoleAliases(staffProfile: StaffProfile | nul
 
 export function isSpecialistStaffProfile(staffProfile: StaffProfile | null | undefined) {
   return getMatchedSpecialistRoleAliases(staffProfile).length > 0;
+}
+
+export function getPrimarySpecialistSectionSlug(staffProfile: StaffProfile | null | undefined) {
+  const primaryAliases = getMatchedSpecialistRoleAliases(staffProfile)[0] ?? null;
+
+  if (!primaryAliases) {
+    return null;
+  }
+
+  if (primaryAliases.includes("mandarin")) {
+    return "mandarin";
+  }
+  if (primaryAliases.includes("bm") || primaryAliases.includes("bahasa melayu")) {
+    return "bm";
+  }
+  if (
+    primaryAliases.includes("p.e.") ||
+    primaryAliases.includes("pe") ||
+    primaryAliases.includes("physical education")
+  ) {
+    return "pe";
+  }
+  if (primaryAliases.includes("music")) {
+    return "music";
+  }
+  if (
+    primaryAliases.includes("steam") ||
+    primaryAliases.includes("coding") ||
+    primaryAliases.includes("steam / coding")
+  ) {
+    return "steam-coding";
+  }
+  if (primaryAliases.includes("eal")) {
+    return "eal";
+  }
+  if (primaryAliases.includes("maths support") || primaryAliases.includes("math support")) {
+    return "maths-support";
+  }
+  if (primaryAliases.includes("reading support") || primaryAliases.includes("remedial reading")) {
+    return "reading-support";
+  }
+  if (
+    primaryAliases.includes("sen") ||
+    primaryAliases.includes("senco") ||
+    primaryAliases.includes("learning support")
+  ) {
+    return "sen";
+  }
+
+  return null;
 }
 
 function inferGradebookClassContext(className: string | undefined, classOptions: StaffDirectoryClassOption[]) {
@@ -5346,6 +5398,18 @@ export async function getGradebookSubjects(
   );
 
   if (context.staffProfile && isSpecialistStaffProfile(context.staffProfile)) {
+    if (context.specialistSectionSlug) {
+      const forcedSpecialistSubjects = filtered.filter(
+        (subject) =>
+          resolveGradebookSectionSlug(subject) === context.specialistSectionSlug ||
+          subjectMatchesAliases(subject, SPECIALIST_STUDENT_PROFILE_ALIASES)
+      );
+
+      if (forcedSpecialistSubjects.length > 0) {
+        return forcedSpecialistSubjects;
+      }
+    }
+
     try {
       const specialistRegisters = await getSpecialistRegisters({
         staffProfileId: context.staffProfile.id

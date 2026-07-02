@@ -29,6 +29,7 @@ type GradebookWorkspaceProps = {
   previewEmail?: string | null;
   heroSettings?: PortalHeroSettings | null;
   isSpecialistView?: boolean;
+  specialistSectionSlug?: string | null;
 };
 
 type EntriesResponse = {
@@ -245,7 +246,8 @@ export function GradebookWorkspace({
   initialFilters,
   previewEmail,
   heroSettings,
-  isSpecialistView = false
+  isSpecialistView = false,
+  specialistSectionSlug = null
 }: GradebookWorkspaceProps) {
   const isAdminView = canManageAssignments || canManageSetup;
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilters);
@@ -432,6 +434,9 @@ export function GradebookWorkspace({
       if (previewEmail) {
         params.set("viewAs", previewEmail);
       }
+      if (specialistSectionSlug) {
+        params.set("specialistSectionSlug", specialistSectionSlug);
+      }
 
       const response = await fetch(`/api/gradebook/subjects?${params.toString()}`, {
         cache: "no-store"
@@ -456,6 +461,15 @@ export function GradebookWorkspace({
         }
 
         if (isSpecialistView) {
+          if (
+            specialistSectionSlug &&
+            workspaceSections.some(
+              (section) => section.slug === specialistSectionSlug && section.isConfigured
+            )
+          ) {
+            return specialistSectionSlug;
+          }
+
           const specialistAssessment =
             workspaceSections.find((section) => section.mode === "assessment" && section.isConfigured) ?? null;
           if (specialistAssessment) {
@@ -480,7 +494,7 @@ export function GradebookWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [activeFilters.className, isSpecialistView, previewEmail, sectionDefinitions]);
+  }, [activeFilters.className, isSpecialistView, previewEmail, sectionDefinitions, specialistSectionSlug]);
 
   useEffect(() => {
     if (!isAdminView) {

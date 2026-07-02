@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import {
+  getPrimarySpecialistSectionSlug,
   getPortalHeroSettings,
   getTimetablePreviewStaffOptions,
   isSpecialistStaffProfile
@@ -27,6 +28,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
   const heroSettings =
     (await getPortalHeroSettings()).find((setting) => setting.pageKey === "markbook") ?? null;
   const isSpecialistView = isSpecialistStaffProfile(preview.activeProfile);
+  const specialistSectionSlug = getPrimarySpecialistSectionSlug(preview.activeProfile);
   const activeClassName =
     !preview.activeAccess.isFullAccess && !isSpecialistView
       ? preview.activeProfile?.class || preview.activeProfile?.timetable || ""
@@ -74,6 +76,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         previewEmail={preview.previewEmail}
         heroSettings={heroSettings}
         isSpecialistView={isSpecialistView}
+        specialistSectionSlug={specialistSectionSlug}
         initialFilters={{
           school: toStringValue(searchParams.school),
           designation: toStringValue(searchParams.designation),

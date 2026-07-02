@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     const preview = await getAccessPreviewSession(session, previewEmail);
     const subjects = await getGradebookSubjects({
       className,
-      staffProfile: preview.activeProfile
+      staffProfile: preview.activeProfile,
+      specialistSectionSlug: url.searchParams.get("specialistSectionSlug")
     });
     return NextResponse.json({ subjects });
   } catch (error) {
