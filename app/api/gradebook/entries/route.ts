@@ -28,6 +28,7 @@ export async function GET(request: Request) {
   const assessmentName = url.searchParams.get("assessmentName") ?? "";
   const assessmentDate = url.searchParams.get("assessmentDate") ?? "";
   const registerId = url.searchParams.get("registerId");
+  const specialistSubjectId = url.searchParams.get("specialistSubjectId");
 
   if (!subjectId) {
     return NextResponse.json({ error: "subjectId is required." }, { status: 400 });
@@ -40,8 +41,16 @@ export async function GET(request: Request) {
       ? await getAccessPreviewSession(session, url.searchParams.get("viewAs"))
       : null;
     const subject = await getGradebookSubjectById(subjectId);
+    const specialistContextSubject =
+      specialistSubjectId && specialistSubjectId !== subjectId
+        ? await getGradebookSubjectById(specialistSubjectId)
+        : subject;
     const infoOnly = subject?.slug === "student-pastoral";
-    const usesSpecialistRegisters = Boolean(preview?.activeProfile && isSpecialistGradebookSubject(subject));
+    const specialistRegisterSubject =
+      isSpecialistGradebookSubject(subject) ? subject : specialistContextSubject;
+    const usesSpecialistRegisters = Boolean(
+      preview?.activeProfile && isSpecialistGradebookSubject(specialistRegisterSubject)
+    );
     let specialistRegisters: SpecialistRegister[] = [];
     let activeRegisterId: string | null = null;
     let students: StudentRow[] = [];
@@ -49,7 +58,7 @@ export async function GET(request: Request) {
     if (usesSpecialistRegisters && preview?.activeProfile) {
       specialistRegisters = await getSpecialistRegisters({
         staffProfileId: preview.activeProfile.id,
-        subjectId
+        subjectId: specialistRegisterSubject?.id ?? subjectId
       });
 
       const resolvedRegisterId =

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
-import { getPortalHeroSettings, getTimetablePreviewStaffOptions } from "@/lib/data";
+import {
+  getPortalHeroSettings,
+  getTimetablePreviewStaffOptions,
+  isSpecialistStaffProfile
+} from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -22,8 +26,9 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
   const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
   const heroSettings =
     (await getPortalHeroSettings()).find((setting) => setting.pageKey === "markbook") ?? null;
+  const isSpecialistView = isSpecialistStaffProfile(preview.activeProfile);
   const activeClassName =
-    !preview.activeAccess.isFullAccess
+    !preview.activeAccess.isFullAccess && !isSpecialistView
       ? preview.activeProfile?.class || preview.activeProfile?.timetable || ""
       : toStringValue(searchParams.className);
 
@@ -68,6 +73,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         canManageSetup={access.isFullAccess && !preview.isPreviewing}
         previewEmail={preview.previewEmail}
         heroSettings={heroSettings}
+        isSpecialistView={isSpecialistView}
         initialFilters={{
           school: toStringValue(searchParams.school),
           designation: toStringValue(searchParams.designation),

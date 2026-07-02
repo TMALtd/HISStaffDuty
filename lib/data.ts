@@ -5150,6 +5150,29 @@ function buildSpecialistRoleTokens(staffProfile: StaffProfile | null | undefined
   );
 }
 
+export function getMatchedSpecialistRoleAliases(staffProfile: StaffProfile | null | undefined) {
+  const specialistRoleTokens = buildSpecialistRoleTokens(staffProfile);
+  const specialistCategories = [
+    ["mandarin"],
+    ["bm", "bahasa melayu"],
+    ["p.e.", "pe", "physical education"],
+    ["music"],
+    ["steam", "coding", "steam / coding"],
+    ["eal"],
+    ["maths support", "math support"],
+    ["reading support", "remedial reading"],
+    ["sen", "senco", "learning support"]
+  ];
+
+  return specialistCategories.filter((aliases) =>
+    aliases.some((alias) => specialistRoleTokens.has(alias))
+  );
+}
+
+export function isSpecialistStaffProfile(staffProfile: StaffProfile | null | undefined) {
+  return getMatchedSpecialistRoleAliases(staffProfile).length > 0;
+}
+
 function inferGradebookClassContext(className: string | undefined, classOptions: StaffDirectoryClassOption[]) {
   if (!className) {
     return null;

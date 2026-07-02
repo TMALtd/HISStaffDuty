@@ -28,6 +28,7 @@ type GradebookWorkspaceProps = {
   initialFilters: FilterState;
   previewEmail?: string | null;
   heroSettings?: PortalHeroSettings | null;
+  isSpecialistView?: boolean;
 };
 
 type EntriesResponse = {
@@ -243,7 +244,8 @@ export function GradebookWorkspace({
   canManageSetup,
   initialFilters,
   previewEmail,
-  heroSettings
+  heroSettings,
+  isSpecialistView = false
 }: GradebookWorkspaceProps) {
   const isAdminView = canManageAssignments || canManageSetup;
   const [activeFilters, setActiveFilters] = useState<FilterState>(initialFilters);
@@ -274,6 +276,8 @@ export function GradebookWorkspace({
   const [specialistRegisters, setSpecialistRegisters] = useState<SpecialistRegister[]>([]);
   const [selectedRegisterId, setSelectedRegisterId] = useState("");
   const [usesSpecialistRegisters, setUsesSpecialistRegisters] = useState(false);
+  const [selectedSpecialistYearGroup, setSelectedSpecialistYearGroup] = useState("");
+  const [selectedSpecialistClass, setSelectedSpecialistClass] = useState("");
   const [collapsedTerms, setCollapsedTerms] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [assignmentSavingId, setAssignmentSavingId] = useState("");
@@ -322,6 +326,14 @@ export function GradebookWorkspace({
     [selectedSectionSlug, visibleSections]
   );
   const linkedSubject = selectedSection?.subject ?? null;
+  const specialistAssessmentSection = useMemo(
+    () =>
+      visibleSections.find(
+        (section) => section.mode === "assessment" && section.subject
+      ) ?? null,
+    [visibleSections]
+  );
+  const specialistSubjectForRegisters = specialistAssessmentSection?.subject ?? null;
   const classOptionLookup = useMemo(
     () => new Map(classOptions.map((option) => [option.className, option])),
     [classOptions]
@@ -330,8 +342,35 @@ export function GradebookWorkspace({
     () =>
       selectedStudentId
         ? students.filter((student) => student.school_id === selectedStudentId)
-        : students,
-    [selectedStudentId, students]
+        : students.filter((student) => {
+            if (selectedSpecialistYearGroup && student.year_group !== selectedSpecialistYearGroup) {
+              return false;
+            }
+            if (selectedSpecialistClass && student.class_name !== selectedSpecialistClass) {
+              return false;
+            }
+            return true;
+          }),
+    [selectedSpecialistClass, selectedSpecialistYearGroup, selectedStudentId, students]
+  );
+  const specialistYearGroupOptions = useMemo(
+    () =>
+      Array.from(new Set(students.map((student) => student.year_group).filter(Boolean))).sort((left, right) =>
+        left.localeCompare(right, undefined, { numeric: true })
+      ),
+    [students]
+  );
+  const specialistClassOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          students
+            .filter((student) => !selectedSpecialistYearGroup || student.year_group === selectedSpecialistYearGroup)
+            .map((student) => student.class_name)
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true })),
+    [selectedSpecialistYearGroup, students]
   );
   const assessmentsByTerm = useMemo(() => {
     const orderedTerms = terms.length ? terms : buildDefaultTerms();
@@ -416,6 +455,14 @@ export function GradebookWorkspace({
           return current;
         }
 
+        if (isSpecialistView) {
+          const specialistAssessment =
+            workspaceSections.find((section) => section.mode === "assessment" && section.isConfigured) ?? null;
+          if (specialistAssessment) {
+            return specialistAssessment.slug;
+          }
+        }
+
         return (
           workspaceSections.find((section) => section.isConfigured)?.slug ??
           workspaceSections[0]?.slug ??
@@ -433,7 +480,7 @@ export function GradebookWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [activeFilters.className, previewEmail, sectionDefinitions]);
+  }, [activeFilters.className, isSpecialistView, previewEmail, sectionDefinitions]);
 
   useEffect(() => {
     if (!isAdminView) {
@@ -491,6 +538,8 @@ export function GradebookWorkspace({
     setSpecialistRegisters([]);
     setSelectedRegisterId("");
     setUsesSpecialistRegisters(false);
+    setSelectedSpecialistYearGroup("");
+    setSelectedSpecialistClass("");
     setStatus("");
     setError("");
   }, [selectedSectionSlug]);
@@ -511,6 +560,9 @@ export function GradebookWorkspace({
       try {
         const params = new URLSearchParams(buildQueryString(activeFilters));
         params.set("subjectId", linkedSubject.id);
+        if (specialistSubjectForRegisters?.id) {
+          params.set("specialistSubjectId", specialistSubjectForRegisters.id);
+        }
         if (selectedRegisterId) {
           params.set("registerId", selectedRegisterId);
         }
@@ -544,6 +596,20 @@ export function GradebookWorkspace({
           }
           return "";
         });
+        setSelectedSpecialistYearGroup((current) => {
+          if (current && (json.students ?? []).some((student) => student.year_group === current)) {
+            return current;
+          }
+          if (json.activeRegisterId) {
+            const activeRegister =
+              (json.specialistRegisters ?? []).find((register) => register.id === json.activeRegisterId) ?? null;
+            return activeRegister?.year_group ?? "";
+          }
+          return (json.students ?? []).find((student) => student.year_group)?.year_group ?? "";
+        });
+        setSelectedSpecialistClass((current) =>
+          current && (json.students ?? []).some((student) => student.class_name === current) ? current : ""
+        );
         const nextTerms = (json.terms?.length ? json.terms : buildDefaultTerms()).slice().sort(
           (left, right) => left.sort_order - right.sort_order
         );
@@ -669,7 +735,8 @@ export function GradebookWorkspace({
     refreshToken,
     selectedRegisterId,
     selectedSection,
-    selectedStudentId
+    selectedStudentId,
+    specialistSubjectForRegisters
   ]);
 
   function updateDraft(studentId: string, field: keyof DraftRow, value: string) {
@@ -1901,9 +1968,11 @@ export function GradebookWorkspace({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <p className="eyebrow compact-eyebrow">Class Markbook</p>
+            <p className="eyebrow compact-eyebrow">{isSpecialistView ? "Specialist Markbook" : "Class Markbook"}</p>
             <h2 className="panel-title" style={{ marginBottom: 0 }}>
-              {activeFilters.className || "Whole-school markbook"}
+              {isSpecialistView
+                ? specialistSubjectForRegisters?.name || linkedSubject?.name || "Specialist markbook"
+                : activeFilters.className || "Whole-school markbook"}
             </h2>
           </div>
           <span className="hint">
@@ -2018,13 +2087,56 @@ export function GradebookWorkspace({
               value={selectedSection?.slug ?? ""}
               onChange={(event) => setSelectedSectionSlug(event.target.value)}
             >
-              {sections.map((section) => (
+              {visibleSections.map((section) => (
                 <option key={section.slug} value={section.slug}>
                   {section.name}
                 </option>
               ))}
             </select>
           </div>
+          {isSpecialistView ? (
+            <div className="field">
+              <label htmlFor="specialistYearGroupFilter">Year group</label>
+              <select
+                id="specialistYearGroupFilter"
+                value={selectedSpecialistYearGroup}
+                onChange={(event) => {
+                  setSelectedStudentId("");
+                  setSelectedSpecialistYearGroup(event.target.value);
+                  setSelectedSpecialistClass("");
+                }}
+                disabled={!students.length}
+              >
+                <option value="">All year groups</option>
+                {specialistYearGroupOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {isSpecialistView ? (
+            <div className="field">
+              <label htmlFor="specialistClassFilter">Class</label>
+              <select
+                id="specialistClassFilter"
+                value={selectedSpecialistClass}
+                onChange={(event) => {
+                  setSelectedStudentId("");
+                  setSelectedSpecialistClass(event.target.value);
+                }}
+                disabled={!students.length}
+              >
+                <option value="">All classes</option>
+                {specialistClassOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {usesSpecialistRegisters ? (
             <div className="field">
               <label htmlFor="specialistRegisterFilter">Specialist register</label>
@@ -2054,8 +2166,8 @@ export function GradebookWorkspace({
               onChange={(event) => setSelectedStudentId(event.target.value)}
               disabled={!linkedSubject}
             >
-              <option value="">Whole class</option>
-              {students.map((student) => (
+              <option value="">{isSpecialistView ? "Whole register" : "Whole class"}</option>
+              {filteredStudents.map((student) => (
                 <option key={student.school_id} value={student.school_id}>
                   {student.full_name}
                 </option>
@@ -2197,7 +2309,11 @@ export function GradebookWorkspace({
         </div>
         <div className="actions">
           <span className="hint">
-            Active class filter: {activeFilters.className || "All classes"}
+            {isSpecialistView
+              ? `Year group: ${selectedSpecialistYearGroup || "All year groups"} | Class: ${
+                  selectedSpecialistClass || "All classes"
+                }`
+              : `Active class filter: ${activeFilters.className || "All classes"}`}
             {selectedSection ? ` | Section: ${selectedSection.name}` : ""}
             {usesSpecialistRegisters
               ? ` | Register: ${
@@ -2262,7 +2378,7 @@ export function GradebookWorkspace({
               {renderProfileCards()}
               {!students.length && !isLoading ? (
                 <div className="empty-state">
-                  No students match the current filters. Choose a different class or return to the
+                  No students match the current filters. Choose a different filter or return to the
                   filter page first.
                 </div>
               ) : null}
