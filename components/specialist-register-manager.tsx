@@ -10,6 +10,8 @@ import type {
 
 type SpecialistRegisterManagerProps = {
   previewEmail?: string | null;
+  initialYearGroup?: string | null;
+  initialSubjectId?: string | null;
 };
 
 type SubjectsResponse = {
@@ -38,15 +40,19 @@ function buildApiPath(path: string, previewEmail?: string | null) {
   return `${path}${separator}viewAs=${encodeURIComponent(previewEmail)}`;
 }
 
-export function SpecialistRegisterManager({ previewEmail = null }: SpecialistRegisterManagerProps) {
+export function SpecialistRegisterManager({
+  previewEmail = null,
+  initialYearGroup = null,
+  initialSubjectId = null
+}: SpecialistRegisterManagerProps) {
   const [subjects, setSubjects] = useState<GradebookSubject[]>([]);
   const [allStudents, setAllStudents] = useState<StudentRow[]>([]);
   const [registers, setRegisters] = useState<SpecialistRegister[]>([]);
   const [selectedRegisterId, setSelectedRegisterId] = useState("");
   const [registerName, setRegisterName] = useState("");
   const [registerDescription, setRegisterDescription] = useState("");
-  const [selectedSubjectId, setSelectedSubjectId] = useState("");
-  const [selectedYearGroup, setSelectedYearGroup] = useState("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState(initialSubjectId ?? "");
+  const [selectedYearGroup, setSelectedYearGroup] = useState(initialYearGroup ?? "");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -93,6 +99,39 @@ export function SpecialistRegisterManager({ previewEmail = null }: SpecialistReg
     () => registers.find((register) => register.id === selectedRegisterId) ?? null,
     [registers, selectedRegisterId]
   );
+
+  const selectedYearGroupStudents = useMemo(
+    () =>
+      allStudents
+        .filter((student) => !selectedYearGroup || student.year_group === selectedYearGroup)
+        .sort(
+          (left, right) =>
+            left.class_name.localeCompare(right.class_name, undefined, { numeric: true }) ||
+            left.full_name.localeCompare(right.full_name, undefined, { numeric: true })
+        ),
+    [allStudents, selectedYearGroup]
+  );
+
+  const selectedVisibleCount = useMemo(
+    () => visibleStudents.filter((student) => selectedStudentIds.includes(student.school_id)).length,
+    [selectedStudentIds, visibleStudents]
+  );
+
+  const yearGroupClassBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    selectedYearGroupStudents.forEach((student) => {
+      const className = student.class_name || "Unassigned";
+      counts.set(className, (counts.get(className) ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .map(([className, count]) => ({ className, count }))
+      .sort(
+        (left, right) =>
+          right.count - left.count ||
+          left.className.localeCompare(right.className, undefined, { numeric: true })
+      );
+  }, [selectedYearGroupStudents]);
 
   async function loadSubjects() {
     const response = await fetch(buildApiPath("/api/gradebook/subjects", previewEmail), {
@@ -440,6 +479,32 @@ export function SpecialistRegisterManager({ previewEmail = null }: SpecialistReg
             </button>
           </div>
         </div>
+        {selectedYearGroup ? (
+          <div className="mini-stats specialist-pool-stats">
+            <article className="stat-card">
+              <p className="stat-label">Year group students</p>
+              <p className="mini-value">{selectedYearGroupStudents.length}</p>
+            </article>
+            <article className="stat-card">
+              <p className="stat-label">Visible in filter</p>
+              <p className="mini-value">{visibleStudents.length}</p>
+            </article>
+            <article className="stat-card">
+              <p className="stat-label">Selected now</p>
+              <p className="mini-value">{selectedVisibleCount}</p>
+            </article>
+          </div>
+        ) : null}
+        {selectedYearGroup && yearGroupClassBreakdown.length > 0 ? (
+          <div className="breakdown-list specialist-class-breakdown">
+            {yearGroupClassBreakdown.map((entry) => (
+              <div className="breakdown-row" key={`${selectedYearGroup}-${entry.className}`}>
+                <span>{entry.className}</span>
+                <strong>{entry.count}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="field">
           <label htmlFor="specialistStudentSearch">Search students</label>
           <input

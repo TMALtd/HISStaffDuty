@@ -8,6 +8,8 @@ import { SpecialistRegisterManager } from "@/components/specialist-register-mana
 type SpecialistRegistersPageProps = {
   searchParams?: {
     viewAs?: string;
+    yearGroup?: string;
+    subjectId?: string;
   };
 };
 
@@ -38,7 +40,11 @@ export default async function SpecialistRegistersPage({ searchParams }: Speciali
         <SignOutButton />
       </section>
       <PortalNav allowedViews={preview.activeAccess.allowedViews} />
-      <SpecialistRegisterManager previewEmail={preview.previewEmail} />
+      <SpecialistRegisterManager
+        previewEmail={preview.previewEmail}
+        initialYearGroup={searchParams?.yearGroup ?? null}
+        initialSubjectId={searchParams?.subjectId ?? null}
+      />
     </main>
   );
 }

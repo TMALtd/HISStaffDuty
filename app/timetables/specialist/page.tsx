@@ -26,6 +26,9 @@ export default async function SpecialistTimetablePage({ searchParams }: Speciali
   const backHref = preview.previewEmail
     ? `/timetables?viewAs=${encodeURIComponent(preview.previewEmail)}`
     : "/timetables";
+  const registerBaseHref = preview.previewEmail
+    ? `/gradebook/registers?viewAs=${encodeURIComponent(preview.previewEmail)}`
+    : "/gradebook/registers";
 
   return (
     <main className="page-shell">
@@ -45,7 +48,7 @@ export default async function SpecialistTimetablePage({ searchParams }: Speciali
         <SignOutButton />
       </section>
       <PortalNav allowedViews={preview.activeAccess.allowedViews} />
-      <SpecialistTimetableView data={schedule} backHref={backHref} />
+      <SpecialistTimetableView data={schedule} backHref={backHref} registerBaseHref={registerBaseHref} />
     </main>
   );
 }

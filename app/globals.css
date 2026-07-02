@@ -920,6 +920,18 @@ tr:last-child td {
   margin: 0;
 }
 
+.specialist-coverage-actions {
+  margin-top: 6px;
+}
+
+.specialist-pool-stats {
+  margin: 16px 0;
+}
+
+.specialist-class-breakdown {
+  margin-bottom: 16px;
+}
+
 .breakdown-pie-shell {
   display: flex;
   align-items: center;

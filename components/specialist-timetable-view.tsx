@@ -4,9 +4,15 @@ import type { SpecialistTimetableViewData } from "@/lib/types";
 type SpecialistTimetableViewProps = {
   data: SpecialistTimetableViewData;
   backHref: string;
+  registerBaseHref: string;
 };
 
-export function SpecialistTimetableView({ data, backHref }: SpecialistTimetableViewProps) {
+function buildRegisterHref(registerBaseHref: string, yearGroup: string) {
+  const separator = registerBaseHref.includes("?") ? "&" : "?";
+  return `${registerBaseHref}${separator}yearGroup=${encodeURIComponent(yearGroup)}`;
+}
+
+export function SpecialistTimetableView({ data, backHref, registerBaseHref }: SpecialistTimetableViewProps) {
   return (
     <section className="dashboard-grid">
       <section className="hero-card">
@@ -68,6 +74,14 @@ export function SpecialistTimetableView({ data, backHref }: SpecialistTimetableV
                           <strong>{coverage.yearGroup}</strong>
                           <span>{coverage.coverageLabel}</span>
                           <p>{coverage.classNames.join(", ")}</p>
+                          <div className="actions specialist-coverage-actions">
+                            <Link
+                              className="button secondary"
+                              href={buildRegisterHref(registerBaseHref, coverage.yearGroup)}
+                            >
+                              Open Student List
+                            </Link>
+                          </div>
                         </div>
                       ))}
                     </div>
