@@ -5398,10 +5398,13 @@ export async function getGradebookSubjects(
   );
 
   if (context.staffProfile && isSpecialistStaffProfile(context.staffProfile)) {
-    if (context.specialistSectionSlug) {
+    const resolvedSpecialistSectionSlug =
+      context.specialistSectionSlug ?? getPrimarySpecialistSectionSlug(context.staffProfile);
+
+    if (resolvedSpecialistSectionSlug) {
       const forcedSpecialistSubjects = filtered.filter(
         (subject) =>
-          resolveGradebookSectionSlug(subject) === context.specialistSectionSlug ||
+          resolveGradebookSectionSlug(subject) === resolvedSpecialistSectionSlug ||
           subjectMatchesAliases(subject, SPECIALIST_STUDENT_PROFILE_ALIASES)
       );
 

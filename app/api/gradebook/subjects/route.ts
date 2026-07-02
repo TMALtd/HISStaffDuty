@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { createGradebookSubject, getGradebookSubjects } from "@/lib/data";
+import {
+  createGradebookSubject,
+  getGradebookSubjects,
+  getPrimarySpecialistSectionSlug
+} from "@/lib/data";
 import { getAccessPreviewSession, getCurrentUserOrNull, requirePortalAccess } from "@/lib/auth";
 
 export async function GET(request: Request) {
@@ -12,7 +16,8 @@ export async function GET(request: Request) {
     const subjects = await getGradebookSubjects({
       className,
       staffProfile: preview.activeProfile,
-      specialistSectionSlug: url.searchParams.get("specialistSectionSlug")
+      specialistSectionSlug:
+        url.searchParams.get("specialistSectionSlug") ?? getPrimarySpecialistSectionSlug(preview.activeProfile)
     });
     return NextResponse.json({ subjects });
   } catch (error) {
