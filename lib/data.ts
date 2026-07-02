@@ -4621,6 +4621,42 @@ export async function getSpecialistRegisterDetail(params: {
   };
 }
 
+const SPECIALIST_SUBJECT_SLUGS = new Set([
+  "mandarin",
+  "bm",
+  "pe",
+  "music",
+  "steam-coding",
+  "eal",
+  "maths-support",
+  "reading-support",
+  "sen"
+]);
+
+export function isSpecialistGradebookSubject(subject: Pick<GradebookSubject, "slug" | "name"> | null | undefined) {
+  if (!subject) {
+    return false;
+  }
+
+  const slug = normalizeTimetableLookupKey(subject.slug);
+  const name = normalizeTimetableLookupKey(subject.name);
+
+  return (
+    SPECIALIST_SUBJECT_SLUGS.has(slug) ||
+    name === "mandarin" ||
+    name === "bm" ||
+    name === "p.e." ||
+    name === "pe" ||
+    name === "music" ||
+    name.includes("steam") ||
+    name.includes("coding") ||
+    name === "eal" ||
+    name.includes("maths support") ||
+    name.includes("reading support") ||
+    name === "sen"
+  );
+}
+
 export async function createSpecialistRegister(input: {
   staffProfileId: string;
   subjectId: string;

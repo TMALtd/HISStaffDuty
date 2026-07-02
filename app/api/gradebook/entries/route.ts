@@ -6,13 +6,16 @@ import {
   getGradebookTerms,
   getGradebookEntries,
   getGradebookFieldDefinitions,
+  getSpecialistRegisterDetail,
+  getSpecialistRegisters,
   getStaffDirectoryClassOptions,
   getStudents,
+  isSpecialistGradebookSubject,
   upsertGradebookEntry
 } from "@/lib/data";
 import { getAccessPreviewSession, getCurrentStaffAccessOrNull, getCurrentUserOrNull } from "@/lib/auth";
 import { filterStudentsForAccess } from "@/lib/access";
-import { toQueryFilters } from "@/lib/types";
+import { toQueryFilters, type SpecialistRegister, type StudentRow } from "@/lib/types";
 
 export async function GET(request: Request) {
   const user = await getCurrentUserOrNull();
@@ -24,6 +27,7 @@ export async function GET(request: Request) {
   const subjectId = url.searchParams.get("subjectId");
   const assessmentName = url.searchParams.get("assessmentName") ?? "";
   const assessmentDate = url.searchParams.get("assessmentDate") ?? "";
+  const registerId = url.searchParams.get("registerId");
 
   if (!subjectId) {
     return NextResponse.json({ error: "subjectId is required." }, { status: 400 });
@@ -37,7 +41,58 @@ export async function GET(request: Request) {
       : null;
     const subject = await getGradebookSubjectById(subjectId);
     const infoOnly = subject?.slug === "student-pastoral";
-    const students = preview ? filterStudentsForAccess(await getStudents(filters), preview.activeAccess) : await getStudents(filters);
+    const usesSpecialistRegisters = Boolean(preview?.activeProfile && isSpecialistGradebookSubject(subject));
+    let specialistRegisters: SpecialistRegister[] = [];
+    let activeRegisterId: string | null = null;
+    let students: StudentRow[] = [];
+
+    if (usesSpecialistRegisters && preview?.activeProfile) {
+      specialistRegisters = await getSpecialistRegisters({
+        staffProfileId: preview.activeProfile.id,
+        subjectId
+      });
+
+      const resolvedRegisterId =
+        (registerId && specialistRegisters.some((register) => register.id === registerId) ? registerId : null) ??
+        specialistRegisters[0]?.id ??
+        null;
+
+      if (resolvedRegisterId) {
+        const detail = await getSpecialistRegisterDetail({
+          registerId: resolvedRegisterId,
+          staffProfileId: preview.activeProfile.id
+        });
+
+        if (detail) {
+          const registerStudentIds = detail.students.map((student) => student.student_school_id);
+          const registerStudentOrder = new Map(
+            detail.students.map((student, index) => [student.student_school_id, index])
+          );
+          const specialistFilters = {
+            ...filters,
+            className: "",
+            yearGroup: detail.register.year_group
+          };
+          const studentPool = preview
+            ? filterStudentsForAccess(await getStudents(specialistFilters), preview.activeAccess)
+            : await getStudents(specialistFilters);
+
+          students = studentPool
+            .filter((student) => registerStudentIds.includes(student.school_id))
+            .sort(
+              (left, right) =>
+                (registerStudentOrder.get(left.school_id) ?? 0) - (registerStudentOrder.get(right.school_id) ?? 0)
+            );
+          activeRegisterId = resolvedRegisterId;
+        } else {
+          students = [];
+        }
+      } else {
+        students = [];
+      }
+    } else {
+      students = preview ? filterStudentsForAccess(await getStudents(filters), preview.activeAccess) : await getStudents(filters);
+    }
     const fields = await getGradebookFieldDefinitions(subjectId);
     const [entries, classOptions, assessments, terms] = await Promise.all([
       getGradebookEntries({
@@ -52,7 +107,18 @@ export async function GET(request: Request) {
       getGradebookTerms()
     ]);
 
-    return NextResponse.json({ students, fields, entries, subject, classOptions, assessments, terms });
+    return NextResponse.json({
+      students,
+      fields,
+      entries,
+      subject,
+      classOptions,
+      assessments,
+      terms,
+      specialistRegisters,
+      activeRegisterId,
+      usesSpecialistRegisters: usesSpecialistRegisters && specialistRegisters.length > 0
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to load gradebook entries." },
