@@ -5127,6 +5127,8 @@ type GradebookSubjectContext = {
   staffProfile?: StaffProfile | null;
 };
 
+const SPECIALIST_STUDENT_PROFILE_ALIASES = ["Student Pastoral", "Learning Support", "PTMs"];
+
 function buildSubjectRuleTokens(subject: GradebookSubject) {
   return buildTimetableLookupKeys(subject.name).concat(buildTimetableLookupKeys(subject.slug));
 }
@@ -5342,6 +5344,29 @@ export async function getGradebookSubjects(
   const filtered = subjects.filter((subject) =>
     className ? !subject.class_name || subject.class_name === className : !subject.class_name
   );
+
+  if (context.staffProfile && isSpecialistStaffProfile(context.staffProfile)) {
+    try {
+      const specialistRegisters = await getSpecialistRegisters({
+        staffProfileId: context.staffProfile.id
+      });
+      const specialistSubjectIds = new Set(specialistRegisters.map((register) => register.subject_id));
+
+      if (specialistSubjectIds.size > 0) {
+        const specialistScopedSubjects = filtered.filter(
+          (subject) =>
+            specialistSubjectIds.has(subject.id) ||
+            subjectMatchesAliases(subject, SPECIALIST_STUDENT_PROFILE_ALIASES)
+        );
+
+        if (specialistScopedSubjects.length > 0) {
+          return specialistScopedSubjects;
+        }
+      }
+    } catch {
+      // Fall back to role-based matching if specialist register tables are unavailable.
+    }
+  }
 
   if (!className) {
     return filtered.filter((subject) => shouldIncludeGradebookSubject(subject, null, context.staffProfile));
