@@ -279,6 +279,10 @@ export function GradebookWorkspace({
     () => buildGradebookWorkspaceSections(subjects, sectionDefinitions),
     [sectionDefinitions, subjects]
   );
+  const visibleSections = useMemo(
+    () => (isAdminView ? sections : sections.filter((section) => section.isConfigured)),
+    [isAdminView, sections]
+  );
   const sectionGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -286,11 +290,11 @@ export function GradebookWorkspace({
         key: string;
         label: string;
         order: number;
-        sections: typeof sections;
+        sections: typeof visibleSections;
       }
     >();
 
-    for (const section of sections) {
+    for (const section of visibleSections) {
       const current =
         groups.get(section.groupKey) ??
         {
@@ -304,10 +308,11 @@ export function GradebookWorkspace({
     }
 
     return Array.from(groups.values()).sort((left, right) => left.order - right.order);
-  }, [sections]);
+  }, [visibleSections]);
   const selectedSection = useMemo(
-    () => sections.find((section) => section.slug === selectedSectionSlug) ?? sections[0] ?? null,
-    [sections, selectedSectionSlug]
+    () =>
+      visibleSections.find((section) => section.slug === selectedSectionSlug) ?? visibleSections[0] ?? null,
+    [selectedSectionSlug, visibleSections]
   );
   const linkedSubject = selectedSection?.subject ?? null;
   const classOptionLookup = useMemo(
@@ -1326,7 +1331,9 @@ export function GradebookWorkspace({
                 <h3 className="gradebook-section-group-title">{group.label}</h3>
               </div>
               <span className="hint">
-                {group.sections.filter((section) => section.isConfigured).length} of {group.sections.length} ready
+                {isAdminView
+                  ? `${group.sections.filter((section) => section.isConfigured).length} of ${group.sections.length} ready`
+                  : `${group.sections.length} sections`}
               </span>
             </summary>
             <div className="gradebook-section-group-body">
@@ -1341,7 +1348,7 @@ export function GradebookWorkspace({
                     <div className="gradebook-section-card-top">
                       <p className="eyebrow compact-eyebrow">{group.label}</p>
                       <span className={`gradebook-section-status ${section.isConfigured ? "ready" : "pending"}`}>
-                        {section.isConfigured ? "Ready" : "To build"}
+                        {isAdminView ? (section.isConfigured ? "Ready" : "To build") : "Ready"}
                       </span>
                     </div>
                     <h3 className="gradebook-section-name">{section.name}</h3>
@@ -1875,7 +1882,9 @@ export function GradebookWorkspace({
             </h2>
           </div>
           <span className="hint">
-            {sections.filter((section) => section.isConfigured).length} of {sections.length} sections configured
+            {isAdminView
+              ? `${sections.filter((section) => section.isConfigured).length} of ${sections.length} sections configured`
+              : `${visibleSections.length} sections available`}
           </span>
         </div>
         {renderSectionCards()}
