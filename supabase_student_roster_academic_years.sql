@@ -81,7 +81,10 @@ end $$;
 create unique index if not exists student_class_assignments_year_student_idx
   on public.student_class_assignments (student_school_id, academic_year_label);
 
-create or replace view public.student_class_roster_legacy as
+drop view if exists public.student_class_roster;
+drop view if exists public.student_class_roster_legacy;
+
+create view public.student_class_roster_legacy as
 select
   c."Class Code" as class_code,
   c."Class Name" as class_name,
@@ -90,7 +93,7 @@ select
   c."Year Group" as year_group,
   c."Milepost" as milepost,
   c."Level" as level,
-  t."School Id" as school_id,
+  t."School Id"::text as school_id,
   t."Full Name" as full_name,
   null::text as surname,
   null::text as first_name,
@@ -104,7 +107,7 @@ from public."Term 3 Data" t
 join public."Class List" c
   on c."Class Name" = t."Form";
 
-create or replace view public.student_class_roster as
+create view public.student_class_roster as
 with active_year as (
   select id
   from public.student_academic_years
