@@ -84,15 +84,15 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
         <section className="panel specialist-launch-panel">
           <div>
             <p className="eyebrow">Specialist teachers</p>
-            <h2 className="panel-title">Open the year-group teaching schedule</h2>
+            <h2 className="panel-title">View the specialist teaching timetable</h2>
             <p className="hero-copy specialist-launch-copy">
-              Use the specialist timetable view to see which year group this teacher is covering in each block,
-              alongside the class coverage within that slot.
+              See which year group this teacher is teaching in each lesson block, along with the
+              classes they are covering during that time.
             </p>
           </div>
           <div className="actions">
             <Link className="button" href={specialistScheduleHref}>
-              Open Teaching Schedule
+              Open Specialist Timetable
             </Link>
           </div>
         </section>
