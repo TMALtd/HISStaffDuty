@@ -1865,20 +1865,31 @@ async function getStudentClassAssignmentRows(
     data = (v2Result.data ?? []) as Array<Record<string, unknown>>;
   }
 
-  return data
-    .map((row) => ({
+  const rows = data.map((row) => ({
       student_school_id: String(row.student_school_id ?? "").trim(),
       class_name: String(row.class_name ?? "").trim(),
       class_code: row.class_code ? String(row.class_code).trim() : null,
       academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() : null
-    }))
-    .filter((row) => {
-      if (!academicYearLabel) {
-        return row.academic_year_label === null;
-      }
+    }));
 
-      return row.academic_year_label === academicYearLabel;
-    });
+  if (!academicYearLabel) {
+    return rows.filter((row) => row.academic_year_label === null);
+  }
+
+  const scopedRows = rows.filter(
+    (row) => row.academic_year_label === academicYearLabel || row.academic_year_label === null
+  );
+  const preferredRows = new Map<string, StudentClassAssignmentRow>();
+
+  for (const row of scopedRows) {
+    const existing = preferredRows.get(row.student_school_id) ?? null;
+
+    if (!existing || (existing.academic_year_label === null && row.academic_year_label === academicYearLabel)) {
+      preferredRows.set(row.student_school_id, row);
+    }
+  }
+
+  return Array.from(preferredRows.values());
 }
 
 async function getStudentProfileOverrideRows(
@@ -1926,8 +1937,7 @@ async function getStudentProfileOverrideRows(
     data = (v2Result.data ?? []) as Array<Record<string, unknown>>;
   }
 
-  return data
-    .map((row) => ({
+  const rows = data.map((row) => ({
       student_school_id: String(row.student_school_id ?? "").trim(),
       academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() || null : null,
       school: row.school ? String(row.school).trim() : null,
@@ -1945,14 +1955,26 @@ async function getStudentProfileOverrideRows(
       year_code: row.year_code ? String(row.year_code).trim() : null,
       tutor: row.tutor ? String(row.tutor).trim() : null,
       academic_house: row.academic_house ? String(row.academic_house).trim() : null
-    }))
-    .filter((row) => {
-      if (!academicYearLabel) {
-        return row.academic_year_label === null;
-      }
+    }));
 
-      return row.academic_year_label === academicYearLabel;
-    });
+  if (!academicYearLabel) {
+    return rows.filter((row) => row.academic_year_label === null);
+  }
+
+  const scopedRows = rows.filter(
+    (row) => row.academic_year_label === academicYearLabel || row.academic_year_label === null
+  );
+  const preferredRows = new Map<string, StudentProfileOverrideRow>();
+
+  for (const row of scopedRows) {
+    const existing = preferredRows.get(row.student_school_id) ?? null;
+
+    if (!existing || (existing.academic_year_label === null && row.academic_year_label === academicYearLabel)) {
+      preferredRows.set(row.student_school_id, row);
+    }
+  }
+
+  return Array.from(preferredRows.values());
 }
 
 function buildStudentClassMetadataLookup(
