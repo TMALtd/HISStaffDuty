@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import {
   getPortalHeroSettings,
   getStudentAcademicYears,
+  getStudentRosterClassOptions,
   getTimetablePreviewStaffOptions
 } from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
@@ -19,8 +20,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const session = await requirePortalAccess("student-filter");
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
-  const [academicYears, previewOptions] = await Promise.all([
+  const [academicYears, classOptions, previewOptions] = await Promise.all([
     access.isFullAccess && !preview.isPreviewing ? getStudentAcademicYears() : Promise.resolve([]),
+    access.isFullAccess && !preview.isPreviewing ? getStudentRosterClassOptions() : Promise.resolve([]),
     access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([])
   ]);
   const heroSettings =
@@ -59,6 +61,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <StaffDashboard
         canManageRosterYears={access.isFullAccess && !preview.isPreviewing}
         academicYears={academicYears}
+        classOptions={classOptions}
         previewEmail={preview.previewEmail}
       />
     </main>

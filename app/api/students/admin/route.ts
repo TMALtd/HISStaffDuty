@@ -6,7 +6,9 @@ import {
   getStudentRosterClassOptions,
   importStudentRosterClassCsv,
   setActiveStudentAcademicYear,
-  upsertStudentAcademicYear
+  upsertStudentAcademicYear,
+  upsertStudentClassAssignment,
+  upsertStudentProfileOverride
 } from "@/lib/data";
 
 export async function GET() {
@@ -94,6 +96,66 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to update student roster setup." },
+      { status: 400 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  const session = await getCurrentStaffAccessOrNull();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!session.access.isFullAccess) {
+    return NextResponse.json({ error: "Only admins can update student details." }, { status: 403 });
+  }
+
+  try {
+    const body = await request.json();
+    const action = String(body.action ?? "");
+
+    if (action !== "update-student") {
+      return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+    }
+
+    await upsertStudentClassAssignment(
+      {
+        studentSchoolId: body.studentSchoolId,
+        className: body.className ?? null,
+        classCode: body.classCode ?? null
+      },
+      session.user.email ?? null
+    );
+
+    await upsertStudentProfileOverride(
+      {
+        studentSchoolId: body.studentSchoolId,
+        academicYearLabel: body.academicYearLabel ?? undefined,
+        school: body.school ?? null,
+        designation: body.designation ?? null,
+        yearGroup: body.yearGroup ?? null,
+        milepost: body.milepost ?? null,
+        level: body.level ?? null,
+        fullName: body.fullName ?? null,
+        surname: body.surname ?? null,
+        firstName: body.firstName ?? null,
+        preferredName: body.preferredName ?? null,
+        gender: body.gender ?? null,
+        nationality: body.nationality ?? null,
+        form: body.form ?? null,
+        yearCode: body.yearCode ?? null,
+        tutor: body.tutor ?? null,
+        academicHouse: body.academicHouse ?? null
+      },
+      session.user.email ?? null
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to update student details." },
       { status: 400 }
     );
   }

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   EMPTY_FILTERS,
   FILTER_FIELDS,
+  type StaffDirectoryClassOption,
   type FilterOptions,
   type FilterState,
   type StudentAcademicYear,
@@ -180,22 +181,48 @@ function BreakdownPie({
 type StaffDashboardProps = {
   canManageRosterYears?: boolean;
   academicYears?: StudentAcademicYear[];
+  classOptions?: StaffDirectoryClassOption[];
   previewEmail?: string | null;
+};
+
+type StudentEditorDraft = {
+  school: string;
+  designation: string;
+  year_group: string;
+  milepost: string;
+  level: string;
+  class_name: string;
+  full_name: string;
+  surname: string;
+  first_name: string;
+  preferred_name: string;
+  gender: string;
+  nationality: string;
+  form: string;
+  year_code: string;
+  tutor: string;
+  academic_house: string;
 };
 
 export function StaffDashboard({
   canManageRosterYears = false,
   academicYears = [],
+  classOptions = [],
   previewEmail = null
 }: StaffDashboardProps) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [options, setOptions] = useState<FilterOptions>(createEmptyOptions());
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [academicYear, setAcademicYear] = useState(
     canManageRosterYears ? academicYears.find((year) => year.is_active)?.label ?? "" : ""
   );
+  const [editingStudentId, setEditingStudentId] = useState("");
+  const [editorDraft, setEditorDraft] = useState<StudentEditorDraft | null>(null);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -256,7 +283,7 @@ export function StaffDashboard({
     return () => {
       isMounted = false;
     };
-  }, [filters, academicYear, canManageRosterYears, previewEmail]);
+  }, [filters, academicYear, canManageRosterYears, previewEmail, refreshToken]);
 
   function updateFilter(field: keyof FilterState, value: string) {
     setFilters((current) => {
@@ -273,6 +300,93 @@ export function StaffDashboard({
 
   function clearFilters() {
     setFilters(EMPTY_FILTERS);
+  }
+
+  function openStudentEditor(student: StudentRow) {
+    setEditingStudentId(student.school_id);
+    setEditorDraft({
+      school: student.school,
+      designation: student.designation,
+      year_group: student.year_group,
+      milepost: student.milepost,
+      level: student.level,
+      class_name: student.class_name,
+      full_name: student.full_name,
+      surname: student.surname ?? "",
+      first_name: student.first_name ?? "",
+      preferred_name: student.preferred_name ?? "",
+      gender: student.gender ?? "",
+      nationality: student.nationality ?? "",
+      form: student.form,
+      year_code: student.year_code ?? "",
+      tutor: student.tutor ?? "",
+      academic_house: student.academic_house ?? ""
+    });
+    setError("");
+    setStatus("");
+  }
+
+  function closeStudentEditor() {
+    setEditingStudentId("");
+    setEditorDraft(null);
+    setIsSavingStudent(false);
+  }
+
+  async function saveStudentEditor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingStudentId || !editorDraft) {
+      return;
+    }
+
+    const selectedClassOption =
+      classOptions.find((option) => option.className === editorDraft.class_name) ?? null;
+
+    setIsSavingStudent(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/students/admin", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "update-student",
+          academicYearLabel: canManageRosterYears ? academicYear || null : null,
+          studentSchoolId: editingStudentId,
+          className: editorDraft.class_name,
+          classCode: selectedClassOption?.classCode ?? null,
+          school: editorDraft.school,
+          designation: editorDraft.designation,
+          yearGroup: editorDraft.year_group,
+          milepost: editorDraft.milepost,
+          level: editorDraft.level,
+          fullName: editorDraft.full_name,
+          surname: editorDraft.surname,
+          firstName: editorDraft.first_name,
+          preferredName: editorDraft.preferred_name,
+          gender: editorDraft.gender,
+          nationality: editorDraft.nationality,
+          form: editorDraft.form,
+          yearCode: editorDraft.year_code,
+          tutor: editorDraft.tutor,
+          academicHouse: editorDraft.academic_house
+        })
+      });
+
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not update student details.");
+      }
+
+      setStatus("Student details updated.");
+      closeStudentEditor();
+      setRefreshToken((current) => current + 1);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not update student details.");
+    } finally {
+      setIsSavingStudent(false);
+    }
   }
 
   const selectedCount = Object.values(filters).filter(Boolean).length;
@@ -419,10 +533,13 @@ export function StaffDashboard({
           <Link className="button" href={gradebookHref}>
             Enter Markbook
           </Link>
-          <Link className="button secondary" href="/admin/gradebook">
-            Markbook Setup
-          </Link>
+          {canManageRosterYears ? (
+            <Link className="button secondary" href="/admin/gradebook">
+              Markbook Setup
+            </Link>
+          ) : null}
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
+          {status ? <span className="hint">{status}</span> : null}
           {canManageRosterYears && academicYear ? (
             <span className="hint">Previewing {academicYear}</span>
           ) : null}
@@ -555,6 +672,7 @@ export function StaffDashboard({
                 <th>Year Code</th>
                 <th>Homeroom Teacher</th>
                 <th>House</th>
+                {canManageRosterYears ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -569,6 +687,17 @@ export function StaffDashboard({
                   <td>{getStudentYearLabel(student)}</td>
                   <td>{student.assigned_teacher_name || student.tutor || "—"}</td>
                   <td>{student.academic_house || "—"}</td>
+                  {canManageRosterYears ? (
+                    <td>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={() => openStudentEditor(student)}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -581,6 +710,119 @@ export function StaffDashboard({
           ) : null}
         </div>
       </section>
+
+      {canManageRosterYears && editorDraft && editingStudentId ? (
+        <div className="directory-modal-backdrop" role="presentation" onClick={closeStudentEditor}>
+          <div className="directory-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <button className="directory-modal-close" type="button" onClick={closeStudentEditor} aria-label="Close">
+              ×
+            </button>
+            <div className="directory-modal-header">
+              <div>
+                <p className="eyebrow">Student editor</p>
+                <h2 className="directory-modal-title">{editorDraft.full_name || editingStudentId}</h2>
+                <p className="meta">School ID: {editingStudentId}</p>
+              </div>
+            </div>
+            <form onSubmit={saveStudentEditor}>
+              <div className="directory-modal-grid">
+                <section className="directory-modal-section">
+                  <h3 className="directory-modal-heading">Identity</h3>
+                  <div className="directory-form-grid">
+                    <label className="field field-span-2">
+                      <span>Full Name</span>
+                      <input value={editorDraft.full_name} onChange={(event) => setEditorDraft((current) => current ? { ...current, full_name: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>First Name</span>
+                      <input value={editorDraft.first_name} onChange={(event) => setEditorDraft((current) => current ? { ...current, first_name: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Surname</span>
+                      <input value={editorDraft.surname} onChange={(event) => setEditorDraft((current) => current ? { ...current, surname: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Preferred Name</span>
+                      <input value={editorDraft.preferred_name} onChange={(event) => setEditorDraft((current) => current ? { ...current, preferred_name: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Gender</span>
+                      <select value={editorDraft.gender} onChange={(event) => setEditorDraft((current) => current ? { ...current, gender: event.target.value } : current)}>
+                        <option value="">Not set</option>
+                        <option value="M">M</option>
+                        <option value="F">F</option>
+                      </select>
+                    </label>
+                    <label className="field field-span-2">
+                      <span>Nationality</span>
+                      <input value={editorDraft.nationality} onChange={(event) => setEditorDraft((current) => current ? { ...current, nationality: event.target.value } : current)} />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="directory-modal-section">
+                  <h3 className="directory-modal-heading">Placement</h3>
+                  <div className="directory-form-grid">
+                    <label className="field">
+                      <span>School</span>
+                      <input value={editorDraft.school} onChange={(event) => setEditorDraft((current) => current ? { ...current, school: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Designation</span>
+                      <input value={editorDraft.designation} onChange={(event) => setEditorDraft((current) => current ? { ...current, designation: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Year Group</span>
+                      <input value={editorDraft.year_group} onChange={(event) => setEditorDraft((current) => current ? { ...current, year_group: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Milepost</span>
+                      <input value={editorDraft.milepost} onChange={(event) => setEditorDraft((current) => current ? { ...current, milepost: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Level</span>
+                      <input value={editorDraft.level} onChange={(event) => setEditorDraft((current) => current ? { ...current, level: event.target.value } : current)} />
+                    </label>
+                    <label className="field field-span-2">
+                      <span>Class</span>
+                      <input list="student-class-options" value={editorDraft.class_name} onChange={(event) => setEditorDraft((current) => current ? { ...current, class_name: event.target.value } : current)} />
+                      <datalist id="student-class-options">
+                        {classOptions.map((option) => (
+                          <option key={`${option.classCode}-${option.className}`} value={option.className} />
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="field">
+                      <span>Form</span>
+                      <input value={editorDraft.form} onChange={(event) => setEditorDraft((current) => current ? { ...current, form: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Year Code</span>
+                      <input value={editorDraft.year_code} onChange={(event) => setEditorDraft((current) => current ? { ...current, year_code: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>Tutor / Homeroom Teacher</span>
+                      <input value={editorDraft.tutor} onChange={(event) => setEditorDraft((current) => current ? { ...current, tutor: event.target.value } : current)} />
+                    </label>
+                    <label className="field">
+                      <span>House</span>
+                      <input value={editorDraft.academic_house} onChange={(event) => setEditorDraft((current) => current ? { ...current, academic_house: event.target.value } : current)} />
+                    </label>
+                  </div>
+                </section>
+              </div>
+              <div className="directory-modal-actions">
+                <button className="button secondary" type="button" onClick={closeStudentEditor}>
+                  Cancel
+                </button>
+                <button className="button" type="submit" disabled={isSavingStudent}>
+                  {isSavingStudent ? "Saving..." : "Save Student"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

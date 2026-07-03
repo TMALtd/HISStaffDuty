@@ -1929,7 +1929,7 @@ async function getStudentProfileOverrideRows(
   return data
     .map((row) => ({
       student_school_id: String(row.student_school_id ?? "").trim(),
-      academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() : null,
+      academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() || null : null,
       school: row.school ? String(row.school).trim() : null,
       designation: row.designation ? String(row.designation).trim() : null,
       year_group: row.year_group ? String(row.year_group).trim() : null,
@@ -2074,7 +2074,7 @@ export async function getStudents(
     academicYearLabel === undefined ? await getActiveStudentAcademicYearLabelOrNull() : academicYearLabel;
   const data = await getStudentRosterRowsFromView(resolvedAcademicYearLabel);
 
-  const [assignmentRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
+  const [assignmentRows, profileOverrideRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
     getStudentClassAssignmentRows(resolvedAcademicYearLabel),
     getStudentProfileOverrideRows(resolvedAcademicYearLabel),
     getClassRecords(),
@@ -2083,10 +2083,8 @@ export async function getStudents(
   ]);
 
   const assignmentsByStudentId = new Map(assignmentRows.map((row) => [row.student_school_id, row]));
-  const overridesByStudentId = new Map(classRecords.map(() => []));
-  getStudentProfileOverrideRows;
-  const studentOverridesByStudentId = new Map(
-    arguments[0] && Array.isArray(arguments[0]) ? [] : []
+  const overridesByStudentId = new Map(
+    profileOverrideRows.map((row) => [row.student_school_id, row])
   );
   const classMetadataLookup = buildStudentClassMetadataLookup(classRecords, timetableRows);
 
@@ -2104,6 +2102,7 @@ export async function getStudents(
 
       const classCode = assignedMetadata?.class_code || assignment?.class_code || String(student.class_code ?? "");
       const className = assignedMetadata?.class_name || assignment?.class_name || String(student.class_name ?? "");
+      const override = overridesByStudentId.get(schoolId) ?? null;
       const teacherName =
         buildTimetableLookupKeys(className)
           .map((key) => teacherLookup.get(key))
@@ -2133,7 +2132,28 @@ export async function getStudents(
         class_assignment_source: assignment ? "override" : "roster"
       };
 
-      return nextStudent;
+      if (!override) {
+        return nextStudent;
+      }
+
+      return {
+        ...nextStudent,
+        school: override.school ?? nextStudent.school,
+        designation: override.designation ?? nextStudent.designation,
+        year_group: override.year_group ?? nextStudent.year_group,
+        milepost: override.milepost ?? nextStudent.milepost,
+        level: override.level ?? nextStudent.level,
+        full_name: override.full_name ?? nextStudent.full_name,
+        surname: override.surname ?? nextStudent.surname,
+        first_name: override.first_name ?? nextStudent.first_name,
+        preferred_name: override.preferred_name ?? nextStudent.preferred_name,
+        gender: override.gender ?? nextStudent.gender,
+        nationality: override.nationality ?? nextStudent.nationality,
+        form: override.form ?? nextStudent.form,
+        year_code: override.year_code ?? nextStudent.year_code,
+        tutor: override.tutor ?? nextStudent.tutor,
+        academic_house: override.academic_house ?? nextStudent.academic_house
+      };
     })
     .filter((student) => {
       if (normalized.school && student.school !== normalized.school) {
@@ -2268,6 +2288,115 @@ export async function upsertStudentClassAssignment(
       ) {
         throw new Error(
           "Student class assignments table is not set up yet. Run supabase_gradebook_student_assignments.sql first."
+        );
+      }
+
+      throw new Error(legacyResult.error.message);
+    }
+  }
+}
+
+export async function upsertStudentProfileOverride(
+  input: {
+    studentSchoolId: string;
+    academicYearLabel?: string | null;
+    school?: string | null;
+    designation?: string | null;
+    yearGroup?: string | null;
+    milepost?: string | null;
+    level?: string | null;
+    fullName?: string | null;
+    surname?: string | null;
+    firstName?: string | null;
+    preferredName?: string | null;
+    gender?: string | null;
+    nationality?: string | null;
+    form?: string | null;
+    yearCode?: string | null;
+    tutor?: string | null;
+    academicHouse?: string | null;
+  },
+  updatedByEmail?: string | null
+): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const studentSchoolId = normalizeRequiredText(input.studentSchoolId, "Student school ID");
+  const resolvedAcademicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : input.academicYearLabel;
+
+  const payload = {
+    student_school_id: studentSchoolId,
+    academic_year_label: resolvedAcademicYearLabel ?? "",
+    school: normalizeOptionalText(input.school),
+    designation: normalizeOptionalText(input.designation),
+    year_group: normalizeOptionalText(input.yearGroup),
+    milepost: normalizeOptionalText(input.milepost),
+    level: normalizeOptionalText(input.level),
+    full_name: normalizeOptionalText(input.fullName),
+    surname: normalizeOptionalText(input.surname),
+    first_name: normalizeOptionalText(input.firstName),
+    preferred_name: normalizeOptionalText(input.preferredName),
+    gender: normalizeOptionalText(input.gender),
+    nationality: normalizeOptionalText(input.nationality),
+    form: normalizeOptionalText(input.form),
+    year_code: normalizeOptionalText(input.yearCode),
+    tutor: normalizeOptionalText(input.tutor),
+    academic_house: normalizeOptionalText(input.academicHouse),
+    updated_by_email: normalizeOptionalText(updatedByEmail)?.toLowerCase() ?? null,
+    updated_at: new Date().toISOString()
+  };
+
+  const v2Result = await supabase
+    .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+    .upsert(payload, { onConflict: "student_school_id,academic_year_label" });
+
+  if (v2Result.error) {
+    if (isMissingSupabaseRelationError(new Error(v2Result.error.message), STUDENT_PROFILE_OVERRIDES_TABLE)) {
+      throw new Error(
+        "Student profile overrides table is not set up yet. Run supabase_student_profile_overrides.sql first."
+      );
+    }
+
+    if (!/academic_year_label/i.test(v2Result.error.message)) {
+      throw new Error(v2Result.error.message);
+    }
+
+    const legacyResult = await supabase
+      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+      .upsert(
+        {
+          student_school_id: studentSchoolId,
+          school: payload.school,
+          designation: payload.designation,
+          year_group: payload.year_group,
+          milepost: payload.milepost,
+          level: payload.level,
+          full_name: payload.full_name,
+          surname: payload.surname,
+          first_name: payload.first_name,
+          preferred_name: payload.preferred_name,
+          gender: payload.gender,
+          nationality: payload.nationality,
+          form: payload.form,
+          year_code: payload.year_code,
+          tutor: payload.tutor,
+          academic_house: payload.academic_house,
+          updated_by_email: payload.updated_by_email,
+          updated_at: payload.updated_at
+        },
+        { onConflict: "student_school_id" }
+      );
+
+    if (legacyResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(legacyResult.error.message),
+          STUDENT_PROFILE_OVERRIDES_TABLE
+        )
+      ) {
+        throw new Error(
+          "Student profile overrides table is not set up yet. Run supabase_student_profile_overrides.sql first."
         );
       }
 
