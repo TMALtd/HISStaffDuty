@@ -136,11 +136,11 @@ function matchesWholeTerm(value: string, pattern: RegExp) {
 
 function resolveExplicitYearGroup(person: StaffDirectoryRecord) {
   const values = [
-    person.class,
-    person.timetable,
+    person.timetable_access_year_group,
     person.designation,
     person.department,
-    person.role
+    person.role,
+    person.timetable
   ]
     .map((value) => normalizeLookupValue(value))
     .filter(Boolean);
@@ -173,6 +173,16 @@ function resolveExplicitYearGroup(person: StaffDirectoryRecord) {
   }
 
   return null;
+}
+
+function resolvePreferredYearGroup(
+  person: StaffDirectoryRecord,
+  classYearGroupLookup: Map<string, string>
+) {
+  return (
+    resolveExplicitYearGroup(person) ??
+    resolveStaffAssignedYearGroup(person, classYearGroupLookup)
+  );
 }
 
 function resolveExplicitMilepost(person: StaffDirectoryRecord) {
@@ -243,8 +253,7 @@ function getStaffTeamKey(
   classYearGroupLookup: Map<string, string>
 ): StaffTeamKey {
   const text = combinedStaffText(person);
-  const assignedYearGroup = resolveStaffAssignedYearGroup(person, classYearGroupLookup);
-  const explicitYearGroup = resolveExplicitYearGroup(person);
+  const resolvedYearGroup = resolvePreferredYearGroup(person, classYearGroupLookup);
   const explicitMilepost = resolveExplicitMilepost(person);
 
   if (
@@ -263,35 +272,19 @@ function getStaffTeamKey(
     return "slt";
   }
 
-  if (assignedYearGroup === "Preschool 1" || assignedYearGroup === "Preschool 2") {
+  if (resolvedYearGroup === "Preschool 1" || resolvedYearGroup === "Preschool 2") {
     return "preschool";
   }
 
-  if (explicitYearGroup === "Preschool 1" || explicitYearGroup === "Preschool 2") {
-    return "preschool";
-  }
-
-  if (assignedYearGroup === "Year 1" || assignedYearGroup === "Year 2") {
+  if (resolvedYearGroup === "Year 1" || resolvedYearGroup === "Year 2") {
     return "mp1";
   }
 
-  if (explicitYearGroup === "Year 1" || explicitYearGroup === "Year 2") {
-    return "mp1";
-  }
-
-  if (assignedYearGroup === "Year 3" || assignedYearGroup === "Year 4") {
+  if (resolvedYearGroup === "Year 3" || resolvedYearGroup === "Year 4") {
     return "mp2";
   }
 
-  if (explicitYearGroup === "Year 3" || explicitYearGroup === "Year 4") {
-    return "mp2";
-  }
-
-  if (assignedYearGroup === "Year 5" || assignedYearGroup === "Year 6") {
-    return "mp3";
-  }
-
-  if (explicitYearGroup === "Year 5" || explicitYearGroup === "Year 6") {
+  if (resolvedYearGroup === "Year 5" || resolvedYearGroup === "Year 6") {
     return "mp3";
   }
 
@@ -342,8 +335,7 @@ function getStaffSubGroupTitle(
   classYearGroupLookup: Map<string, string>
 ) {
   const text = combinedStaffText(person);
-  const assignedYearGroup =
-    resolveStaffAssignedYearGroup(person, classYearGroupLookup) ?? resolveExplicitYearGroup(person);
+  const assignedYearGroup = resolvePreferredYearGroup(person, classYearGroupLookup);
 
   if (teamKey === "slt") {
     return "Senior Leadership Team";
