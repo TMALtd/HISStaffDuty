@@ -204,6 +204,20 @@ type StudentEditorDraft = {
   academic_house: string;
 };
 
+function normalizeStudentGender(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+
+  if (normalized === "M" || normalized === "MALE" || normalized === "BOY") {
+    return "M";
+  }
+
+  if (normalized === "F" || normalized === "FEMALE" || normalized === "GIRL") {
+    return "F";
+  }
+
+  return "";
+}
+
 export function StaffDashboard({
   canManageRosterYears = false,
   academicYears = [],
@@ -315,7 +329,7 @@ export function StaffDashboard({
       surname: student.surname ?? "",
       first_name: student.first_name ?? "",
       preferred_name: student.preferred_name ?? "",
-      gender: student.gender ?? "",
+      gender: normalizeStudentGender(student.gender),
       nationality: student.nationality ?? "",
       form: student.form,
       year_code: student.year_code ?? "",
@@ -365,7 +379,7 @@ export function StaffDashboard({
           surname: editorDraft.surname,
           firstName: editorDraft.first_name,
           preferredName: editorDraft.preferred_name,
-          gender: editorDraft.gender,
+          gender: normalizeStudentGender(editorDraft.gender),
           nationality: editorDraft.nationality,
           form: editorDraft.form,
           yearCode: editorDraft.year_code,

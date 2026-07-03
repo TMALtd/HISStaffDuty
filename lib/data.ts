@@ -1593,7 +1593,7 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
     surname: row.surname ? String(row.surname) : null,
     first_name: row.first_name ? String(row.first_name) : null,
     preferred_name: row.preferred_name ? String(row.preferred_name) : null,
-    gender: row.gender ? String(row.gender) : null,
+    gender: normalizeStudentGenderValue(row.gender ? String(row.gender) : null),
     nationality: row.nationality ? String(row.nationality) : null,
     form: String(row.form ?? ""),
     year_code: row.year_code ? String(row.year_code) : null,
@@ -1939,7 +1939,7 @@ async function getStudentProfileOverrideRows(
       surname: row.surname ? String(row.surname).trim() : null,
       first_name: row.first_name ? String(row.first_name).trim() : null,
       preferred_name: row.preferred_name ? String(row.preferred_name).trim() : null,
-      gender: row.gender ? String(row.gender).trim() : null,
+      gender: normalizeStudentGenderValue(row.gender ? String(row.gender).trim() : null),
       nationality: row.nationality ? String(row.nationality).trim() : null,
       form: row.form ? String(row.form).trim() : null,
       year_code: row.year_code ? String(row.year_code).trim() : null,
@@ -2147,7 +2147,7 @@ export async function getStudents(
         surname: override.surname ?? nextStudent.surname,
         first_name: override.first_name ?? nextStudent.first_name,
         preferred_name: override.preferred_name ?? nextStudent.preferred_name,
-        gender: override.gender ?? nextStudent.gender,
+        gender: normalizeStudentGenderValue(override.gender) ?? normalizeStudentGenderValue(nextStudent.gender),
         nationality: override.nationality ?? nextStudent.nationality,
         form: override.form ?? nextStudent.form,
         year_code: override.year_code ?? nextStudent.year_code,
@@ -2337,7 +2337,7 @@ export async function upsertStudentProfileOverride(
     surname: normalizeOptionalText(input.surname),
     first_name: normalizeOptionalText(input.firstName),
     preferred_name: normalizeOptionalText(input.preferredName),
-    gender: normalizeOptionalText(input.gender),
+    gender: normalizeStudentGenderValue(input.gender),
     nationality: normalizeOptionalText(input.nationality),
     form: normalizeOptionalText(input.form),
     year_code: normalizeOptionalText(input.yearCode),
@@ -2674,7 +2674,7 @@ export async function archiveLegacyStudentRoster(input: {
         surname: surnameGuess.length ? surnameGuess.join(" ") : null,
         first_name: firstNameGuess || null,
         preferred_name: preferredName,
-        gender: row.gender ? String(row.gender).trim() : null,
+        gender: normalizeStudentGenderValue(row.gender ? String(row.gender).trim() : null),
         form: String(row.form ?? row.class_name ?? "").trim(),
         year_code: row.year_code ? String(row.year_code).trim() : null,
         tutor: row.tutor ? String(row.tutor).trim() : null,
@@ -2808,7 +2808,7 @@ export async function importStudentRosterClassCsv(input: {
       surname: surnameIndex === -1 ? null : normalizeOptionalText(row[surnameIndex]),
       first_name: firstNameIndex === -1 ? null : normalizeOptionalText(row[firstNameIndex]),
       preferred_name: preferredNameIndex === -1 ? null : normalizeOptionalText(row[preferredNameIndex]),
-      gender: genderIndex === -1 ? null : normalizeOptionalText(row[genderIndex]),
+      gender: genderIndex === -1 ? null : normalizeStudentGenderValue(row[genderIndex]),
       form: String(targetClass["Class Name"] ?? "").trim(),
       year_code: yearCodeIndex === -1 ? null : normalizeOptionalText(row[yearCodeIndex]),
       tutor: null,
@@ -3011,6 +3011,24 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = String(value ?? "").trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeStudentGenderValue(value: string | null | undefined): "M" | "F" | null {
+  const normalized = normalizeOptionalText(value)?.toUpperCase() ?? null;
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === "M" || normalized === "MALE" || normalized === "BOY") {
+    return "M";
+  }
+
+  if (normalized === "F" || normalized === "FEMALE" || normalized === "GIRL") {
+    return "F";
+  }
+
+  return null;
 }
 
 function applyNullableTextFilter<T extends { eq: (column: string, value: string) => T; is: (column: string, value: null) => T }>(
