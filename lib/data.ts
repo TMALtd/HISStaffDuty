@@ -77,6 +77,26 @@ type StudentClassAssignmentRow = {
   academic_year_label: string | null;
 };
 
+type StudentProfileOverrideRow = {
+  student_school_id: string;
+  academic_year_label: string | null;
+  school: string | null;
+  designation: string | null;
+  year_group: string | null;
+  milepost: string | null;
+  level: string | null;
+  full_name: string | null;
+  surname: string | null;
+  first_name: string | null;
+  preferred_name: string | null;
+  gender: string | null;
+  nationality: string | null;
+  form: string | null;
+  year_code: string | null;
+  tutor: string | null;
+  academic_house: string | null;
+};
+
 type StudentClassMetadata = {
   class_code: string;
   class_name: string;
@@ -135,6 +155,7 @@ const TABLE_NAME = "Class List";
 const VIEW_NAME = "student_class_roster";
 const LEGACY_STUDENT_ROSTER_VIEW_NAME = "student_class_roster_legacy";
 const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
+const STUDENT_PROFILE_OVERRIDES_TABLE = "student_profile_overrides";
 const STUDENT_ACADEMIC_YEARS_TABLE = "student_academic_years";
 const STUDENT_ROSTER_ENTRIES_TABLE = "student_roster_entries";
 const SUBJECTS_TABLE = "gradebook_subjects";
@@ -1860,6 +1881,80 @@ async function getStudentClassAssignmentRows(
     });
 }
 
+async function getStudentProfileOverrideRows(
+  academicYearLabel?: string | null
+): Promise<StudentProfileOverrideRow[]> {
+  const supabase = createSupabaseAdminClient();
+  let data: Array<Record<string, unknown>> | null = null;
+
+  const v2Result = await supabase
+    .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+    .select(
+      "student_school_id,academic_year_label,school,designation,year_group,milepost,level,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
+    );
+
+  if (v2Result.error) {
+    if (isMissingSupabaseRelationError(new Error(v2Result.error.message), STUDENT_PROFILE_OVERRIDES_TABLE)) {
+      return [];
+    }
+
+    if (!/academic_year_label/i.test(v2Result.error.message)) {
+      throw new Error(v2Result.error.message);
+    }
+
+    const legacyResult = await supabase
+      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+      .select(
+        "student_school_id,school,designation,year_group,milepost,level,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house"
+      );
+
+    if (legacyResult.error) {
+      if (
+        isMissingSupabaseRelationError(
+          new Error(legacyResult.error.message),
+          STUDENT_PROFILE_OVERRIDES_TABLE
+        )
+      ) {
+        return [];
+      }
+
+      throw new Error(legacyResult.error.message);
+    }
+
+    data = (legacyResult.data ?? []) as Array<Record<string, unknown>>;
+  } else {
+    data = (v2Result.data ?? []) as Array<Record<string, unknown>>;
+  }
+
+  return data
+    .map((row) => ({
+      student_school_id: String(row.student_school_id ?? "").trim(),
+      academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() : null,
+      school: row.school ? String(row.school).trim() : null,
+      designation: row.designation ? String(row.designation).trim() : null,
+      year_group: row.year_group ? String(row.year_group).trim() : null,
+      milepost: row.milepost ? String(row.milepost).trim() : null,
+      level: row.level ? String(row.level).trim() : null,
+      full_name: row.full_name ? String(row.full_name).trim() : null,
+      surname: row.surname ? String(row.surname).trim() : null,
+      first_name: row.first_name ? String(row.first_name).trim() : null,
+      preferred_name: row.preferred_name ? String(row.preferred_name).trim() : null,
+      gender: row.gender ? String(row.gender).trim() : null,
+      nationality: row.nationality ? String(row.nationality).trim() : null,
+      form: row.form ? String(row.form).trim() : null,
+      year_code: row.year_code ? String(row.year_code).trim() : null,
+      tutor: row.tutor ? String(row.tutor).trim() : null,
+      academic_house: row.academic_house ? String(row.academic_house).trim() : null
+    }))
+    .filter((row) => {
+      if (!academicYearLabel) {
+        return row.academic_year_label === null;
+      }
+
+      return row.academic_year_label === academicYearLabel;
+    });
+}
+
 function buildStudentClassMetadataLookup(
   classRecords: ClassRecord[],
   timetableRows: Array<Record<string, unknown> & { class_code: string | null; class_name: string }>
@@ -1981,13 +2076,17 @@ export async function getStudents(
 
   const [assignmentRows, classRecords, timetableRows, teacherLookup] = await Promise.all([
     getStudentClassAssignmentRows(resolvedAcademicYearLabel),
+    getStudentProfileOverrideRows(resolvedAcademicYearLabel),
     getClassRecords(),
     selectClassTimetableRows(),
     getClassTeacherLookup()
   ]);
 
-  const assignmentsByStudentId = new Map(
-    assignmentRows.map((row) => [row.student_school_id, row])
+  const assignmentsByStudentId = new Map(assignmentRows.map((row) => [row.student_school_id, row]));
+  const overridesByStudentId = new Map(classRecords.map(() => []));
+  getStudentProfileOverrideRows;
+  const studentOverridesByStudentId = new Map(
+    arguments[0] && Array.isArray(arguments[0]) ? [] : []
   );
   const classMetadataLookup = buildStudentClassMetadataLookup(classRecords, timetableRows);
 
