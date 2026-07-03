@@ -2284,27 +2284,45 @@ export async function upsertStudentClassAssignment(
       );
     }
 
-    if (!/academic_year_label/i.test(v2Result.error.message)) {
-      throw new Error(v2Result.error.message);
+    const deleteWithYearResult = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .delete()
+      .eq("student_school_id", studentSchoolId)
+      .eq("academic_year_label", activeAcademicYearLabel);
+
+    if (!deleteWithYearResult.error) {
+      const insertWithYearResult = await supabase
+        .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+        .insert(payload);
+
+      if (insertWithYearResult.error) {
+        throw new Error(insertWithYearResult.error.message);
+      }
+
+      return;
     }
 
-    const legacyResult = await supabase
-      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
-      .upsert(
-        {
-          student_school_id: studentSchoolId,
-          class_name: className,
-          class_code: classCode,
-          assigned_by_email: normalizeOptionalText(assignedByEmail)?.toLowerCase() ?? null,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: "student_school_id" }
-      );
+    if (!/academic_year_label/i.test(deleteWithYearResult.error.message)) {
+      throw new Error(deleteWithYearResult.error.message);
+    }
 
-    if (legacyResult.error) {
+    const legacyPayload = {
+      student_school_id: studentSchoolId,
+      class_name: className,
+      class_code: classCode,
+      assigned_by_email: normalizeOptionalText(assignedByEmail)?.toLowerCase() ?? null,
+      updated_at: new Date().toISOString()
+    };
+
+    const legacyDeleteResult = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .delete()
+      .eq("student_school_id", studentSchoolId);
+
+    if (legacyDeleteResult.error) {
       if (
         isMissingSupabaseRelationError(
-          new Error(legacyResult.error.message),
+          new Error(legacyDeleteResult.error.message),
           STUDENT_CLASS_ASSIGNMENTS_TABLE
         )
       ) {
@@ -2313,7 +2331,15 @@ export async function upsertStudentClassAssignment(
         );
       }
 
-      throw new Error(legacyResult.error.message);
+      throw new Error(legacyDeleteResult.error.message);
+    }
+
+    const legacyInsertResult = await supabase
+      .from(STUDENT_CLASS_ASSIGNMENTS_TABLE)
+      .insert(legacyPayload);
+
+    if (legacyInsertResult.error) {
+      throw new Error(legacyInsertResult.error.message);
     }
   }
 }
@@ -2380,40 +2406,58 @@ export async function upsertStudentProfileOverride(
       );
     }
 
-    if (!/academic_year_label/i.test(v2Result.error.message)) {
-      throw new Error(v2Result.error.message);
+    const deleteWithYearResult = await supabase
+      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+      .delete()
+      .eq("student_school_id", studentSchoolId)
+      .eq("academic_year_label", resolvedAcademicYearLabel ?? "");
+
+    if (!deleteWithYearResult.error) {
+      const insertWithYearResult = await supabase
+        .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+        .insert(payload);
+
+      if (insertWithYearResult.error) {
+        throw new Error(insertWithYearResult.error.message);
+      }
+
+      return;
     }
 
-    const legacyResult = await supabase
-      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
-      .upsert(
-        {
-          student_school_id: studentSchoolId,
-          school: payload.school,
-          designation: payload.designation,
-          year_group: payload.year_group,
-          milepost: payload.milepost,
-          level: payload.level,
-          full_name: payload.full_name,
-          surname: payload.surname,
-          first_name: payload.first_name,
-          preferred_name: payload.preferred_name,
-          gender: payload.gender,
-          nationality: payload.nationality,
-          form: payload.form,
-          year_code: payload.year_code,
-          tutor: payload.tutor,
-          academic_house: payload.academic_house,
-          updated_by_email: payload.updated_by_email,
-          updated_at: payload.updated_at
-        },
-        { onConflict: "student_school_id" }
-      );
+    if (!/academic_year_label/i.test(deleteWithYearResult.error.message)) {
+      throw new Error(deleteWithYearResult.error.message);
+    }
 
-    if (legacyResult.error) {
+    const legacyPayload = {
+      student_school_id: studentSchoolId,
+      school: payload.school,
+      designation: payload.designation,
+      year_group: payload.year_group,
+      milepost: payload.milepost,
+      level: payload.level,
+      full_name: payload.full_name,
+      surname: payload.surname,
+      first_name: payload.first_name,
+      preferred_name: payload.preferred_name,
+      gender: payload.gender,
+      nationality: payload.nationality,
+      form: payload.form,
+      year_code: payload.year_code,
+      tutor: payload.tutor,
+      academic_house: payload.academic_house,
+      updated_by_email: payload.updated_by_email,
+      updated_at: payload.updated_at
+    };
+
+    const legacyDeleteResult = await supabase
+      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+      .delete()
+      .eq("student_school_id", studentSchoolId);
+
+    if (legacyDeleteResult.error) {
       if (
         isMissingSupabaseRelationError(
-          new Error(legacyResult.error.message),
+          new Error(legacyDeleteResult.error.message),
           STUDENT_PROFILE_OVERRIDES_TABLE
         )
       ) {
@@ -2422,7 +2466,15 @@ export async function upsertStudentProfileOverride(
         );
       }
 
-      throw new Error(legacyResult.error.message);
+      throw new Error(legacyDeleteResult.error.message);
+    }
+
+    const legacyInsertResult = await supabase
+      .from(STUDENT_PROFILE_OVERRIDES_TABLE)
+      .insert(legacyPayload);
+
+    if (legacyInsertResult.error) {
+      throw new Error(legacyInsertResult.error.message);
     }
   }
 }

@@ -553,11 +553,11 @@ export function StaffDashboard({
             </Link>
           ) : null}
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
-          {status ? <span className="hint">{status}</span> : null}
           {canManageRosterYears && academicYear ? (
             <span className="hint">Previewing {academicYear}</span>
           ) : null}
         </div>
+        {status ? <div className="status-banner success">{status}</div> : null}
         {error ? <div className="banner error-banner">{error}</div> : null}
       </section>
 
@@ -739,6 +739,7 @@ export function StaffDashboard({
               </div>
             </div>
             <form onSubmit={saveStudentEditor}>
+              {error ? <div className="status-banner error compact-banner">{error}</div> : null}
               <div className="directory-modal-grid">
                 <section className="directory-modal-section">
                   <h3 className="directory-modal-heading">Identity</h3>
