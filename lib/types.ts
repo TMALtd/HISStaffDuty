@@ -153,12 +153,25 @@ export type PortalHeroPageKey =
   | "timetables-admin"
   | "timetables-view";
 
+export type PortalPageAccessKey =
+  | "student-filter"
+  | "gradebook"
+  | "duty"
+  | "timetables"
+  | "directory";
+
 export type PortalHeroSettings = {
   pageKey: PortalHeroPageKey;
   label: string;
   eyebrow: string;
   title: string;
   description: string;
+};
+
+export type PortalPageAccessSetting = {
+  pageKey: PortalPageAccessKey;
+  label: string;
+  isEnabled: boolean;
 };
 
 export type GradebookWorkspaceSection = GradebookSectionDefinition & {

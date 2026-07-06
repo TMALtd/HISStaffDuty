@@ -1,4 +1,4 @@
-import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import { getSpecialistTimetableView, getTimetablePreviewStaffOptions } from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
@@ -18,7 +18,10 @@ export default async function SpecialistTimetablePage({ searchParams }: Speciali
   const session = await requirePortalAccess("timetables");
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
-  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
+  const [previewOptions, visibleViews] = await Promise.all([
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+    getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
+  ]);
   const schedule = await getSpecialistTimetableView({
     staffProfileId: preview.activeProfile?.id ?? "",
     staffName: preview.activeProfile?.first_name ?? preview.activeProfile?.name ?? null
@@ -47,7 +50,7 @@ export default async function SpecialistTimetablePage({ searchParams }: Speciali
         ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       <SpecialistTimetableView data={schedule} backHref={backHref} registerBaseHref={registerBaseHref} />
     </main>
   );

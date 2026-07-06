@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import {
   getPrimarySpecialistSectionSlug,
   getPortalHeroSettings,
@@ -24,9 +24,12 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
   const { user, access } = session;
   const previewEmail = toStringValue(searchParams.viewAs);
   const preview = await getAccessPreviewSession(session, previewEmail);
-  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
-  const heroSettings =
-    (await getPortalHeroSettings()).find((setting) => setting.pageKey === "markbook") ?? null;
+  const [previewOptions, heroEntries, visibleViews] = await Promise.all([
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+    getPortalHeroSettings(),
+    getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
+  ]);
+  const heroSettings = heroEntries.find((setting) => setting.pageKey === "markbook") ?? null;
   const isSpecialistView = isSpecialistStaffProfile(preview.activeProfile);
   const specialistSectionSlug = getPrimarySpecialistSectionSlug(preview.activeProfile);
   const activeClassName =
@@ -51,7 +54,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       <section className="panel mi-card">
         <div>
           <p className="eyebrow">Specialist Registers</p>

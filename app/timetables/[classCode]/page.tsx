@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import { getTimetableBuilderData, getTimetablePreviewStaffOptions } from "@/lib/data";
 import { canAccessTimetableClass, canEditTimetableClass } from "@/lib/access";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
@@ -24,7 +24,10 @@ export default async function TimetableBuilderPage({ params, searchParams }: Tim
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
   const data = await getTimetableBuilderData(decodeURIComponent(params.classCode));
-  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
+  const [previewOptions, visibleViews] = await Promise.all([
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+    getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
+  ]);
   const canEdit = canEditTimetableClass(preview.activeAccess, data.classSummary);
 
   if (!canAccessTimetableClass(preview.activeAccess, data.classSummary)) {
@@ -48,7 +51,7 @@ export default async function TimetableBuilderPage({ params, searchParams }: Tim
         ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       <TimetableBuilder initialData={data} isReadOnly={!canEdit} />
     </main>
   );

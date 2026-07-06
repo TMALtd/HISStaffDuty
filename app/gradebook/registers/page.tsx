@@ -1,4 +1,4 @@
-import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import { getTimetablePreviewStaffOptions } from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
 import { PortalNav } from "@/components/portal-nav";
@@ -20,7 +20,10 @@ export default async function SpecialistRegistersPage({ searchParams }: Speciali
   const session = await requirePortalAccess("gradebook");
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
-  const previewOptions = access.isFullAccess ? await getTimetablePreviewStaffOptions() : [];
+  const [previewOptions, visibleViews] = await Promise.all([
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+    getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
+  ]);
 
   return (
     <main className="page-shell">
@@ -39,7 +42,7 @@ export default async function SpecialistRegistersPage({ searchParams }: Speciali
         ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       <SpecialistRegisterManager
         previewEmail={preview.previewEmail}
         initialYearGroup={searchParams?.yearGroup ?? null}

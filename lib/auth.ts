@@ -1,7 +1,14 @@
 import { redirect } from "next/navigation";
 import type { StaffProfile } from "@/lib/types";
-import { getStaffProfileByEmail } from "@/lib/data";
-import { canAccessView, getStaffAccess, type PortalView, type StaffAccess } from "@/lib/access";
+import { getPortalPageAccessSettings, getStaffProfileByEmail } from "@/lib/data";
+import {
+  canAccessView,
+  filterPortalViewsForAvailability,
+  isPortalViewGloballyEnabled,
+  getStaffAccess,
+  type PortalView,
+  type StaffAccess
+} from "@/lib/access";
 import { hasSupabaseBrowserEnv } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -81,9 +88,16 @@ export async function requireStaffAccess(): Promise<StaffAccessSession> {
 
 export async function requirePortalAccess(view: PortalView): Promise<StaffAccessSession> {
   const session = await requireStaffAccess();
+  const pageAccessSettings = await getPortalPageAccessSettings();
+  const visibleViews = filterPortalViewsForAvailability(
+    session.access.allowedViews,
+    pageAccessSettings,
+    session.access.isFullAccess
+  );
+  const hasGlobalAccess = session.access.isFullAccess || isPortalViewGloballyEnabled(view, pageAccessSettings);
 
-  if (!canAccessView(session.access, view)) {
-    const fallbackView = session.access.allowedViews[0];
+  if (!canAccessView(session.access, view) || !hasGlobalAccess) {
+    const fallbackView = visibleViews[0];
     if (fallbackView) {
       redirect(VIEW_FALLBACK_PATHS[fallbackView] ?? "/");
     }
@@ -96,6 +110,12 @@ export async function requirePortalAccess(view: PortalView): Promise<StaffAccess
   }
 
   return session;
+}
+
+export async function getVisiblePortalViews(access: StaffAccess, bypassDisabled = false) {
+  const pageAccessSettings = await getPortalPageAccessSettings();
+
+  return filterPortalViewsForAvailability(access.allowedViews, pageAccessSettings, bypassDisabled);
 }
 
 export async function getAccessPreviewSession(

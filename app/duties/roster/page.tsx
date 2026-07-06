@@ -1,11 +1,12 @@
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DutyRoster } from "@/components/duty-roster";
-import { requirePortalAccess } from "@/lib/auth";
+import { getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import { getDutyRosterViewData } from "@/lib/data";
 
 export default async function DutyRosterPage() {
   const { user, staffProfile, access } = await requirePortalAccess("duty-roster");
+  const visibleViews = await getVisiblePortalViews(access, access.isFullAccess);
   const data = await getDutyRosterViewData();
 
   return (
@@ -19,7 +20,7 @@ export default async function DutyRosterPage() {
         </div>
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={access.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       <DutyRoster data={data} />
     </main>
   );

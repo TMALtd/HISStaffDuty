@@ -1,4 +1,10 @@
-import type { StaffProfile, StudentRow, TimetableClassSummary } from "@/lib/types";
+import type {
+  PortalPageAccessKey,
+  PortalPageAccessSetting,
+  StaffProfile,
+  StudentRow,
+  TimetableClassSummary
+} from "@/lib/types";
 
 export const ALL_TIMETABLES_ACCESS_VALUE = "All Timetables";
 const NORMALIZED_ALL_TIMETABLES_ACCESS_VALUE = normalize(ALL_TIMETABLES_ACCESS_VALUE);
@@ -24,6 +30,17 @@ export const PORTAL_NAV_ITEMS: Array<{
   { href: "/timetables", label: "Timetables", view: "timetables" },
   { href: "/directory", label: "Staff Directory", view: "directory" },
   { href: "/admin/gradebook", label: "Setup", view: "setup" }
+];
+
+export const MANAGED_PORTAL_PAGE_ITEMS: Array<{
+  pageKey: PortalPageAccessKey;
+  label: string;
+}> = [
+  { pageKey: "student-filter", label: "Students" },
+  { pageKey: "duty", label: "Duties" },
+  { pageKey: "gradebook", label: "Markbooks" },
+  { pageKey: "timetables", label: "Timetables" },
+  { pageKey: "directory", label: "Staff Directory" }
 ];
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);
@@ -145,6 +162,51 @@ export function getStaffAccess(staffProfile: StaffProfile | null): StaffAccess {
 
 export function canAccessView(access: StaffAccess, view: PortalView) {
   return access.isFullAccess || access.allowedViews.includes(view);
+}
+
+export function getPortalPageAccessKeyForView(view: PortalView): PortalPageAccessKey | null {
+  switch (view) {
+    case "student-filter":
+      return "student-filter";
+    case "gradebook":
+      return "gradebook";
+    case "duty":
+    case "duty-roster":
+      return "duty";
+    case "timetables":
+      return "timetables";
+    case "directory":
+      return "directory";
+    case "setup":
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function isPortalViewGloballyEnabled(
+  view: PortalView,
+  settings: PortalPageAccessSetting[]
+) {
+  const pageKey = getPortalPageAccessKeyForView(view);
+
+  if (!pageKey) {
+    return true;
+  }
+
+  return settings.find((setting) => setting.pageKey === pageKey)?.isEnabled ?? true;
+}
+
+export function filterPortalViewsForAvailability(
+  views: PortalView[],
+  settings: PortalPageAccessSetting[],
+  bypassDisabled = false
+) {
+  if (bypassDisabled) {
+    return views;
+  }
+
+  return views.filter((view) => isPortalViewGloballyEnabled(view, settings));
 }
 
 export function canAccessTimetableClass(access: StaffAccess, classSummary: TimetableClassSummary) {

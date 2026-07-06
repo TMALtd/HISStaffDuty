@@ -46,6 +46,8 @@ import {
   type GradebookSectionSettingsInput,
   type GradebookSubject,
   type PortalHeroPageKey,
+  type PortalPageAccessKey,
+  type PortalPageAccessSetting,
   type PortalHeroSettings,
   type FilterField,
   type FilterOptions,
@@ -167,6 +169,7 @@ const SECTION_SETTINGS_TABLE = "gradebook_section_settings";
 const SPECIALIST_REGISTERS_TABLE = "specialist_registers";
 const SPECIALIST_REGISTER_STUDENTS_TABLE = "specialist_register_students";
 const PORTAL_HERO_SETTINGS_TABLE = "portal_hero_settings";
+const PORTAL_PAGE_ACCESS_TABLE = "portal_page_access";
 const STAFF_TABLE = "staff";
 const DUTIES_TABLE = "duties";
 const TIMETABLE_TEMPLATES_TABLE = "timetable_templates";
@@ -228,6 +231,13 @@ const DEFAULT_PORTAL_HERO_SETTINGS: PortalHeroSettings[] = [
     description:
       "Open the timetable cards you have access to and review the class schedules in a cleaner read-only view."
   }
+];
+const DEFAULT_PORTAL_PAGE_ACCESS_SETTINGS: PortalPageAccessSetting[] = [
+  { pageKey: "student-filter", label: "Students", isEnabled: true },
+  { pageKey: "duty", label: "Duties", isEnabled: true },
+  { pageKey: "gradebook", label: "Markbooks", isEnabled: true },
+  { pageKey: "timetables", label: "Timetables", isEnabled: true },
+  { pageKey: "directory", label: "Staff Directory", isEnabled: true }
 ];
 const DEFAULT_TIMETABLE_SUBJECT_TARGETS: TimetableSubjectTarget[] = [
   { id: "default-preschool-1-mainstream-bm", milepost: "Preschool 1", streamType: "mainstream", subjectName: "BM", requiredMinutes: 75, sortOrder: 1, isActive: true },
@@ -6067,6 +6077,40 @@ export async function getPortalHeroSettings(): Promise<PortalHeroSettings[]> {
   return defaults.map((setting) => overrideLookup.get(setting.pageKey) ?? setting);
 }
 
+export async function getPortalPageAccessSettings(): Promise<PortalPageAccessSetting[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(PORTAL_PAGE_ACCESS_TABLE)
+    .select("page_key,label,is_enabled")
+    .order("page_key");
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), PORTAL_PAGE_ACCESS_TABLE)) {
+      return DEFAULT_PORTAL_PAGE_ACCESS_SETTINGS;
+    }
+
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as Array<{
+    page_key?: string | null;
+    label?: string | null;
+    is_enabled?: boolean | null;
+  }>;
+
+  return DEFAULT_PORTAL_PAGE_ACCESS_SETTINGS.map((defaultSetting) => {
+    const matched = rows.find((row) => String(row.page_key ?? "").trim() === defaultSetting.pageKey);
+
+    return matched
+      ? {
+          pageKey: defaultSetting.pageKey,
+          label: String(matched.label ?? "").trim() || defaultSetting.label,
+          isEnabled: Boolean(matched.is_enabled)
+        }
+      : defaultSetting;
+  });
+}
+
 export async function upsertPortalHeroSettings(
   input: PortalHeroSettings[]
 ): Promise<PortalHeroSettings[]> {
@@ -6093,6 +6137,38 @@ export async function upsertPortalHeroSettings(
   }
 
   return getPortalHeroSettings();
+}
+
+export async function upsertPortalPageAccessSettings(
+  input: PortalPageAccessSetting[]
+): Promise<PortalPageAccessSetting[]> {
+  const supabase = createSupabaseAdminClient();
+  const payload = DEFAULT_PORTAL_PAGE_ACCESS_SETTINGS.map((defaultSetting) => {
+    const matched = input.find((setting) => setting.pageKey === defaultSetting.pageKey);
+
+    return {
+      page_key: defaultSetting.pageKey,
+      label: normalizeRequiredText(matched?.label ?? defaultSetting.label, `${defaultSetting.label} label`),
+      is_enabled: matched?.isEnabled ?? defaultSetting.isEnabled,
+      updated_at: new Date().toISOString()
+    };
+  });
+
+  const { error } = await supabase.from(PORTAL_PAGE_ACCESS_TABLE).upsert(payload, {
+    onConflict: "page_key"
+  });
+
+  if (error) {
+    if (isMissingSupabaseRelationError(new Error(error.message), PORTAL_PAGE_ACCESS_TABLE)) {
+      throw new Error(
+        "Portal page access table is not set up yet. Run supabase_portal_page_access.sql first."
+      );
+    }
+
+    throw new Error(error.message);
+  }
+
+  return getPortalPageAccessSettings();
 }
 
 function inferGradebookTermKey(assessmentDate: string, terms: GradebookTerm[]) {

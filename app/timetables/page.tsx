@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
+import { getAccessPreviewSession, getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
 import {
   getPortalHeroSettings,
   getTimetableAdminData,
@@ -35,6 +35,10 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
   let setupMessage: string | null = null;
   let previewOptions: TimetablePreviewStaffOption[] = [];
   let activeHero: PortalHeroSettings | null = null;
+  const visibleViews = await getVisiblePortalViews(
+    preview.activeAccess,
+    access.isFullAccess && !preview.isPreviewing
+  );
 
   try {
     const [data, staffOptions, heroSettings] = await Promise.all([
@@ -79,7 +83,7 @@ export default async function TimetablesPage({ searchParams }: TimetablesPagePro
         ) : null}
         <SignOutButton />
       </section>
-      <PortalNav allowedViews={preview.activeAccess.allowedViews} />
+      <PortalNav allowedViews={visibleViews} />
       {preview.activeProfile ? (
         <section className="panel specialist-launch-panel">
           <div>
