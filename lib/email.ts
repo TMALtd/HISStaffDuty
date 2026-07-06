@@ -53,7 +53,7 @@ function configuredSenders(): EmailSenderConfig[] {
   const oauthClientSecret = env("GOOGLE_OAUTH_CLIENT_SECRET");
   const oauthRefreshToken = env("GOOGLE_OAUTH_REFRESH_TOKEN");
   if (oauthSenderEmail && oauthClientId && oauthClientSecret && oauthRefreshToken) {
-    const oauthSenderName = env("GOOGLE_OAUTH_SENDER_NAME") || "Workspace Email";
+    const oauthSenderName = env("GOOGLE_OAUTH_SENDER_NAME") || "HELP International School";
     senders.push({
       key: "workspace",
       label: oauthSenderName,

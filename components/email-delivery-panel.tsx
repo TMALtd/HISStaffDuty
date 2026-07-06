@@ -14,19 +14,52 @@ type EmailDeliveryPanelProps = {
   defaultRecipient?: string;
 };
 
+function getEmailPreset(senderLabel: string) {
+  return {
+    subject: `Message from ${senderLabel}`,
+    message: `Hello,
+
+This is a message from ${senderLabel}.
+
+Kind regards,
+${senderLabel}`
+  };
+}
+
 export function EmailDeliveryPanel({
   senderOptions,
   defaultRecipient = ""
 }: EmailDeliveryPanelProps) {
-  const [senderKey, setSenderKey] = useState(senderOptions[0]?.key ?? "workspace");
+  const initialSenderKey = senderOptions[0]?.key ?? "workspace";
+  const initialSenderLabel =
+    senderOptions.find((option) => option.key === initialSenderKey)?.fromName ?? "HELP International School";
+  const initialPreset = getEmailPreset(initialSenderLabel);
+  const [senderKey, setSenderKey] = useState(initialSenderKey);
   const [to, setTo] = useState(defaultRecipient);
-  const [subject, setSubject] = useState("Workspace email test");
-  const [message, setMessage] = useState(
-    "This is a test email from the HELP staff workspace."
-  );
+  const [subject, setSubject] = useState(initialPreset.subject);
+  const [message, setMessage] = useState(initialPreset.message);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  function handleSenderChange(nextSenderKey: EmailSenderOption["key"]) {
+    const currentSenderLabel =
+      senderOptions.find((option) => option.key === senderKey)?.fromName ?? "HELP International School";
+    const nextSenderLabel =
+      senderOptions.find((option) => option.key === nextSenderKey)?.fromName ?? "HELP International School";
+    const currentPreset = getEmailPreset(currentSenderLabel);
+    const nextPreset = getEmailPreset(nextSenderLabel);
+
+    setSenderKey(nextSenderKey);
+
+    if (!subject.trim() || subject === currentPreset.subject) {
+      setSubject(nextPreset.subject);
+    }
+
+    if (!message.trim() || message === currentPreset.message) {
+      setMessage(nextPreset.message);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,7 +117,7 @@ export function EmailDeliveryPanel({
           <p className="eyebrow">Email Delivery</p>
           <h2 className="panel-title">Send email from the workspace</h2>
         </div>
-        <p className="hint">Choose a configured sender and send a test email directly from the app.</p>
+        <p className="hint">Choose a configured sender, then tailor the subject and message before sending.</p>
       </div>
 
       <form className="directory-search-grid" onSubmit={handleSubmit}>
@@ -93,7 +126,7 @@ export function EmailDeliveryPanel({
           <select
             id="senderKey"
             value={senderKey}
-            onChange={(event) => setSenderKey(event.target.value as EmailSenderOption["key"])}
+            onChange={(event) => handleSenderChange(event.target.value as EmailSenderOption["key"])}
           >
             {senderOptions.map((option) => (
               <option key={option.key} value={option.key}>
