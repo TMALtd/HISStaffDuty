@@ -80,6 +80,59 @@ function formatDutyLabel(duty: StaffDirectoryRecord["assigned_duties"][number]) 
   return `${duty.dayLabel} / ${duty.name} (${duty.timeLabel})`;
 }
 
+type StaffExportRow = {
+  staffId: string;
+  name: string;
+  firstName: string;
+  role: string;
+  email: string;
+  department: string;
+  designation: string;
+  assignedClass: string;
+  timetableLabel: string;
+  yearGroupAccess: string;
+  extension: string;
+  status: string;
+  maxDuties: string;
+  duties: string;
+};
+
+function buildStaffExportRows(staff: StaffDirectoryRecord[]): StaffExportRow[] {
+  return staff.map((person) => ({
+    staffId: person.staff_id ?? "",
+    name: person.name,
+    firstName: person.first_name ?? "",
+    role: person.role ?? "",
+    email: person.email ?? "",
+    department: person.department ?? "",
+    designation: person.designation ?? "",
+    assignedClass: person.class ?? "",
+    timetableLabel: person.timetable ?? "",
+    yearGroupAccess: person.timetable_access_year_group ?? "",
+    extension: person.extension ?? "",
+    status: person.status ?? "",
+    maxDuties:
+      person.max_duties === null || person.max_duties === undefined ? "" : String(person.max_duties),
+    duties: person.assigned_duties.map((duty) => formatDutyLabel(duty)).join(" | ")
+  }));
+}
+
+function csvEscape(value: string) {
+  const normalized = value.replace(/\r?\n/g, " ").trim();
+  if (/[",]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+function htmlEscape(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
   return {
     id: record.id,
@@ -870,6 +923,7 @@ export function StaffDirectory({
     () => buildStaffTeamSections(filteredStaff, classYearGroupLookup),
     [classYearGroupLookup, filteredStaff]
   );
+  const exportRows = useMemo(() => buildStaffExportRows(filteredStaff), [filteredStaff]);
 
   const selectedStaff =
     filteredStaff.find((person) => person.id === selectedStaffId) ??
@@ -1068,6 +1122,129 @@ export function StaffDirectory({
 
   const activeStaff = modalMode === "create" ? null : selectedStaff;
 
+  function downloadBlob(filename: string, content: BlobPart, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportStaffCsv() {
+    const headers = [
+      "Staff ID",
+      "Name",
+      "First Name",
+      "Role",
+      "Email",
+      "Department",
+      "Designation",
+      "Assigned Class",
+      "Timetable Label",
+      "Year Group Access",
+      "Extension",
+      "Status",
+      "Max Duties",
+      "Assigned Duties"
+    ];
+
+    const lines = [
+      headers.join(","),
+      ...exportRows.map((row) =>
+        [
+          row.staffId,
+          row.name,
+          row.firstName,
+          row.role,
+          row.email,
+          row.department,
+          row.designation,
+          row.assignedClass,
+          row.timetableLabel,
+          row.yearGroupAccess,
+          row.extension,
+          row.status,
+          row.maxDuties,
+          row.duties
+        ]
+          .map(csvEscape)
+          .join(",")
+      )
+    ];
+
+    downloadBlob(
+      `staff-directory-${new Date().toISOString().slice(0, 10)}.csv`,
+      `\uFEFF${lines.join("\n")}`,
+      "text/csv;charset=utf-8;"
+    );
+  }
+
+  function exportStaffXls() {
+    const headers = [
+      "Staff ID",
+      "Name",
+      "First Name",
+      "Role",
+      "Email",
+      "Department",
+      "Designation",
+      "Assigned Class",
+      "Timetable Label",
+      "Year Group Access",
+      "Extension",
+      "Status",
+      "Max Duties",
+      "Assigned Duties"
+    ];
+
+    const rowsHtml = exportRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${htmlEscape(row.staffId)}</td>
+            <td>${htmlEscape(row.name)}</td>
+            <td>${htmlEscape(row.firstName)}</td>
+            <td>${htmlEscape(row.role)}</td>
+            <td>${htmlEscape(row.email)}</td>
+            <td>${htmlEscape(row.department)}</td>
+            <td>${htmlEscape(row.designation)}</td>
+            <td>${htmlEscape(row.assignedClass)}</td>
+            <td>${htmlEscape(row.timetableLabel)}</td>
+            <td>${htmlEscape(row.yearGroupAccess)}</td>
+            <td>${htmlEscape(row.extension)}</td>
+            <td>${htmlEscape(row.status)}</td>
+            <td>${htmlEscape(row.maxDuties)}</td>
+            <td>${htmlEscape(row.duties)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <table border="1">
+      <thead>
+        <tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </body>
+</html>`;
+
+    downloadBlob(
+      `staff-directory-${new Date().toISOString().slice(0, 10)}.xls`,
+      `\uFEFF${html}`,
+      "application/vnd.ms-excel;charset=utf-8;"
+    );
+  }
+
   return (
     <div className="dashboard-grid">
       <section className="directory-hero">
@@ -1081,11 +1258,19 @@ export function StaffDirectory({
                 : "Browse teaching staff profiles and contact information")}
           </p>
         </div>
-        {canManageStaff ? (
-          <button className="directory-add-button" type="button" onClick={openCreateModal}>
-            + Add Staff Member
+        <div className="actions">
+          <button className="button secondary" type="button" onClick={exportStaffCsv}>
+            Download CSV
           </button>
-        ) : null}
+          <button className="button secondary" type="button" onClick={exportStaffXls}>
+            Download XLS
+          </button>
+          {canManageStaff ? (
+            <button className="directory-add-button" type="button" onClick={openCreateModal}>
+              + Add Staff Member
+            </button>
+          ) : null}
+        </div>
       </section>
 
       <section className="directory-search-panel">
