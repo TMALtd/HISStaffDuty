@@ -3133,6 +3133,39 @@ function normalizeOptionalNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeTimetableTimeOverride(value: string | null | undefined) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) {
+    throw new Error(`Invalid time value: ${normalized}. Use HH:MM or HH:MM:SS.`);
+  }
+
+  const [, hourText, minuteText, secondText] = match;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText ?? "00");
+
+  if (
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    Number.isNaN(second) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    throw new Error(`Invalid time value: ${normalized}.`);
+  }
+
+  return `${hourText}:${minuteText}:${String(second).padStart(2, "0")}`;
+}
+
 function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
   return {
     staff_id: normalizeOptionalText(input.staff_id),
@@ -3998,8 +4031,8 @@ async function getTimetableBlocksForTimetable(
         period_id: String(row.period_id ?? ""),
         weekday: period.weekday,
         period_label: period.label,
-        start_time: period.start_time,
-        end_time: period.end_time,
+        start_time: row.start_time_override ? String(row.start_time_override) : period.start_time,
+        end_time: row.end_time_override ? String(row.end_time_override) : period.end_time,
         block_type: normalizeTimetableBlockType(row.block_type ?? period.block_type),
         title: row.title ? String(row.title) : null,
         color: resolveTimetableColor(
@@ -4917,6 +4950,8 @@ export async function upsertTimetableBlock(input: {
   title: string | null;
   blockType: TimetableBlockType;
   color: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
   notes?: string | null;
   staffIds: string[];
 }) {
@@ -4969,12 +5004,21 @@ export async function upsertTimetableBlock(input: {
         blockType: normalizedBlockType,
         periodLabel: ""
       });
+  const normalizedStartTime = normalizeTimetableTimeOverride(input.startTime);
+  const normalizedEndTime = normalizeTimetableTimeOverride(input.endTime);
+
+  if (normalizedStartTime && normalizedEndTime && normalizedStartTime >= normalizedEndTime) {
+    throw new Error("End time must be later than start time.");
+  }
+
   const { error: updateError } = await supabase
     .from(TIMETABLE_BLOCKS_TABLE)
     .update({
       title: normalizedTitle,
       block_type: normalizedBlockType,
       color: resolveTimetableColor(normalizedTitle, input.color ?? null, normalizedBlockType),
+      start_time_override: normalizedStartTime,
+      end_time_override: normalizedEndTime,
       notes: input.notes?.trim() ? input.notes.trim() : null
     })
     .eq("id", input.blockId)
