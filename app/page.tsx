@@ -2,7 +2,6 @@ import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
-import { PortalPageAccessPanel } from "@/components/portal-page-access-panel";
 import {
   getPortalHeroSettings,
   getPortalPageAccessSettings,
@@ -27,7 +26,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     access.isFullAccess && !preview.isPreviewing ? getStudentAcademicYears() : Promise.resolve([]),
     access.isFullAccess && !preview.isPreviewing ? getStudentRosterClassOptions() : Promise.resolve([]),
     access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
-    access.isFullAccess && !preview.isPreviewing ? getPortalPageAccessSettings() : Promise.resolve([]),
+    getPortalPageAccessSettings(),
     getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
   ]);
   const heroSettings =
@@ -63,13 +62,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
       </section>
-      {access.isFullAccess && !preview.isPreviewing ? (
-        <PortalPageAccessPanel initialSettings={pageAccessSettings} />
-      ) : null}
       <StaffDashboard
         canManageRosterYears={access.isFullAccess && !preview.isPreviewing}
         academicYears={academicYears}
         classOptions={classOptions}
+        pageAccessSettings={pageAccessSettings}
         previewEmail={preview.previewEmail}
       />
     </main>

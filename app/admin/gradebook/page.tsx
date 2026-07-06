@@ -1,11 +1,16 @@
 import { getVisiblePortalViews, requirePortalAccess } from "@/lib/auth";
+import { getPortalPageAccessSettings } from "@/lib/data";
+import { PortalPageAccessPanel } from "@/components/portal-page-access-panel";
 import { PortalNav } from "@/components/portal-nav";
 import { SignOutButton } from "@/components/sign-out-button";
 import { GradebookAdmin } from "@/components/gradebook-admin";
 
 export default async function GradebookAdminPage() {
   const { user, access } = await requirePortalAccess("setup");
-  const visibleViews = await getVisiblePortalViews(access, true);
+  const [visibleViews, pageAccessSettings] = await Promise.all([
+    getVisiblePortalViews(access, true),
+    getPortalPageAccessSettings()
+  ]);
 
   return (
     <main className="page-shell">
@@ -18,6 +23,7 @@ export default async function GradebookAdminPage() {
       </section>
       <PortalNav allowedViews={visibleViews} />
       <GradebookAdmin />
+      <PortalPageAccessPanel initialSettings={pageAccessSettings} />
     </main>
   );
 }

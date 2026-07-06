@@ -42,7 +42,10 @@ export const MANAGED_PORTAL_PAGE_ITEMS: Array<{
   { pageKey: "duty", label: "Duties" },
   { pageKey: "gradebook", label: "Markbooks" },
   { pageKey: "timetables", label: "Timetables" },
-  { pageKey: "directory", label: "Staff Directory" }
+  { pageKey: "directory", label: "Staff Directory" },
+  { pageKey: "student-link-directory", label: "Students Tab: Open Directory Button" },
+  { pageKey: "student-link-duty", label: "Students Tab: Open Duty Button" },
+  { pageKey: "student-link-gradebook", label: "Students Tab: Enter Markbook Button" }
 ];
 
 const ALL_PORTAL_VIEWS = PORTAL_NAV_ITEMS.map((item) => item.view);

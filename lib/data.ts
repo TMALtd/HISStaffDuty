@@ -238,7 +238,10 @@ const DEFAULT_PORTAL_PAGE_ACCESS_SETTINGS: PortalPageAccessSetting[] = [
   { pageKey: "duty", label: "Duties", isEnabled: true },
   { pageKey: "gradebook", label: "Markbooks", isEnabled: true },
   { pageKey: "timetables", label: "Timetables", isEnabled: true },
-  { pageKey: "directory", label: "Staff Directory", isEnabled: true }
+  { pageKey: "directory", label: "Staff Directory", isEnabled: true },
+  { pageKey: "student-link-directory", label: "Students Tab: Open Directory Button", isEnabled: false },
+  { pageKey: "student-link-duty", label: "Students Tab: Open Duty Button", isEnabled: false },
+  { pageKey: "student-link-gradebook", label: "Students Tab: Enter Markbook Button", isEnabled: false }
 ];
 const DEFAULT_TIMETABLE_SUBJECT_TARGETS: TimetableSubjectTarget[] = [
   { id: "default-preschool-1-mainstream-bm", milepost: "Preschool 1", streamType: "mainstream", subjectName: "BM", requiredMinutes: 75, sortOrder: 1, isActive: true },

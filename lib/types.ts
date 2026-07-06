@@ -158,7 +158,10 @@ export type PortalPageAccessKey =
   | "gradebook"
   | "duty"
   | "timetables"
-  | "directory";
+  | "directory"
+  | "student-link-directory"
+  | "student-link-duty"
+  | "student-link-gradebook";
 
 export type PortalHeroSettings = {
   pageKey: PortalHeroPageKey;

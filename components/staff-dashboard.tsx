@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   EMPTY_FILTERS,
   FILTER_FIELDS,
+  type PortalPageAccessSetting,
   type StaffDirectoryClassOption,
   type FilterOptions,
   type FilterState,
@@ -182,6 +183,7 @@ type StaffDashboardProps = {
   canManageRosterYears?: boolean;
   academicYears?: StudentAcademicYear[];
   classOptions?: StaffDirectoryClassOption[];
+  pageAccessSettings?: PortalPageAccessSetting[];
   previewEmail?: string | null;
 };
 
@@ -222,6 +224,7 @@ export function StaffDashboard({
   canManageRosterYears = false,
   academicYears = [],
   classOptions = [],
+  pageAccessSettings = [],
   previewEmail = null
 }: StaffDashboardProps) {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
@@ -419,6 +422,10 @@ export function StaffDashboard({
   }
   const gradebookQuery = gradebookParams.toString();
   const gradebookHref = `/gradebook${gradebookQuery ? `?${gradebookQuery}` : ""}`;
+  const pageAccessLookup = new Map(pageAccessSettings.map((setting) => [setting.pageKey, setting.isEnabled]));
+  const showDirectoryLink = pageAccessLookup.get("student-link-directory") ?? false;
+  const showDutyLink = pageAccessLookup.get("student-link-duty") ?? false;
+  const showGradebookLink = pageAccessLookup.get("student-link-gradebook") ?? false;
 
   return (
     <div className="dashboard-grid">
@@ -538,15 +545,21 @@ export function StaffDashboard({
           <button className="button secondary" type="button" onClick={clearFilters}>
             Clear filters
           </button>
-          <Link className="button secondary" href="/directory">
-            Open Directory
-          </Link>
-          <Link className="button secondary" href="/duties">
-            Open Duty
-          </Link>
-          <Link className="button" href={gradebookHref}>
-            Enter Markbook
-          </Link>
+          {showDirectoryLink ? (
+            <Link className="button secondary" href="/directory">
+              Open Directory
+            </Link>
+          ) : null}
+          {showDutyLink ? (
+            <Link className="button secondary" href="/duties">
+              Open Duty
+            </Link>
+          ) : null}
+          {showGradebookLink ? (
+            <Link className="button" href={gradebookHref}>
+              Enter Markbook
+            </Link>
+          ) : null}
           {canManageRosterYears ? (
             <Link className="button secondary" href="/admin/gradebook">
               Markbook Setup

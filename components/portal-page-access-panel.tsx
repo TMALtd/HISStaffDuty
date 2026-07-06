@@ -55,10 +55,13 @@ export function PortalPageAccessPanel({ initialSettings }: PortalPageAccessPanel
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Staff Page Access</p>
-          <h2 className="panel-title">Turn staff pages on or off</h2>
+          <p className="eyebrow">Staff Access</p>
+          <h2 className="panel-title">Turn pages and student-tab links on or off</h2>
         </div>
-        <p className="hint">Admins still keep access. These switches control what staff can open and see in the navigation.</p>
+        <p className="hint">
+          Admins still keep access. These switches control what staff can open in the navigation and
+          which quick links appear on the Students tab.
+        </p>
       </div>
 
       <div className="page-access-grid">
