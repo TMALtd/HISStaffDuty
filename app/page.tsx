@@ -2,6 +2,7 @@ import { getAccessPreviewSession, requirePortalAccess } from "@/lib/auth";
 import { PortalNav } from "@/components/portal-nav";
 import { StaffDashboard } from "@/components/staff-dashboard";
 import { SignOutButton } from "@/components/sign-out-button";
+import { EmailDeliveryPanel } from "@/components/email-delivery-panel";
 import {
   getPortalHeroSettings,
   getStudentAcademicYears,
@@ -9,6 +10,7 @@ import {
   getTimetablePreviewStaffOptions
 } from "@/lib/data";
 import { AccessPreviewSwitcher } from "@/components/access-preview-switcher";
+import { getConfiguredEmailSenderOptions } from "@/lib/email";
 
 type HomePageProps = {
   searchParams?: {
@@ -20,10 +22,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const session = await requirePortalAccess("student-filter");
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
-  const [academicYears, classOptions, previewOptions] = await Promise.all([
+  const [academicYears, classOptions, previewOptions, emailSenderOptions] = await Promise.all([
     access.isFullAccess && !preview.isPreviewing ? getStudentAcademicYears() : Promise.resolve([]),
     access.isFullAccess && !preview.isPreviewing ? getStudentRosterClassOptions() : Promise.resolve([]),
-    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([])
+    access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
+    access.isFullAccess && !preview.isPreviewing
+      ? Promise.resolve(getConfiguredEmailSenderOptions())
+      : Promise.resolve([])
   ]);
   const heroSettings =
     (await getPortalHeroSettings()).find((setting) => setting.pageKey === "student-filter") ?? null;
@@ -58,6 +63,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </div>
       </section>
+      {access.isFullAccess && !preview.isPreviewing ? (
+        <EmailDeliveryPanel
+          senderOptions={emailSenderOptions}
+          defaultRecipient={user.email ?? ""}
+        />
+      ) : null}
       <StaffDashboard
         canManageRosterYears={access.isFullAccess && !preview.isPreviewing}
         academicYears={academicYears}
