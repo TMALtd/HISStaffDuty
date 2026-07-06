@@ -90,7 +90,11 @@ export function EmailDeliveryPanel({
       <form className="directory-search-grid" onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="senderKey">Sender</label>
-          <select id="senderKey" value={senderKey} onChange={(event) => setSenderKey(event.target.value)}>
+          <select
+            id="senderKey"
+            value={senderKey}
+            onChange={(event) => setSenderKey(event.target.value as EmailSenderOption["key"])}
+          >
             {senderOptions.map((option) => (
               <option key={option.key} value={option.key}>
                 {option.label} ({option.fromEmail})

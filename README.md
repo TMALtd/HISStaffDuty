@@ -8,6 +8,7 @@ Private staff-facing Next.js app for browsing students by school, designation, y
 - Reads live data from Supabase
 - Uses cascading filters from the `Class List` table
 - Shows matching students from `Term 3 Data`
+- Lets full-access admins send email from configured Google Workspace mailboxes
 - Deploys cleanly to Render
 
 ## Supabase setup
@@ -36,6 +37,43 @@ If every route suddenly returns `500`, check that these env vars are still prese
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+## Google Workspace email setup
+
+Full-access admins can send email from the homepage once SMTP is configured for the school mailboxes.
+
+Add these Render environment variables:
+
+- `EMAIL_SMTP_HOST`
+- `EMAIL_SMTP_PORT`
+- `EMAIL_SMTP_SECURE`
+- `HIS_EMAIL_WORKSPACE_NAME`
+- `HIS_EMAIL_WORKSPACE_ADDRESS`
+- `HIS_EMAIL_WORKSPACE_SMTP_USER`
+- `HIS_EMAIL_WORKSPACE_SMTP_PASS`
+- `HIS_EMAIL_DUTIES_NAME`
+- `HIS_EMAIL_DUTIES_ADDRESS`
+- `HIS_EMAIL_DUTIES_SMTP_USER`
+- `HIS_EMAIL_DUTIES_SMTP_PASS`
+
+Recommended values for Google Workspace:
+
+- `EMAIL_SMTP_HOST=smtp.gmail.com`
+- `EMAIL_SMTP_PORT=465`
+- `EMAIL_SMTP_SECURE=true`
+
+For each mailbox:
+
+1. Enable the account for SMTP sending in Google Workspace.
+2. Generate an app password if the account uses 2-step verification.
+3. Put the mailbox address into the matching `*_ADDRESS` and `*_SMTP_USER` variables.
+4. Put the app password into the matching `*_SMTP_PASS` variable.
+5. Redeploy the app.
+
+The two configured sender identities are:
+
+- `HIS Staff Workspace` using `benjamin.allen@kl.his.edu.my`
+- `HIS Staff Duties` using `duties@kl.his.edu.my`
+
 ## Render deployment
 
 1. Push this folder to GitHub.
@@ -46,6 +84,7 @@ If every route suddenly returns `500`, check that these env vars are still prese
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - the Google Workspace email variables listed above if you want in-app email sending
 5. Deploy.
 
 ## Data contract

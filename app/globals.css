@@ -43,7 +43,8 @@ a {
 
 button,
 select,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -216,7 +217,8 @@ input {
 }
 
 .field select,
-.field input {
+.field input,
+.field textarea {
   width: 100%;
   padding: 12px 14px;
   border-radius: 14px;
@@ -225,12 +227,21 @@ input {
   color: var(--ink);
 }
 
+.field textarea {
+  resize: vertical;
+  min-height: 140px;
+}
+
 .actions {
   display: flex;
   gap: 12px;
   align-items: center;
   margin-top: 18px;
   flex-wrap: wrap;
+}
+
+.field-span-3 {
+  grid-column: 1 / -1;
 }
 
 .button {
