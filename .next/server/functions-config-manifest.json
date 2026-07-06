@@ -1,1 +1,1 @@
-{"version":1,"functions":{"/timetables":{},"/gradebook/registers":{},"/timetables/[classCode]":{},"/directory":{},"/timetables/specialist":{}}}
+{"version":1,"functions":{"/directory":{},"/timetables/specialist":{},"/timetables/[classCode]":{},"/gradebook/registers":{},"/timetables":{}}}

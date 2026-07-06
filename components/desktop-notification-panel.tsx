@@ -290,21 +290,29 @@ export function DesktopNotificationPanel({
                 placeholder="Search by name, email, or team"
               />
               <div className="email-recipient-list">
-                {visibleRecipientOptions.map((option) => (
-                  <label key={option.email} className="email-recipient-option">
+                {visibleRecipientOptions.map((option) => {
+                  const isSelected = selectedEmails.includes(option.email);
+
+                  return (
+                    <label
+                      key={option.email}
+                      className={`email-recipient-option${isSelected ? " selected" : ""}`}
+                    >
                     <input
                       type="checkbox"
-                      checked={selectedEmails.includes(option.email)}
+                      checked={isSelected}
                       onChange={() => toggleEmail(option.email)}
                     />
-                    <span>
+                    <span className="email-recipient-details">
                       <strong>{option.name}</strong>
                       <small>
                         {option.email} | {option.teamLabel}
                       </small>
                     </span>
                   </label>
-                ))}
+                  );
+                })}
+                {!visibleRecipientOptions.length ? <p className="hint">No matching staff found.</p> : null}
               </div>
             </div>
           ) : null}

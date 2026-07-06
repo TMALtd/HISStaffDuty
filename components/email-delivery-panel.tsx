@@ -420,13 +420,16 @@ export function EmailDeliveryPanel({
                 const isSelected = selectedEmails.includes(option.email);
 
                 return (
-                  <label key={option.email} className="email-recipient-option">
+                  <label
+                    key={option.email}
+                    className={`email-recipient-option${isSelected ? " selected" : ""}`}
+                  >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleIndividualRecipient(option.email)}
                     />
-                    <span>
+                    <span className="email-recipient-details">
                       <strong>{option.name}</strong>
                       <small>
                         {option.email} | {option.teamLabel}
