@@ -25,6 +25,8 @@ type EditableBlockDraft = {
   title: string;
   blockType: TimetableBlockType;
   color: string;
+  startTime: string;
+  endTime: string;
   staffIds: string[];
 };
 
@@ -111,6 +113,15 @@ function minutesBetween(startTime: string, endTime: string) {
 function formatDisplayTime(value: string) {
   const [hour, minute] = value.split(":");
   return `${hour}:${minute}`;
+}
+
+function normalizeTimeInputValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.length === 5 ? `${trimmed}:00` : trimmed;
 }
 
 function timeRangeLabel(startTime: string, endTime: string) {
@@ -1082,6 +1093,8 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
       title: block.title ?? "",
       blockType: block.block_type,
       color: block.color ?? "#8be6a8",
+      startTime: block.start_time,
+      endTime: block.end_time,
       staffIds: block.teachers.map((teacher) => teacher.staff_id)
     });
   }
@@ -1097,6 +1110,13 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
 
     try {
       for (const targetBlockId of draft.targetBlockIds) {
+        const targetIndex = draft.targetBlockIds.indexOf(targetBlockId);
+        const isFirstTarget = targetIndex === 0;
+        const isLastTarget = targetIndex === draft.targetBlockIds.length - 1;
+        const startTime =
+          draft.targetBlockIds.length === 1 ? draft.startTime : isFirstTarget ? draft.startTime : null;
+        const endTime =
+          draft.targetBlockIds.length === 1 ? draft.endTime : isLastTarget ? draft.endTime : null;
         const response = await fetch(
           withCurrentApiQuery(`/api/timetables/${encodeURIComponent(data.classSummary.classCode)}/blocks`),
           {
@@ -1109,6 +1129,8 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
               title: draft.title,
               blockType: draft.blockType,
               color: draft.color,
+              startTime,
+              endTime,
               staffIds: draft.staffIds
             })
           }
@@ -1874,11 +1896,25 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
               <div className="timetable-time-row">
                 <div className="field">
                   <label>Start</label>
-                  <input value={selectedBlock.start_time} readOnly />
+                  <input
+                    type="time"
+                    step={300}
+                    value={formatDisplayTime(draft.startTime)}
+                    onChange={(event) =>
+                      setDraft({ ...draft, startTime: normalizeTimeInputValue(event.target.value) })
+                    }
+                  />
                 </div>
                 <div className="field">
                   <label>End</label>
-                  <input value={selectedBlock.end_time} readOnly />
+                  <input
+                    type="time"
+                    step={300}
+                    value={formatDisplayTime(draft.endTime)}
+                    onChange={(event) =>
+                      setDraft({ ...draft, endTime: normalizeTimeInputValue(event.target.value) })
+                    }
+                  />
                 </div>
               </div>
 
@@ -1897,6 +1933,12 @@ export function TimetableBuilder({ initialData, isReadOnly = false }: TimetableB
                     </button>
                   ))}
                 </div>
+                <input
+                  type="color"
+                  value={draft.color}
+                  onChange={(event) => setDraft({ ...draft, color: event.target.value })}
+                  aria-label="Choose block color"
+                />
               </div>
 
               <div className="field">

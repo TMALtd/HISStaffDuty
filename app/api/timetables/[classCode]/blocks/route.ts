@@ -33,6 +33,8 @@ export async function POST(request: Request, context: TimetableRouteContext) {
       title: body.title ?? null,
       blockType: String(body.blockType ?? "lesson") as TimetableBlockType,
       color: body.color ?? null,
+      startTime: body.startTime ?? null,
+      endTime: body.endTime ?? null,
       notes: body.notes ?? null,
       staffIds: Array.isArray(body.staffIds) ? body.staffIds.map(String) : []
     });
