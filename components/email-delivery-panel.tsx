@@ -67,11 +67,11 @@ export function EmailDeliveryPanel({
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Email Delivery</p>
-            <h2 className="panel-title">Google Workspace email not configured yet</h2>
+            <h2 className="panel-title">Email delivery is not configured yet</h2>
           </div>
         </div>
         <div className="status-banner error">
-          Add the Google Workspace SMTP environment variables in Render before sending email from the app.
+          Add at least one sender configuration in Render before sending email from the app.
         </div>
       </section>
     );
@@ -82,9 +82,9 @@ export function EmailDeliveryPanel({
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Email Delivery</p>
-          <h2 className="panel-title">Send from Google Workspace</h2>
+          <h2 className="panel-title">Send email from the workspace</h2>
         </div>
-        <p className="hint">Choose either school identity and send a test email directly from the app.</p>
+        <p className="hint">Choose a configured sender and send a test email directly from the app.</p>
       </div>
 
       <form className="directory-search-grid" onSubmit={handleSubmit}>
