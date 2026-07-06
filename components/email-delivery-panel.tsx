@@ -14,15 +14,139 @@ type EmailDeliveryPanelProps = {
   defaultRecipient?: string;
 };
 
-function getEmailPreset(senderLabel: string) {
-  return {
-    subject: `Message from ${senderLabel}`,
-    message: `Hello,
+type EmailTemplateKey =
+  | "new-user-login"
+  | "personal-details-update"
+  | "timetable-change"
+  | "student-list-timetable"
+  | "all-users-notification"
+  | "duty-swap";
 
-This is a message from ${senderLabel}.
+type EmailTemplate = {
+  key: EmailTemplateKey;
+  label: string;
+  subject: (senderLabel: string) => string;
+  message: (senderLabel: string) => string;
+};
+
+const EMAIL_TEMPLATES: EmailTemplate[] = [
+  {
+    key: "new-user-login",
+    label: "New User Login Email",
+    subject: () => "Your HELP Staff Workspace login details",
+    message: (senderLabel) => `Hello [Staff Name],
+
+Welcome to the HELP Staff Workspace.
+
+Your account has now been set up and you can sign in using your school email address.
+
+Please use the login page below:
+[Login Link]
+
+If you have any trouble accessing your account, please reply to this email for support.
 
 Kind regards,
 ${senderLabel}`
+  },
+  {
+    key: "personal-details-update",
+    label: "Personal Details Update Email",
+    subject: () => "Please review and update your staff details",
+    message: (senderLabel) => `Hello [Staff Name],
+
+Please review your personal details in the HELP Staff Workspace and update any information that is no longer correct.
+
+Please check the following carefully:
+- Full name
+- Email address
+- Extension
+- Department
+- Class or timetable access
+
+If anything needs changing, please update it as soon as possible.
+
+Kind regards,
+${senderLabel}`
+  },
+  {
+    key: "timetable-change",
+    label: "Timetable Change Email",
+    subject: () => "Timetable update for [Class / Year Group]",
+    message: (senderLabel) => `Hello [Staff Name],
+
+Please note that there has been a timetable change for [Class / Year Group].
+
+Summary of change:
+[Insert timetable change details]
+
+Please review the updated timetable in the HELP Staff Workspace.
+
+Kind regards,
+${senderLabel}`
+  },
+  {
+    key: "student-list-timetable",
+    label: "Student List Timetable Email",
+    subject: () => "Student list and timetable update for [Class / Group]",
+    message: (senderLabel) => `Hello [Staff Name],
+
+Please find the latest student list and timetable information for [Class / Group].
+
+Included in this update:
+- Student list
+- Timetable details
+- Any recent class changes
+
+Please review the information and let us know if anything needs correcting.
+
+Kind regards,
+${senderLabel}`
+  },
+  {
+    key: "all-users-notification",
+    label: "All Users Notification Email",
+    subject: () => "Important update from HELP Staff Workspace",
+    message: (senderLabel) => `Hello everyone,
+
+Please note the following important update:
+
+[Insert announcement or message here]
+
+Please read this carefully and take any required action.
+
+Kind regards,
+${senderLabel}`
+  },
+  {
+    key: "duty-swap",
+    label: "Duty Swap Email",
+    subject: () => "Duty swap request for [Date / Duty Name]",
+    message: (senderLabel) => `Hello [Staff Name],
+
+This is a duty swap request for:
+[Duty Name]
+[Date and Time]
+
+Requested change:
+[Insert details of the swap]
+
+Please confirm whether you are able to cover this duty.
+
+Kind regards,
+${senderLabel}`
+  }
+];
+
+function getTemplateByKey(templateKey: EmailTemplateKey) {
+  return EMAIL_TEMPLATES.find((template) => template.key === templateKey) ?? EMAIL_TEMPLATES[0];
+}
+
+function getEmailPreset(templateKey: EmailTemplateKey, senderLabel: string) {
+  const template = getTemplateByKey(templateKey);
+
+  return {
+    subject: template.subject(senderLabel),
+    message: template.message(senderLabel)
   };
 }
 
@@ -30,10 +154,12 @@ export function EmailDeliveryPanel({
   senderOptions,
   defaultRecipient = ""
 }: EmailDeliveryPanelProps) {
+  const initialTemplateKey: EmailTemplateKey = "new-user-login";
   const initialSenderKey = senderOptions[0]?.key ?? "workspace";
   const initialSenderLabel =
     senderOptions.find((option) => option.key === initialSenderKey)?.fromName ?? "HELP International School";
-  const initialPreset = getEmailPreset(initialSenderLabel);
+  const initialPreset = getEmailPreset(initialTemplateKey, initialSenderLabel);
+  const [templateKey, setTemplateKey] = useState<EmailTemplateKey>(initialTemplateKey);
   const [senderKey, setSenderKey] = useState(initialSenderKey);
   const [to, setTo] = useState(defaultRecipient);
   const [subject, setSubject] = useState(initialPreset.subject);
@@ -47,8 +173,8 @@ export function EmailDeliveryPanel({
       senderOptions.find((option) => option.key === senderKey)?.fromName ?? "HELP International School";
     const nextSenderLabel =
       senderOptions.find((option) => option.key === nextSenderKey)?.fromName ?? "HELP International School";
-    const currentPreset = getEmailPreset(currentSenderLabel);
-    const nextPreset = getEmailPreset(nextSenderLabel);
+    const currentPreset = getEmailPreset(templateKey, currentSenderLabel);
+    const nextPreset = getEmailPreset(templateKey, nextSenderLabel);
 
     setSenderKey(nextSenderKey);
 
@@ -59,6 +185,16 @@ export function EmailDeliveryPanel({
     if (!message.trim() || message === currentPreset.message) {
       setMessage(nextPreset.message);
     }
+  }
+
+  function handleTemplateChange(nextTemplateKey: EmailTemplateKey) {
+    const currentSenderLabel =
+      senderOptions.find((option) => option.key === senderKey)?.fromName ?? "HELP International School";
+    const nextPreset = getEmailPreset(nextTemplateKey, currentSenderLabel);
+
+    setTemplateKey(nextTemplateKey);
+    setSubject(nextPreset.subject);
+    setMessage(nextPreset.message);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -122,6 +258,21 @@ export function EmailDeliveryPanel({
 
       <form className="directory-search-grid" onSubmit={handleSubmit}>
         <div className="field">
+          <label htmlFor="emailTemplate">Template</label>
+          <select
+            id="emailTemplate"
+            value={templateKey}
+            onChange={(event) => handleTemplateChange(event.target.value as EmailTemplateKey)}
+          >
+            {EMAIL_TEMPLATES.map((template) => (
+              <option key={template.key} value={template.key}>
+                {template.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
           <label htmlFor="senderKey">Sender</label>
           <select
             id="senderKey"
@@ -173,6 +324,11 @@ export function EmailDeliveryPanel({
           </button>
         </div>
       </form>
+
+      <p className="hint">
+        You can use placeholders such as `[Staff Name]`, `[Login Link]`, `[Class / Group]`, `[Duty Name]`, and
+        replace them before sending.
+      </p>
 
       {status ? <div className="status-banner success">{status}</div> : null}
       {error ? <div className="status-banner error">{error}</div> : null}
