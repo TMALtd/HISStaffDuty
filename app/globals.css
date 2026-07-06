@@ -821,6 +821,35 @@ tr:last-child td {
   gap: 16px;
 }
 
+.students-mi-panel[open] summary {
+  margin-bottom: 1rem;
+}
+
+.students-mi-summary {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.students-mi-summary::-webkit-details-marker {
+  display: none;
+}
+
+.students-mi-summary::after {
+  content: "Open";
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.students-mi-panel[open] .students-mi-summary::after {
+  content: "Hide";
+}
+
 .mi-card {
   padding: 18px;
   border-radius: 20px;
@@ -2667,6 +2696,11 @@ tr:last-child td {
   .directory-form-grid,
   .legacy-filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .students-mi-summary {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .directory-hero {

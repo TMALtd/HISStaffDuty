@@ -99,9 +99,7 @@ select
   null::text as first_name,
   t."Preferred Name" as preferred_name,
   t."Gender" as gender,
-  t."Form" as form,
-  t."Year Code" as year_code,
-  t."Tutor" as tutor,
+  t."Nationality" as nationality,
   t."Academic House" as academic_house
 from public."Term 3 Data" t
 join public."Class List" c
@@ -129,9 +127,7 @@ select
   e.first_name,
   e.preferred_name,
   e.gender,
-  e.form,
-  e.year_code,
-  e.tutor,
+  e.nationality,
   e.academic_house
 from public.student_roster_entries e
 join active_year a
@@ -153,9 +149,7 @@ select
   legacy.first_name,
   legacy.preferred_name,
   legacy.gender,
-  legacy.form,
-  legacy.year_code,
-  legacy.tutor,
+  legacy.nationality,
   legacy.academic_house
 from public.student_class_roster_legacy legacy
 where not exists (select 1 from active_year);

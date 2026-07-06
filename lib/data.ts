@@ -94,9 +94,6 @@ type StudentProfileOverrideRow = {
   preferred_name: string | null;
   gender: string | null;
   nationality: string | null;
-  form: string | null;
-  year_code: string | null;
-  tutor: string | null;
   academic_house: string | null;
 };
 
@@ -135,9 +132,6 @@ type StudentRosterImportRow = {
   first_name: string | null;
   preferred_name: string | null;
   gender: string | null;
-  form: string;
-  year_code: string | null;
-  tutor: string | null;
   academic_house: string | null;
   nationality: string | null;
   current_school_name: string | null;
@@ -500,6 +494,73 @@ function getClassValue(row: ClassRecord, field: FilterField) {
     case "className":
       return row["Class Name"];
   }
+}
+
+function matchesIndependentStudentFilters(
+  row: StudentRow,
+  filters: FilterState,
+  excludedField?: FilterField
+) {
+  if (excludedField !== "school" && filters.school && row.school !== filters.school) {
+    return false;
+  }
+  if (
+    excludedField !== "designation" &&
+    filters.designation &&
+    row.designation !== filters.designation
+  ) {
+    return false;
+  }
+  if (excludedField !== "yearGroup" && filters.yearGroup && row.year_group !== filters.yearGroup) {
+    return false;
+  }
+  if (excludedField !== "milepost" && filters.milepost && row.milepost !== filters.milepost) {
+    return false;
+  }
+  if (excludedField !== "level" && filters.level && row.level !== filters.level) {
+    return false;
+  }
+  if (excludedField !== "className" && filters.className && row.class_name !== filters.className) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildIndependentFilterOptionsFromStudents(
+  students: StudentRow[],
+  filters: FilterState
+): FilterOptions {
+  const result = {} as FilterOptions;
+  const fieldValue = (row: StudentRow, field: FilterField) => {
+    switch (field) {
+      case "school":
+        return row.school;
+      case "designation":
+        return row.designation;
+      case "yearGroup":
+        return row.year_group;
+      case "milepost":
+        return row.milepost;
+      case "level":
+        return row.level;
+      case "className":
+        return row.class_name;
+    }
+  };
+
+  FILTER_FIELDS.forEach((field) => {
+    result[field] = Array.from(
+      new Set(
+        students
+          .filter((row) => matchesIndependentStudentFilters(row, filters, field))
+          .map((row) => fieldValue(row, field))
+          .filter(Boolean)
+      )
+    ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+  });
+
+  return result;
 }
 
 function formatDutyLocation(first?: string | null, second?: string | null) {
@@ -1599,7 +1660,7 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
     class_name: String(row.class_name ?? ""),
     school: String(row.school ?? ""),
     designation: String(row.designation ?? ""),
-    year_group: String(row.year_group ?? ""),
+    year_group: normalizeStudentYearGroupLabel(row.year_group ? String(row.year_group) : null) ?? "",
     milepost: String(row.milepost ?? ""),
     level: String(row.level ?? ""),
     school_id: String(row.school_id ?? ""),
@@ -1609,9 +1670,6 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
     preferred_name: row.preferred_name ? String(row.preferred_name) : null,
     gender: normalizeStudentGenderValue(row.gender ? String(row.gender) : null),
     nationality: row.nationality ? String(row.nationality) : null,
-    form: String(row.form ?? ""),
-    year_code: row.year_code ? String(row.year_code) : null,
-    tutor: row.tutor ? String(row.tutor) : null,
     academic_house: row.academic_house ? String(row.academic_house) : null,
     assigned_teacher_name: null,
     class_assignment_source: "roster"
@@ -1621,9 +1679,9 @@ function normalizeStudentRosterEntryRow(row: Record<string, unknown>): StudentRo
 async function getStudentRosterRowsFromView(academicYearLabel?: string | null): Promise<StudentRow[]> {
   const supabase = createSupabaseAdminClient();
   const rosterSelect =
-    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,form,year_code,tutor,academic_house";
+    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,nationality,academic_house";
   const legacyRosterSelect =
-    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,form,year_code,tutor,academic_house";
+    "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,surname,first_name,preferred_name,gender,academic_house";
 
   if (academicYearLabel) {
     const matchingYear = (await getStudentAcademicYearRows()).find((year) => year.label === academicYearLabel) ?? null;
@@ -1697,56 +1755,7 @@ export async function getFilterOptions(filters: Partial<FilterState>): Promise<F
   }
 
   if (rosterRows.length > 0) {
-    const rosterResult = {} as FilterOptions;
-    const fieldValue = (row: StudentRow, field: FilterField) => {
-      switch (field) {
-        case "school":
-          return row.school;
-        case "designation":
-          return row.designation;
-        case "yearGroup":
-          return row.year_group;
-        case "milepost":
-          return row.milepost;
-        case "level":
-          return row.level;
-        case "className":
-          return row.class_name;
-      }
-    };
-
-    FILTER_FIELDS.forEach((field, index) => {
-      const options = Array.from(
-        new Set(
-          rosterRows
-            .filter((row) => {
-              if (index >= 1 && normalized.school && row.school !== normalized.school) {
-                return false;
-              }
-              if (index >= 2 && normalized.designation && row.designation !== normalized.designation) {
-                return false;
-              }
-              if (index >= 3 && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
-                return false;
-              }
-              if (index >= 4 && normalized.milepost && row.milepost !== normalized.milepost) {
-                return false;
-              }
-              if (index >= 5 && normalized.level && row.level !== normalized.level) {
-                return false;
-              }
-
-              return true;
-            })
-            .map((row) => fieldValue(row, field))
-            .filter(Boolean)
-        )
-      ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-
-      rosterResult[field] = options;
-    });
-
-    return rosterResult;
+    return buildIndependentFilterOptionsFromStudents(rosterRows, normalized);
   }
 
   const rows = await getClassRecords();
@@ -1781,56 +1790,7 @@ export async function getFilterOptionsForAcademicYear(
   }
 
   if (rosterRows.length > 0) {
-    const rosterResult = {} as FilterOptions;
-    const fieldValue = (row: StudentRow, field: FilterField) => {
-      switch (field) {
-        case "school":
-          return row.school;
-        case "designation":
-          return row.designation;
-        case "yearGroup":
-          return row.year_group;
-        case "milepost":
-          return row.milepost;
-        case "level":
-          return row.level;
-        case "className":
-          return row.class_name;
-      }
-    };
-
-    FILTER_FIELDS.forEach((field, index) => {
-      const options = Array.from(
-        new Set(
-          rosterRows
-            .filter((row) => {
-              if (index >= 1 && normalized.school && row.school !== normalized.school) {
-                return false;
-              }
-              if (index >= 2 && normalized.designation && row.designation !== normalized.designation) {
-                return false;
-              }
-              if (index >= 3 && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
-                return false;
-              }
-              if (index >= 4 && normalized.milepost && row.milepost !== normalized.milepost) {
-                return false;
-              }
-              if (index >= 5 && normalized.level && row.level !== normalized.level) {
-                return false;
-              }
-
-              return true;
-            })
-            .map((row) => fieldValue(row, field))
-            .filter(Boolean)
-        )
-      ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-
-      rosterResult[field] = options;
-    });
-
-    return rosterResult;
+    return buildIndependentFilterOptionsFromStudents(rosterRows, normalized);
   }
 
   return getFilterOptions(filters);
@@ -1956,7 +1916,7 @@ async function getStudentProfileOverrideRows(
       academic_year_label: row.academic_year_label ? String(row.academic_year_label).trim() || null : null,
       school: row.school ? String(row.school).trim() : null,
       designation: row.designation ? String(row.designation).trim() : null,
-      year_group: row.year_group ? String(row.year_group).trim() : null,
+      year_group: normalizeStudentYearGroupLabel(row.year_group ? String(row.year_group).trim() : null),
       milepost: row.milepost ? String(row.milepost).trim() : null,
       level: row.level ? String(row.level).trim() : null,
       full_name: row.full_name ? String(row.full_name).trim() : null,
@@ -2150,7 +2110,10 @@ export async function getStudents(
         class_name: className,
         school: assignedMetadata?.school || String(student.school ?? ""),
         designation: assignedMetadata?.designation || String(student.designation ?? ""),
-        year_group: assignedMetadata?.year_group || String(student.year_group ?? ""),
+        year_group:
+          assignedMetadata?.year_group ||
+          normalizeStudentYearGroupLabel(student.year_group ?? null) ||
+          "",
         milepost: assignedMetadata?.milepost || String(student.milepost ?? ""),
         level: assignedMetadata?.level || String(student.level ?? ""),
         school_id: schoolId,
@@ -2160,9 +2123,6 @@ export async function getStudents(
         preferred_name: student.preferred_name ?? null,
         gender: student.gender ?? null,
         nationality: student.nationality ?? null,
-        form: student.form ?? "",
-        year_code: student.year_code ?? null,
-        tutor: student.tutor ?? null,
         academic_house: student.academic_house ?? null,
         assigned_teacher_name: teacherName,
         class_assignment_source: assignment ? "override" : "roster"
@@ -2176,7 +2136,7 @@ export async function getStudents(
         ...nextStudent,
         school: override.school ?? nextStudent.school,
         designation: override.designation ?? nextStudent.designation,
-        year_group: override.year_group ?? nextStudent.year_group,
+        year_group: normalizeStudentYearGroupLabel(override.year_group) ?? nextStudent.year_group,
         milepost: override.milepost ?? nextStudent.milepost,
         level: override.level ?? nextStudent.level,
         full_name: override.full_name ?? nextStudent.full_name,
@@ -2185,9 +2145,6 @@ export async function getStudents(
         preferred_name: override.preferred_name ?? nextStudent.preferred_name,
         gender: normalizeStudentGenderValue(override.gender) ?? normalizeStudentGenderValue(nextStudent.gender),
         nationality: override.nationality ?? nextStudent.nationality,
-        form: override.form ?? nextStudent.form,
-        year_code: override.year_code ?? nextStudent.year_code,
-        tutor: override.tutor ?? nextStudent.tutor,
         academic_house: override.academic_house ?? nextStudent.academic_house
       };
     })
@@ -2392,7 +2349,7 @@ export async function upsertStudentProfileOverride(
     academic_year_label: resolvedAcademicYearLabel ?? "",
     school: normalizeOptionalText(input.school),
     designation: normalizeOptionalText(input.designation),
-    year_group: normalizeOptionalText(input.yearGroup),
+    year_group: normalizeStudentYearGroupLabel(input.yearGroup),
     milepost: normalizeOptionalText(input.milepost),
     level: normalizeOptionalText(input.level),
     full_name: normalizeOptionalText(input.fullName),
@@ -2401,9 +2358,6 @@ export async function upsertStudentProfileOverride(
     preferred_name: normalizeOptionalText(input.preferredName),
     gender: normalizeStudentGenderValue(input.gender),
     nationality: normalizeOptionalText(input.nationality),
-    form: normalizeOptionalText(input.form),
-    year_code: normalizeOptionalText(input.yearCode),
-    tutor: normalizeOptionalText(input.tutor),
     academic_house: normalizeOptionalText(input.academicHouse),
     updated_by_email: normalizeOptionalText(updatedByEmail)?.toLowerCase() ?? null,
     updated_at: new Date().toISOString()
@@ -2455,9 +2409,6 @@ export async function upsertStudentProfileOverride(
       preferred_name: payload.preferred_name,
       gender: payload.gender,
       nationality: payload.nationality,
-      form: payload.form,
-      year_code: payload.year_code,
-      tutor: payload.tutor,
       academic_house: payload.academic_house,
       updated_by_email: payload.updated_by_email,
       updated_at: payload.updated_at
@@ -2701,7 +2652,7 @@ export async function archiveLegacyStudentRoster(input: {
   const legacyResult = await supabase
     .from(LEGACY_STUDENT_ROSTER_VIEW_NAME)
     .select(
-      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,preferred_name,gender,form,year_code,tutor,academic_house"
+      "class_code,class_name,school,designation,year_group,milepost,level,school_id,full_name,preferred_name,gender,nationality,academic_house"
     )
     .order("class_name")
     .order("full_name");
@@ -2754,7 +2705,7 @@ export async function archiveLegacyStudentRoster(input: {
         class_name: String(row.class_name ?? "").trim(),
         school: String(row.school ?? "").trim(),
         designation: String(row.designation ?? "").trim(),
-        year_group: String(row.year_group ?? "").trim(),
+        year_group: normalizeStudentYearGroupLabel(String(row.year_group ?? "").trim()) ?? "",
         milepost: String(row.milepost ?? "").trim(),
         level: String(row.level ?? "").trim(),
         school_id: String(row.school_id ?? "").trim(),
@@ -2763,9 +2714,7 @@ export async function archiveLegacyStudentRoster(input: {
         first_name: firstNameGuess || null,
         preferred_name: preferredName,
         gender: normalizeStudentGenderValue(row.gender ? String(row.gender).trim() : null),
-        form: String(row.form ?? row.class_name ?? "").trim(),
-        year_code: row.year_code ? String(row.year_code).trim() : null,
-        tutor: row.tutor ? String(row.tutor).trim() : null,
+        nationality: row.nationality ? String(row.nationality).trim() : null,
         academic_house: row.academic_house ? String(row.academic_house).trim() : null,
         source_filename: "Legacy roster archive",
         imported_at: new Date().toISOString()
@@ -2888,7 +2837,7 @@ export async function importStudentRosterClassCsv(input: {
       class_name: String(targetClass["Class Name"] ?? "").trim(),
       school: String(targetClass.School ?? "").trim(),
       designation: String(targetClass.Designation ?? "").trim(),
-      year_group: String(targetClass["Year Group"] ?? "").trim(),
+      year_group: normalizeStudentYearGroupLabel(String(targetClass["Year Group"] ?? "").trim()) ?? "",
       milepost: String(targetClass.Milepost ?? "").trim(),
       level: String(targetClass.Level ?? "").trim(),
       school_id: schoolId,
@@ -2897,9 +2846,6 @@ export async function importStudentRosterClassCsv(input: {
       first_name: firstNameIndex === -1 ? null : normalizeOptionalText(row[firstNameIndex]),
       preferred_name: preferredNameIndex === -1 ? null : normalizeOptionalText(row[preferredNameIndex]),
       gender: genderIndex === -1 ? null : normalizeStudentGenderValue(row[genderIndex]),
-      form: String(targetClass["Class Name"] ?? "").trim(),
-      year_code: yearCodeIndex === -1 ? null : normalizeOptionalText(row[yearCodeIndex]),
-      tutor: null,
       academic_house: null,
       nationality: nationalityIndex === -1 ? null : normalizeOptionalText(row[nationalityIndex]),
       current_school_name: currentSchoolIndex === -1 ? null : normalizeOptionalText(row[currentSchoolIndex]),
@@ -3134,6 +3080,28 @@ export async function getEmailRecipientOptions(): Promise<EmailRecipientOption[]
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = String(value ?? "").trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeStudentYearGroupLabel(value: string | null | undefined) {
+  const normalized = normalizeOptionalText(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const preschoolMatch =
+    normalized.match(/^ps\s*(\d+)$/i) ?? normalized.match(/^preschool\s*(\d+)$/i);
+  if (preschoolMatch) {
+    return `Preschool ${preschoolMatch[1]}`;
+  }
+
+  const yearMatch =
+    normalized.match(/^year\s*(\d+)$/i) ?? normalized.match(/^(\d{1,2})$/);
+  if (yearMatch) {
+    return `Year ${yearMatch[1]}`;
+  }
+
+  return normalized;
 }
 
 function normalizeStudentGenderValue(value: string | null | undefined): "M" | "F" | null {

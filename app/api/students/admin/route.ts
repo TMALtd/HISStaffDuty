@@ -144,9 +144,6 @@ export async function PATCH(request: Request) {
         preferredName: body.preferredName ?? null,
         gender: body.gender ?? null,
         nationality: body.nationality ?? null,
-        form: body.form ?? null,
-        yearCode: body.yearCode ?? null,
-        tutor: body.tutor ?? null,
         academicHouse: body.academicHouse ?? null
       },
       session.user.email ?? null

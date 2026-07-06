@@ -32,29 +32,34 @@ function buildFilterOptionsFromStudents(students: StudentRow[], filters: Partial
     }
   };
 
-  FILTER_FIELDS.forEach((field, index) => {
+  const matchesSelectedFiltersExcludingField = (row: StudentRow, field: FilterField) => {
+    if (field !== "school" && normalized.school && row.school !== normalized.school) {
+      return false;
+    }
+    if (field !== "designation" && normalized.designation && row.designation !== normalized.designation) {
+      return false;
+    }
+    if (field !== "yearGroup" && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
+      return false;
+    }
+    if (field !== "milepost" && normalized.milepost && row.milepost !== normalized.milepost) {
+      return false;
+    }
+    if (field !== "level" && normalized.level && row.level !== normalized.level) {
+      return false;
+    }
+    if (field !== "className" && normalized.className && row.class_name !== normalized.className) {
+      return false;
+    }
+
+    return true;
+  };
+
+  FILTER_FIELDS.forEach((field) => {
     const options = Array.from(
       new Set(
         students
-          .filter((row) => {
-            if (index >= 1 && normalized.school && row.school !== normalized.school) {
-              return false;
-            }
-            if (index >= 2 && normalized.designation && row.designation !== normalized.designation) {
-              return false;
-            }
-            if (index >= 3 && normalized.yearGroup && row.year_group !== normalized.yearGroup) {
-              return false;
-            }
-            if (index >= 4 && normalized.milepost && row.milepost !== normalized.milepost) {
-              return false;
-            }
-            if (index >= 5 && normalized.level && row.level !== normalized.level) {
-              return false;
-            }
-
-            return true;
-          })
+          .filter((row) => matchesSelectedFiltersExcludingField(row, field))
           .map((row) => fieldValue(row, field))
           .filter(Boolean)
       )

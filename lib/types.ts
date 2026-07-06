@@ -35,9 +35,6 @@ export type StudentRow = {
   preferred_name: string | null;
   gender: string | null;
   nationality: string | null;
-  form: string;
-  year_code: string | null;
-  tutor: string | null;
   academic_house: string | null;
   assigned_teacher_name: string | null;
   class_assignment_source: "roster" | "override";

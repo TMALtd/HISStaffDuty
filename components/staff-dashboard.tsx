@@ -62,36 +62,51 @@ function getInitial(value: string | null | undefined) {
   return value;
 }
 
-function getStudentYearLabel(student: StudentRow) {
-  const explicitYearCode = String(student.year_code ?? "").trim();
-  if (explicitYearCode) {
-    return explicitYearCode;
+function formatStaffFacingYearGroup(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return "";
   }
 
-  const candidates = [
-    String(student.year_group ?? "").trim(),
-    String(student.form ?? "").trim(),
-    String(student.class_name ?? "").trim()
-  ].filter(Boolean);
+  const preschoolMatch = normalized.match(/^ps\s*(\d+)$/i) ?? normalized.match(/^preschool\s*(\d+)$/i);
+  if (preschoolMatch) {
+    return `Preschool ${preschoolMatch[1]}`;
+  }
 
-  for (const candidate of candidates) {
-    const preschoolMatch = candidate.match(/preschool\s*(\d+)/i);
-    if (preschoolMatch) {
-      return `PS${preschoolMatch[1]}`;
-    }
+  const yearMatch = normalized.match(/^year\s*(\d+)$/i) ?? normalized.match(/^(\d{1,2})$/);
+  if (yearMatch) {
+    return `Year ${yearMatch[1]}`;
+  }
 
-    const yearGroupMatch = candidate.match(/year\s*(\d+)/i);
-    if (yearGroupMatch) {
-      return yearGroupMatch[1];
-    }
+  return normalized;
+}
 
-    const classLeadingNumberMatch = candidate.match(/^(\d{1,2})\b/);
-    if (classLeadingNumberMatch) {
-      return classLeadingNumberMatch[1];
-    }
+function getStudentYearLabel(student: StudentRow) {
+  const formattedYearGroup = formatStaffFacingYearGroup(student.year_group);
+  if (formattedYearGroup) {
+    return formattedYearGroup;
   }
 
   return "Unknown";
+}
+
+function getYearGroupSortOrder(label: string) {
+  const normalized = formatStaffFacingYearGroup(label).toLowerCase();
+  const preschoolMatch = normalized.match(/^preschool\s+(\d+)$/);
+  if (preschoolMatch) {
+    return Number(preschoolMatch[1]);
+  }
+
+  const yearMatch = normalized.match(/^year\s+(\d+)$/);
+  if (yearMatch) {
+    return 100 + Number(yearMatch[1]);
+  }
+
+  if (normalized === "preschool") {
+    return 0;
+  }
+
+  return 1000;
 }
 
 function buildCounts(students: StudentRow[], getValue: (student: StudentRow) => string) {
@@ -200,9 +215,6 @@ type StudentEditorDraft = {
   preferred_name: string;
   gender: string;
   nationality: string;
-  form: string;
-  year_code: string;
-  tutor: string;
   academic_house: string;
 };
 
@@ -303,16 +315,7 @@ export function StaffDashboard({
   }, [filters, academicYear, canManageRosterYears, previewEmail, refreshToken]);
 
   function updateFilter(field: keyof FilterState, value: string) {
-    setFilters((current) => {
-      const next = { ...current, [field]: value };
-      const changedIndex = FILTER_FIELDS.indexOf(field);
-
-      FILTER_FIELDS.slice(changedIndex + 1).forEach((laterField) => {
-        next[laterField] = "";
-      });
-
-      return next;
-    });
+    setFilters((current) => ({ ...current, [field]: value }));
   }
 
   function clearFilters() {
@@ -334,9 +337,6 @@ export function StaffDashboard({
       preferred_name: student.preferred_name ?? "",
       gender: normalizeStudentGender(student.gender),
       nationality: student.nationality ?? "",
-      form: student.form,
-      year_code: student.year_code ?? "",
-      tutor: student.tutor ?? "",
       academic_house: student.academic_house ?? ""
     });
     setError("");
@@ -384,9 +384,6 @@ export function StaffDashboard({
           preferredName: editorDraft.preferred_name,
           gender: normalizeStudentGender(editorDraft.gender),
           nationality: editorDraft.nationality,
-          form: editorDraft.form,
-          yearCode: editorDraft.year_code,
-          tutor: editorDraft.tutor,
           academicHouse: editorDraft.academic_house
         })
       });
@@ -410,7 +407,9 @@ export function StaffDashboard({
   const classCount = new Set(students.map((student) => student.class_name)).size;
   const genderBreakdown = buildCounts(students, (student) => getInitial(student.gender));
   const houseBreakdown = buildCounts(students, (student) => student.academic_house || "Unknown");
-  const yearBreakdown = buildCounts(students, (student) => getStudentYearLabel(student));
+  const yearBreakdown = buildCounts(students, (student) => getStudentYearLabel(student)).sort(
+    (left, right) => getYearGroupSortOrder(left.label) - getYearGroupSortOrder(right.label)
+  );
   const nationalityBreakdown = buildCounts(students, (student) => student.nationality || "Unknown");
   const classBreakdown = buildCounts(students, (student) => student.class_name);
   const femaleCount = students.filter((student) => (student.gender || "").toUpperCase() === "F").length;
@@ -594,15 +593,20 @@ export function StaffDashboard({
       </section>
 
       <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Management information</p>
-            <h2 className="panel-title">Live summary of the current cohort</h2>
-          </div>
-          <p className="hint">These summaries update automatically as you change filters.</p>
-        </div>
+        <details className="students-mi-panel" open={canManageRosterYears}>
+          <summary className="students-mi-summary">
+            <div>
+              <p className="eyebrow">Management information</p>
+              <h2 className="panel-title">Live summary of the current cohort</h2>
+            </div>
+            <p className="hint">
+              {canManageRosterYears
+                ? "These summaries update automatically as you change filters."
+                : "Open to view cohort summaries for the current filter set."}
+            </p>
+          </summary>
 
-        <div className="mi-grid">
+          <div className="mi-grid">
           <article className="mi-card">
             <h3 className="mi-title">Gender split</h3>
             <BreakdownPie items={genderBreakdown} total={students.length} />
@@ -682,7 +686,8 @@ export function StaffDashboard({
               ))}
             </div>
           </article>
-        </div>
+          </div>
+        </details>
       </section>
 
       <section className="table-shell">
@@ -696,7 +701,7 @@ export function StaffDashboard({
                 <th>Gender</th>
                 <th>Nationality</th>
                 <th>Class</th>
-                <th>Year Code</th>
+                <th>Year Group</th>
                 <th>Homeroom Teacher</th>
                 <th>House</th>
                 {canManageRosterYears ? <th>Actions</th> : null}
@@ -712,7 +717,7 @@ export function StaffDashboard({
                   <td>{student.nationality || "—"}</td>
                   <td>{student.class_name}</td>
                   <td>{getStudentYearLabel(student)}</td>
-                  <td>{student.assigned_teacher_name || student.tutor || "—"}</td>
+                  <td>{student.assigned_teacher_name || "—"}</td>
                   <td>{student.academic_house || "—"}</td>
                   {canManageRosterYears ? (
                     <td>
@@ -819,18 +824,6 @@ export function StaffDashboard({
                           <option key={`${option.classCode}-${option.className}`} value={option.className} />
                         ))}
                       </datalist>
-                    </label>
-                    <label className="field">
-                      <span>Form</span>
-                      <input value={editorDraft.form} onChange={(event) => setEditorDraft((current) => current ? { ...current, form: event.target.value } : current)} />
-                    </label>
-                    <label className="field">
-                      <span>Year Code</span>
-                      <input value={editorDraft.year_code} onChange={(event) => setEditorDraft((current) => current ? { ...current, year_code: event.target.value } : current)} />
-                    </label>
-                    <label className="field">
-                      <span>Tutor / Homeroom Teacher</span>
-                      <input value={editorDraft.tutor} onChange={(event) => setEditorDraft((current) => current ? { ...current, tutor: event.target.value } : current)} />
                     </label>
                     <label className="field">
                       <span>House</span>

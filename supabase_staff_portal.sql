@@ -9,11 +9,11 @@ select
   c."Level" as level,
   t."School Id" as school_id,
   t."Full Name" as full_name,
+  null::text as surname,
+  null::text as first_name,
   t."Preferred Name" as preferred_name,
   t."Gender" as gender,
-  t."Form" as form,
-  t."Year Code" as year_code,
-  t."Tutor" as tutor,
+  t."Nationality" as nationality,
   t."Academic House" as academic_house
 from public."Term 3 Data" t
 join public."Class List" c
