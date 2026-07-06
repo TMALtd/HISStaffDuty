@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { EmailDeliveryPanel } from "@/components/email-delivery-panel";
 import { PortalPageAccessPanel } from "@/components/portal-page-access-panel";
 import {
+  getEmailRecipientOptions,
   getPortalHeroSettings,
   getPortalPageAccessSettings,
   getStudentAcademicYears,
@@ -25,13 +26,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const session = await requirePortalAccess("student-filter");
   const { user, access } = session;
   const preview = await getAccessPreviewSession(session, searchParams?.viewAs);
-  const [academicYears, classOptions, previewOptions, emailSenderOptions, pageAccessSettings, visibleViews] = await Promise.all([
+  const [academicYears, classOptions, previewOptions, emailSenderOptions, emailRecipientOptions, pageAccessSettings, visibleViews] = await Promise.all([
     access.isFullAccess && !preview.isPreviewing ? getStudentAcademicYears() : Promise.resolve([]),
     access.isFullAccess && !preview.isPreviewing ? getStudentRosterClassOptions() : Promise.resolve([]),
     access.isFullAccess ? getTimetablePreviewStaffOptions() : Promise.resolve([]),
     access.isFullAccess && !preview.isPreviewing
       ? Promise.resolve(getConfiguredEmailSenderOptions())
       : Promise.resolve([]),
+    access.isFullAccess && !preview.isPreviewing ? getEmailRecipientOptions() : Promise.resolve([]),
     access.isFullAccess && !preview.isPreviewing ? getPortalPageAccessSettings() : Promise.resolve([]),
     getVisiblePortalViews(preview.activeAccess, access.isFullAccess && !preview.isPreviewing)
   ]);
@@ -71,6 +73,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       {access.isFullAccess && !preview.isPreviewing ? (
         <EmailDeliveryPanel
           senderOptions={emailSenderOptions}
+          recipientOptions={emailRecipientOptions}
           defaultRecipient={user.email ?? ""}
         />
       ) : null}

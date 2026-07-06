@@ -302,6 +302,41 @@ textarea {
   color: var(--accent);
 }
 
+.email-recipient-list {
+  max-height: 280px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+
+.email-recipient-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 252, 247, 0.82);
+  border: 1px solid rgba(118, 18, 29, 0.08);
+}
+
+.email-recipient-option input {
+  margin-top: 3px;
+}
+
+.email-recipient-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.email-recipient-option small {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

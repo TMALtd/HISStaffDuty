@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import type { EmailRecipientOption } from "@/lib/types";
 
 type EmailSenderOption = {
   key: "workspace" | "duties";
@@ -11,8 +12,11 @@ type EmailSenderOption = {
 
 type EmailDeliveryPanelProps = {
   senderOptions: EmailSenderOption[];
+  recipientOptions: EmailRecipientOption[];
   defaultRecipient?: string;
 };
+
+type RecipientMode = "individual" | "team" | "all";
 
 type EmailTemplateKey =
   | "new-user-login"
@@ -152,6 +156,7 @@ function getEmailPreset(templateKey: EmailTemplateKey, senderLabel: string) {
 
 export function EmailDeliveryPanel({
   senderOptions,
+  recipientOptions,
   defaultRecipient = ""
 }: EmailDeliveryPanelProps) {
   const initialTemplateKey: EmailTemplateKey = "new-user-login";
@@ -161,12 +166,57 @@ export function EmailDeliveryPanel({
   const initialPreset = getEmailPreset(initialTemplateKey, initialSenderLabel);
   const [templateKey, setTemplateKey] = useState<EmailTemplateKey>(initialTemplateKey);
   const [senderKey, setSenderKey] = useState(initialSenderKey);
+  const [recipientMode, setRecipientMode] = useState<RecipientMode>("individual");
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [selectedEmails, setSelectedEmails] = useState<string[]>(defaultRecipient ? [defaultRecipient] : []);
+  const [recipientSearch, setRecipientSearch] = useState("");
   const [to, setTo] = useState(defaultRecipient);
   const [subject, setSubject] = useState(initialPreset.subject);
   const [message, setMessage] = useState(initialPreset.message);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  const teamOptions = useMemo(
+    () =>
+      Array.from(new Set(recipientOptions.map((option) => option.teamLabel).filter(Boolean))).sort((left, right) =>
+        left.localeCompare(right, undefined, { numeric: true })
+      ),
+    [recipientOptions]
+  );
+
+  const visibleRecipientOptions = useMemo(() => {
+    const search = recipientSearch.trim().toLowerCase();
+
+    return recipientOptions.filter((option) => {
+      if (!search) {
+        return true;
+      }
+
+      return [option.name, option.email, option.teamLabel]
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [recipientOptions, recipientSearch]);
+
+  const autoRecipients = useMemo(() => {
+    if (recipientMode === "all") {
+      return recipientOptions.map((option) => option.email);
+    }
+
+    if (recipientMode === "team") {
+      return recipientOptions
+        .filter((option) => option.teamLabel === selectedTeam)
+        .map((option) => option.email);
+    }
+
+    return selectedEmails;
+  }, [recipientMode, recipientOptions, selectedEmails, selectedTeam]);
+
+  useEffect(() => {
+    setTo(autoRecipients.join(", "));
+  }, [autoRecipients]);
 
   function handleSenderChange(nextSenderKey: EmailSenderOption["key"]) {
     const currentSenderLabel =
@@ -195,6 +245,12 @@ export function EmailDeliveryPanel({
     setTemplateKey(nextTemplateKey);
     setSubject(nextPreset.subject);
     setMessage(nextPreset.message);
+  }
+
+  function toggleIndividualRecipient(email: string) {
+    setSelectedEmails((current) =>
+      current.includes(email) ? current.filter((entry) => entry !== email) : [...current, email]
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -258,6 +314,37 @@ export function EmailDeliveryPanel({
 
       <form className="directory-search-grid" onSubmit={handleSubmit}>
         <div className="field">
+          <label htmlFor="recipientMode">Recipients</label>
+          <select
+            id="recipientMode"
+            value={recipientMode}
+            onChange={(event) => setRecipientMode(event.target.value as RecipientMode)}
+          >
+            <option value="individual">Select individuals</option>
+            <option value="team">Select a team</option>
+            <option value="all">All users</option>
+          </select>
+        </div>
+
+        {recipientMode === "team" ? (
+          <div className="field">
+            <label htmlFor="recipientTeam">Team</label>
+            <select
+              id="recipientTeam"
+              value={selectedTeam}
+              onChange={(event) => setSelectedTeam(event.target.value)}
+            >
+              <option value="">Choose team</option>
+              {teamOptions.map((team) => (
+                <option key={team} value={team}>
+                  {team}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        <div className="field">
           <label htmlFor="emailTemplate">Template</label>
           <select
             id="emailTemplate"
@@ -317,6 +404,49 @@ export function EmailDeliveryPanel({
             rows={6}
           />
         </div>
+
+        {recipientMode === "individual" ? (
+          <div className="field field-span-3">
+            <label htmlFor="recipientSearch">Choose staff recipients</label>
+            <input
+              id="recipientSearch"
+              type="text"
+              value={recipientSearch}
+              onChange={(event) => setRecipientSearch(event.target.value)}
+              placeholder="Search by name, email, or team"
+            />
+            <div className="email-recipient-list">
+              {visibleRecipientOptions.map((option) => {
+                const isSelected = selectedEmails.includes(option.email);
+
+                return (
+                  <label key={option.email} className="email-recipient-option">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleIndividualRecipient(option.email)}
+                    />
+                    <span>
+                      <strong>{option.name}</strong>
+                      <small>
+                        {option.email} | {option.teamLabel}
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+              {!visibleRecipientOptions.length ? <p className="hint">No matching staff found.</p> : null}
+            </div>
+          </div>
+        ) : null}
+
+        {recipientMode === "all" ? (
+          <div className="field field-span-3">
+            <p className="hint">
+              This will send to all configured staff recipients: <strong>{recipientOptions.length}</strong>
+            </p>
+          </div>
+        ) : null}
 
         <div className="actions">
           <button className="button" type="submit" disabled={isSending}>

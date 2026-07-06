@@ -174,6 +174,12 @@ export type PortalPageAccessSetting = {
   isEnabled: boolean;
 };
 
+export type EmailRecipientOption = {
+  email: string;
+  name: string;
+  teamLabel: string;
+};
+
 export type GradebookWorkspaceSection = GradebookSectionDefinition & {
   subject: GradebookSubject | null;
   isConfigured: boolean;

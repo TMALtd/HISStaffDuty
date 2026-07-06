@@ -45,6 +45,7 @@ import {
   type GradebookSectionDefinition,
   type GradebookSectionSettingsInput,
   type GradebookSubject,
+  type EmailRecipientOption,
   type PortalHeroPageKey,
   type PortalPageAccessKey,
   type PortalPageAccessSetting,
@@ -3090,6 +3091,41 @@ export async function getStaffDirectoryData(): Promise<StaffDirectoryRecord[]> {
         numeric: true
       });
     });
+}
+
+export async function getEmailRecipientOptions(): Promise<EmailRecipientOption[]> {
+  const staff = await getStaffDirectoryData();
+  const seenEmails = new Set<string>();
+
+  return staff
+    .map((person) => {
+      const email = String(person.email ?? "").trim().toLowerCase();
+      const teamLabel =
+        String(person.department ?? "").trim() ||
+        String(person.designation ?? "").trim() ||
+        String(person.role ?? "").trim() ||
+        "General Staff";
+
+      return {
+        email,
+        name: String(person.name ?? "").trim() || email,
+        teamLabel
+      };
+    })
+    .filter((person) => person.email)
+    .filter((person) => {
+      if (seenEmails.has(person.email)) {
+        return false;
+      }
+
+      seenEmails.add(person.email);
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        left.teamLabel.localeCompare(right.teamLabel, undefined, { numeric: true }) ||
+        left.name.localeCompare(right.name, undefined, { numeric: true })
+    );
 }
 
 function normalizeOptionalText(value: string | null | undefined) {
