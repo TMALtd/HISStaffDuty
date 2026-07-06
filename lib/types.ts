@@ -180,6 +180,8 @@ export type EmailRecipientOption = {
   teamLabel: string;
 };
 
+export type NotificationRecipientMode = "individual" | "team" | "all";
+
 export type GradebookWorkspaceSection = GradebookSectionDefinition & {
   subject: GradebookSubject | null;
   isConfigured: boolean;

@@ -39,40 +39,38 @@ If every route suddenly returns `500`, check that these env vars are still prese
 
 ## Google Workspace email setup
 
-Full-access admins can send email from the homepage once SMTP is configured for the school mailboxes.
+Full-access admins can send email from the homepage once Google OAuth is configured for the sender mailbox.
 
 Add these Render environment variables:
 
-- `EMAIL_SMTP_HOST`
-- `EMAIL_SMTP_PORT`
-- `EMAIL_SMTP_SECURE`
-- `HIS_EMAIL_WORKSPACE_NAME`
-- `HIS_EMAIL_WORKSPACE_ADDRESS`
-- `HIS_EMAIL_WORKSPACE_SMTP_USER`
-- `HIS_EMAIL_WORKSPACE_SMTP_PASS`
-- `HIS_EMAIL_DUTIES_NAME`
-- `HIS_EMAIL_DUTIES_ADDRESS`
-- `HIS_EMAIL_DUTIES_SMTP_USER`
-- `HIS_EMAIL_DUTIES_SMTP_PASS`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REFRESH_TOKEN`
+- `GOOGLE_OAUTH_SENDER_EMAIL`
+- `GOOGLE_OAUTH_SENDER_NAME`
 
-Recommended values for Google Workspace:
+Recommended sender values:
 
-- `EMAIL_SMTP_HOST=smtp.gmail.com`
-- `EMAIL_SMTP_PORT=465`
-- `EMAIL_SMTP_SECURE=true`
+- `GOOGLE_OAUTH_SENDER_EMAIL=admin@teachingmrallen.com`
+- `GOOGLE_OAUTH_SENDER_NAME=HELP International School`
 
-For each mailbox:
+The sender mailbox must have a valid Gmail API refresh token with `gmail.send` access.
 
-1. Enable the account for SMTP sending in Google Workspace.
-2. Generate an app password if the account uses 2-step verification.
-3. Put the mailbox address into the matching `*_ADDRESS` and `*_SMTP_USER` variables.
-4. Put the app password into the matching `*_SMTP_PASS` variable.
-5. Redeploy the app.
+## Desktop notifications
 
-The two configured sender identities are:
+The app can send browser desktop notifications to subscribed staff users.
 
-- `HIS Staff Workspace` using `benjamin.allen@kl.his.edu.my`
-- `HIS Staff Duties` using `duties@kl.his.edu.my`
+Run this SQL first:
+
+- `supabase_web_push_subscriptions.sql`
+
+Add these Render environment variables:
+
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
+
+Each staff user must open the workspace and click `Enable Notifications` once in their browser before they can receive desktop alerts.
 
 ## Render deployment
 
@@ -85,6 +83,7 @@ The two configured sender identities are:
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - the Google Workspace email variables listed above if you want in-app email sending
+   - the VAPID variables listed above if you want desktop notifications
 5. Deploy.
 
 ## Data contract
