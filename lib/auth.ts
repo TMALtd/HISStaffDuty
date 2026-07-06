@@ -19,6 +19,7 @@ const VIEW_FALLBACK_PATHS: Partial<Record<PortalView, string>> = {
   "duty-roster": "/duties/roster",
   timetables: "/timetables",
   directory: "/directory",
+  communication: "/communication",
   setup: "/admin/gradebook"
 };
 

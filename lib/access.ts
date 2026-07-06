@@ -16,6 +16,7 @@ export type PortalView =
   | "duty-roster"
   | "timetables"
   | "directory"
+  | "communication"
   | "setup";
 
 export const PORTAL_NAV_ITEMS: Array<{
@@ -29,6 +30,7 @@ export const PORTAL_NAV_ITEMS: Array<{
   { href: "/duties/roster", label: "Duty Roster", view: "duty-roster" },
   { href: "/timetables", label: "Timetables", view: "timetables" },
   { href: "/directory", label: "Staff Directory", view: "directory" },
+  { href: "/communication", label: "Communication", view: "communication" },
   { href: "/admin/gradebook", label: "Setup", view: "setup" }
 ];
 
@@ -177,6 +179,7 @@ export function getPortalPageAccessKeyForView(view: PortalView): PortalPageAcces
       return "timetables";
     case "directory":
       return "directory";
+    case "communication":
     case "setup":
       return null;
     default:
