@@ -81,6 +81,7 @@ export default async function GradebookPage({ searchParams }: GradebookPageProps
         isSpecialistView={isSpecialistView}
         specialistSectionSlug={specialistSectionSlug}
         initialFilters={{
+          searchTerm: "",
           school: toStringValue(searchParams.school),
           designation: toStringValue(searchParams.designation),
           yearGroup: toStringValue(searchParams.yearGroup),

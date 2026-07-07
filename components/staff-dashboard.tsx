@@ -294,6 +294,18 @@ type StudentEditorDraft = {
   academic_house: string;
 };
 
+type StudentCreateDraft = {
+  school_id: string;
+  full_name: string;
+  first_name: string;
+  surname: string;
+  preferred_name: string;
+  gender: string;
+  nationality: string;
+  academic_house: string;
+  class_name: string;
+};
+
 function normalizeStudentGender(value: string | null | undefined) {
   const normalized = String(value ?? "").trim().toUpperCase();
 
@@ -328,6 +340,8 @@ export function StaffDashboard({
   const [editingStudentId, setEditingStudentId] = useState("");
   const [editorDraft, setEditorDraft] = useState<StudentEditorDraft | null>(null);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [isCreatingStudent, setIsCreatingStudent] = useState(false);
+  const [createDraft, setCreateDraft] = useState<StudentCreateDraft | null>(null);
   const [studentHistory, setStudentHistory] = useState<StudentChangeLogEntry[]>([]);
   const [isStudentHistoryLoading, setIsStudentHistoryLoading] = useState(false);
   const [studentHistoryError, setStudentHistoryError] = useState("");
@@ -401,6 +415,28 @@ export function StaffDashboard({
     setFilters(EMPTY_FILTERS);
   }
 
+  function openStudentCreateModal() {
+    setCreateDraft({
+      school_id: "",
+      full_name: "",
+      first_name: "",
+      surname: "",
+      preferred_name: "",
+      gender: "",
+      nationality: "",
+      academic_house: "",
+      class_name: ""
+    });
+    setIsCreatingStudent(false);
+    setError("");
+    setStatus("");
+  }
+
+  function closeStudentCreateModal() {
+    setCreateDraft(null);
+    setIsCreatingStudent(false);
+  }
+
   function openStudentEditor(student: StudentRow) {
     setEditingStudentId(student.school_id);
     setEditorDraft({
@@ -432,6 +468,55 @@ export function StaffDashboard({
     setStudentHistory([]);
     setStudentHistoryError("");
     setIsStudentHistoryLoading(false);
+  }
+
+  async function saveNewStudent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!createDraft) {
+      return;
+    }
+
+    const selectedClassOption =
+      classOptions.find((option) => option.className === createDraft.class_name) ?? null;
+
+    setIsCreatingStudent(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/students/admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action: "create-student",
+          academicYearLabel: canManageRosterYears ? academicYear || null : null,
+          studentSchoolId: createDraft.school_id,
+          fullName: createDraft.full_name,
+          firstName: createDraft.first_name,
+          surname: createDraft.surname,
+          preferredName: createDraft.preferred_name,
+          gender: normalizeStudentGender(createDraft.gender),
+          nationality: createDraft.nationality,
+          academicHouse: createDraft.academic_house,
+          className: createDraft.class_name,
+          classCode: selectedClassOption?.classCode ?? null
+        })
+      });
+
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(json.error ?? "Could not add student.");
+      }
+
+      setStatus("New student added.");
+      closeStudentCreateModal();
+      setRefreshToken((current) => current + 1);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Could not add student.");
+    } finally {
+      setIsCreatingStudent(false);
+    }
   }
 
   useEffect(() => {
@@ -564,6 +649,16 @@ export function StaffDashboard({
       <section className="panel">
         <h2 className="panel-title">Filter roster</h2>
         <div className="filters-grid">
+          <div className="field field-span-2">
+            <label htmlFor="searchTerm">Search by name</label>
+            <input
+              id="searchTerm"
+              type="search"
+              placeholder="Search full name, preferred name, first name, surname, or school ID"
+              value={filters.searchTerm}
+              onChange={(event) => updateFilter("searchTerm", event.target.value)}
+            />
+          </div>
           {canManageRosterYears ? (
             <div className="field">
               <label htmlFor="academicYear">Roster year</label>
@@ -696,6 +791,11 @@ export function StaffDashboard({
             <Link className="button secondary" href="/admin/gradebook">
               Markbook Setup
             </Link>
+          ) : null}
+          {canManageRosterYears ? (
+            <button className="button secondary" type="button" onClick={openStudentCreateModal}>
+              Add Student
+            </button>
           ) : null}
           <span className="hint">{isLoading ? "Refreshing results..." : "Filters update live."}</span>
           {canManageRosterYears && academicYear ? (
@@ -996,6 +1096,126 @@ export function StaffDashboard({
                 </button>
                 <button className="button" type="submit" disabled={isSavingStudent}>
                   {isSavingStudent ? "Saving..." : "Save Student"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {canManageRosterYears && createDraft ? (
+        <div className="directory-modal-backdrop" role="presentation" onClick={closeStudentCreateModal}>
+          <div className="directory-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <button className="directory-modal-close" type="button" onClick={closeStudentCreateModal} aria-label="Close">
+              ×
+            </button>
+            <div className="directory-modal-header">
+              <div>
+                <p className="eyebrow">Student roster</p>
+                <h2 className="directory-modal-title">Add New Student</h2>
+                <p className="meta">
+                  This student will be stored directly in the live roster database.
+                </p>
+              </div>
+            </div>
+            <form onSubmit={saveNewStudent}>
+              {error ? <div className="status-banner error compact-banner">{error}</div> : null}
+              <div className="directory-modal-grid">
+                <section className="directory-modal-section">
+                  <h3 className="directory-modal-heading">Identity</h3>
+                  <div className="directory-form-grid">
+                    <label className="field">
+                      <span>School ID</span>
+                      <input
+                        value={createDraft.school_id}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, school_id: event.target.value } : current)}
+                      />
+                    </label>
+                    <label className="field field-span-2">
+                      <span>Full Name</span>
+                      <input
+                        value={createDraft.full_name}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, full_name: event.target.value } : current)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>First Name</span>
+                      <input
+                        value={createDraft.first_name}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, first_name: event.target.value } : current)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Surname</span>
+                      <input
+                        value={createDraft.surname}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, surname: event.target.value } : current)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Preferred Name</span>
+                      <input
+                        value={createDraft.preferred_name}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, preferred_name: event.target.value } : current)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Gender</span>
+                      <select
+                        value={createDraft.gender}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, gender: event.target.value } : current)}
+                      >
+                        <option value="">Not set</option>
+                        <option value="M">M</option>
+                        <option value="F">F</option>
+                      </select>
+                    </label>
+                    <label className="field field-span-2">
+                      <span>Nationality</span>
+                      <input
+                        value={createDraft.nationality}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, nationality: event.target.value } : current)}
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="directory-modal-section">
+                  <h3 className="directory-modal-heading">Placement</h3>
+                  <div className="directory-form-grid">
+                    <label className="field field-span-2">
+                      <span>Class</span>
+                      <input
+                        list="student-create-class-options"
+                        value={createDraft.class_name}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, class_name: event.target.value } : current)}
+                      />
+                      <datalist id="student-create-class-options">
+                        {classOptions.map((option) => (
+                          <option key={`${option.classCode}-${option.className}-create`} value={option.className} />
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="field">
+                      <span>House</span>
+                      <input
+                        value={createDraft.academic_house}
+                        onChange={(event) => setCreateDraft((current) => current ? { ...current, academic_house: event.target.value } : current)}
+                      />
+                    </label>
+                    <div className="directory-modal-row">
+                      <strong>Placement is derived automatically from the selected class.</strong>
+                      <span>School, designation, year group, milepost, and level will follow the class setup already in the system.</span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div className="directory-modal-actions">
+                <button className="button secondary" type="button" onClick={closeStudentCreateModal}>
+                  Cancel
+                </button>
+                <button className="button" type="submit" disabled={isCreatingStudent}>
+                  {isCreatingStudent ? "Creating..." : "Add Student"}
                 </button>
               </div>
             </form>

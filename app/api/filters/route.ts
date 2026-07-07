@@ -6,6 +6,7 @@ import { FILTER_FIELDS, type FilterField, type FilterOptions, type FilterState, 
 
 function buildFilterOptionsFromStudents(students: StudentRow[], filters: Partial<FilterState>): FilterOptions {
   const normalized = {
+    searchTerm: filters.searchTerm ?? "",
     school: filters.school ?? "",
     designation: filters.designation ?? "",
     yearGroup: filters.yearGroup ?? "",

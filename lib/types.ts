@@ -10,6 +10,7 @@ export const FILTER_FIELDS = [
 export type FilterField = (typeof FILTER_FIELDS)[number];
 
 export type FilterState = {
+  searchTerm: string;
   school: string;
   designation: string;
   yearGroup: string;
@@ -537,6 +538,7 @@ export type SpecialistTimetableViewData = {
 };
 
 export const EMPTY_FILTERS: FilterState = {
+  searchTerm: "",
   school: "",
   designation: "",
   yearGroup: "",
@@ -547,6 +549,7 @@ export const EMPTY_FILTERS: FilterState = {
 
 export function toQueryFilters(searchParams: URLSearchParams): FilterState {
   return {
+    searchTerm: searchParams.get("searchTerm") ?? "",
     school: searchParams.get("school") ?? "",
     designation: searchParams.get("designation") ?? "",
     yearGroup: searchParams.get("yearGroup") ?? "",

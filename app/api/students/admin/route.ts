@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
 import {
   archiveLegacyStudentRoster,
+  createStudentRosterEntry,
   getStudents,
   getStudentAcademicYears,
   getStudentRosterClassOptions,
@@ -92,6 +93,42 @@ export async function POST(request: Request) {
         getStudentRosterClassOptions(String(body.academicYearLabel ?? ""))
       ]);
       return NextResponse.json({ summary, academicYears, classOptions });
+    }
+
+    if (action === "create-student") {
+      const academicYearLabel = body.academicYearLabel ?? undefined;
+      const studentSchoolId = String(body.studentSchoolId ?? "");
+
+      await createStudentRosterEntry(
+        {
+          academicYearLabel,
+          studentSchoolId,
+          fullName: String(body.fullName ?? ""),
+          firstName: body.firstName ?? null,
+          surname: body.surname ?? null,
+          preferredName: body.preferredName ?? null,
+          gender: body.gender ?? null,
+          nationality: body.nationality ?? null,
+          academicHouse: body.academicHouse ?? null,
+          className: body.className ?? null,
+          classCode: body.classCode ?? null
+        },
+        session.user.email ?? null
+      );
+
+      const afterStudent =
+        (await getStudents({}, academicYearLabel)).find((student) => student.school_id === studentSchoolId) ?? null;
+
+      await logStudentChangeAudit({
+        studentSchoolId,
+        academicYearLabel,
+        beforeStudent: null,
+        afterStudent,
+        changedByEmail: session.user.email ?? null,
+        changeSource: "student-create"
+      });
+
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });

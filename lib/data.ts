@@ -471,6 +471,7 @@ const TIMETABLE_YEAR_GROUP_ORDER = [
 
 function normalizeFilterState(filters: Partial<FilterState>): FilterState {
   return {
+    searchTerm: filters.searchTerm ?? EMPTY_FILTERS.searchTerm,
     school: filters.school ?? EMPTY_FILTERS.school,
     designation: filters.designation ?? EMPTY_FILTERS.designation,
     yearGroup: filters.yearGroup ?? EMPTY_FILTERS.yearGroup,
@@ -543,6 +544,25 @@ function matchesIndependentStudentFilters(
   }
 
   return true;
+}
+
+function matchesStudentSearchTerm(student: StudentRow, searchTerm: string) {
+  const normalized = normalizeOptionalText(searchTerm)?.toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  const haystack = [
+    student.full_name,
+    student.preferred_name,
+    student.first_name,
+    student.surname,
+    student.school_id
+  ]
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .filter(Boolean);
+
+  return haystack.some((value) => value.includes(normalized));
 }
 
 function buildIndependentFilterOptionsFromStudents(
@@ -2167,6 +2187,9 @@ export async function getStudents(
       };
     })
     .filter((student) => {
+      if (!matchesStudentSearchTerm(student, normalized.searchTerm)) {
+        return false;
+      }
       if (normalized.school && student.school !== normalized.school) {
         return false;
       }
@@ -2260,6 +2283,114 @@ export async function logStudentChangeAudit(input: {
       throw new Error(
         "Student change log table is not set up yet. Run supabase_student_change_log.sql first."
       );
+    }
+
+    throw new Error(result.error.message);
+  }
+}
+
+export async function createStudentRosterEntry(
+  input: {
+    academicYearLabel?: string | null;
+    studentSchoolId: string;
+    fullName: string;
+    firstName?: string | null;
+    surname?: string | null;
+    preferredName?: string | null;
+    gender?: string | null;
+    nationality?: string | null;
+    academicHouse?: string | null;
+    className: string;
+    classCode?: string | null;
+  },
+  createdByEmail?: string | null
+): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const studentSchoolId = normalizeRequiredText(input.studentSchoolId, "Student school ID");
+  const fullName = normalizeRequiredText(input.fullName, "Full name");
+  const className = normalizeRequiredText(input.className, "Class");
+  const classCode = normalizeOptionalText(input.classCode);
+  const resolvedAcademicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : input.academicYearLabel;
+
+  if (!resolvedAcademicYearLabel) {
+    throw new Error("Choose an academic year before adding a student.");
+  }
+
+  let targetYear =
+    (await getStudentAcademicYearRows()).find((year) => year.label === resolvedAcademicYearLabel) ?? null;
+
+  if (!targetYear) {
+    const createdYears = await upsertStudentAcademicYear({
+      label: resolvedAcademicYearLabel,
+      isActive: false,
+      isArchived: false
+    });
+    targetYear = createdYears.find((year) => year.label === resolvedAcademicYearLabel) ?? null;
+  }
+
+  if (!targetYear) {
+    throw new Error("Could not create the target academic year.");
+  }
+
+  const classRecords = await getClassRecords();
+  const targetClass =
+    (classCode ? findClassRecordByCode(classRecords, classCode) : null) ??
+    findClassRecordByName(classRecords, className);
+
+  if (!targetClass) {
+    throw new Error("Choose a valid class before adding a student.");
+  }
+
+  const payload = {
+    academic_year_id: targetYear.id,
+    class_code: String(targetClass["Class Code"] ?? "").trim(),
+    class_name: String(targetClass["Class Name"] ?? "").trim(),
+    school: String(targetClass.School ?? "").trim(),
+    designation: String(targetClass.Designation ?? "").trim(),
+    year_group: normalizeStudentYearGroupLabel(String(targetClass["Year Group"] ?? "").trim()) ?? "",
+    milepost: String(targetClass.Milepost ?? "").trim(),
+    level: String(targetClass.Level ?? "").trim(),
+    school_id: studentSchoolId,
+    full_name: fullName,
+    surname: normalizeOptionalText(input.surname),
+    first_name: normalizeOptionalText(input.firstName),
+    preferred_name: normalizeOptionalText(input.preferredName),
+    gender: normalizeStudentGenderValue(input.gender),
+    form: String(targetClass["Class Name"] ?? "").trim(),
+    year_code: null,
+    tutor: null,
+    academic_house: normalizeOptionalText(input.academicHouse),
+    nationality: normalizeOptionalText(input.nationality),
+    current_school_name: null,
+    choice_of_programme: null,
+    admission_status: null,
+    offer_type: null,
+    conditional_offer_type: null,
+    source_filename: createdByEmail ? `Manual entry by ${createdByEmail}` : "Manual entry",
+    updated_at: new Date().toISOString()
+  };
+
+  const result = await supabase
+    .from(STUDENT_ROSTER_ENTRIES_TABLE)
+    .insert(payload);
+
+  if (result.error) {
+    if (
+      isMissingSupabaseRelationError(
+        new Error(result.error.message),
+        STUDENT_ROSTER_ENTRIES_TABLE
+      )
+    ) {
+      throw new Error(
+        "Student academic years are not set up yet. Run supabase_student_roster_academic_years.sql first."
+      );
+    }
+
+    if (/duplicate key value|unique constraint/i.test(result.error.message)) {
+      throw new Error(`A student with school ID ${studentSchoolId} already exists in ${resolvedAcademicYearLabel}.`);
     }
 
     throw new Error(result.error.message);
