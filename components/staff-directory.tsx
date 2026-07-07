@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { ALL_TIMETABLES_ACCESS_VALUE } from "@/lib/access";
 import type {
   PortalHeroSettings,
+  StaffChangeLogEntry,
   StaffDirectoryClassOption,
   StaffDirectoryRecord,
   StaffDirectoryUpsertInput
@@ -46,6 +47,11 @@ type StaffTeamSection = {
   }>;
 };
 
+type StaffHistoryResponse = {
+  history?: StaffChangeLogEntry[];
+  error?: string;
+};
+
 const EMPTY_FORM: StaffDirectoryUpsertInput = {
   staff_id: "",
   name: "",
@@ -53,6 +59,10 @@ const EMPTY_FORM: StaffDirectoryUpsertInput = {
   role: "",
   email: "",
   department: "",
+  team: "",
+  sub_team: "",
+  year_group_label: "",
+  milepost_label: "",
   class: "",
   extension: "",
   max_duties: null,
@@ -87,6 +97,10 @@ type StaffExportRow = {
   role: string;
   email: string;
   department: string;
+  team: string;
+  subTeam: string;
+  yearGroupLabel: string;
+  milepostLabel: string;
   designation: string;
   assignedClass: string;
   timetableLabel: string;
@@ -105,6 +119,10 @@ function buildStaffExportRows(staff: StaffDirectoryRecord[]): StaffExportRow[] {
     role: person.role ?? "",
     email: person.email ?? "",
     department: person.department ?? "",
+    team: person.team ?? "",
+    subTeam: person.sub_team ?? "",
+    yearGroupLabel: person.year_group_label ?? "",
+    milepostLabel: person.milepost_label ?? "",
     designation: person.designation ?? "",
     assignedClass: person.class ?? "",
     timetableLabel: person.timetable ?? "",
@@ -142,6 +160,10 @@ function toFormValues(record: StaffDirectoryRecord): StaffDirectoryUpsertInput {
     role: record.role ?? "",
     email: record.email ?? "",
     department: record.department ?? "",
+    team: record.team ?? "",
+    sub_team: record.sub_team ?? "",
+    year_group_label: record.year_group_label ?? "",
+    milepost_label: record.milepost_label ?? "",
     class: record.class ?? "",
     extension: record.extension ?? "",
     max_duties: record.max_duties,
@@ -170,6 +192,10 @@ function combinedStaffText(person: StaffDirectoryRecord) {
     person.first_name,
     person.role,
     person.department,
+    person.team,
+    person.sub_team,
+    person.year_group_label,
+    person.milepost_label,
     person.designation,
     person.class,
     person.timetable
@@ -188,13 +214,21 @@ function matchesWholeTerm(value: string, pattern: RegExp) {
 }
 
 function resolveExplicitYearGroup(person: StaffDirectoryRecord) {
-  const values = [
-    person.timetable_access_year_group,
-    person.designation,
-    person.department,
-    person.role,
-    person.timetable
-  ]
+  const storedYearGroup = person.year_group_label?.trim();
+  if (storedYearGroup) {
+    return storedYearGroup;
+  }
+
+  const accessYearGroup = person.timetable_access_year_group?.trim();
+  if (
+    accessYearGroup &&
+    accessYearGroup !== ALL_TIMETABLES_ACCESS_VALUE &&
+    /^(preschool\s+\d+|year\s+\d+)$/i.test(accessYearGroup)
+  ) {
+    return accessYearGroup;
+  }
+
+  const values = [person.timetable_access_year_group]
     .map((value) => normalizeLookupValue(value))
     .filter(Boolean);
 
@@ -239,24 +273,17 @@ function resolvePreferredYearGroup(
 }
 
 function resolveExplicitMilepost(person: StaffDirectoryRecord) {
-  const values = [
-    person.class,
-    person.timetable,
-    person.designation,
-    person.department,
-    person.role
-  ]
-    .map((value) => normalizeLookupValue(value))
-    .filter(Boolean);
+  const storedMilepost = person.milepost_label?.trim();
+  if (storedMilepost) {
+    const normalizedStoredMilepost = storedMilepost.toLowerCase();
 
-  for (const value of values) {
-    if (matchesWholeTerm(value, /\bmp1\b|\bmilepost 1\b/)) {
+    if (normalizedStoredMilepost === "mp1" || normalizedStoredMilepost === "milepost 1") {
       return "mp1";
     }
-    if (matchesWholeTerm(value, /\bmp2\b|\bmilepost 2\b/)) {
+    if (normalizedStoredMilepost === "mp2" || normalizedStoredMilepost === "milepost 2") {
       return "mp2";
     }
-    if (matchesWholeTerm(value, /\bmp3\b|\bmilepost 3\b/)) {
+    if (normalizedStoredMilepost === "mp3" || normalizedStoredMilepost === "milepost 3") {
       return "mp3";
     }
   }
@@ -308,6 +335,35 @@ function getStaffTeamKey(
   const text = combinedStaffText(person);
   const resolvedYearGroup = resolvePreferredYearGroup(person, classYearGroupLookup);
   const explicitMilepost = resolveExplicitMilepost(person);
+  const storedTeam = normalizeLookupValue(person.team);
+
+  if (storedTeam === "slt" || storedTeam === "senior leadership team") {
+    return "slt";
+  }
+
+  if (storedTeam === "preschool") {
+    return "preschool";
+  }
+
+  if (storedTeam === "mp1" || storedTeam === "milepost 1") {
+    return "mp1";
+  }
+
+  if (storedTeam === "mp2" || storedTeam === "milepost 2") {
+    return "mp2";
+  }
+
+  if (storedTeam === "mp3" || storedTeam === "milepost 3") {
+    return "mp3";
+  }
+
+  if (storedTeam === "specialist" || storedTeam === "specialist teams") {
+    return "specialist";
+  }
+
+  if (storedTeam === "support" || storedTeam === "support teams") {
+    return "support";
+  }
 
   if (
     includesAny(text, [
@@ -387,6 +443,11 @@ function getStaffSubGroupTitle(
   teamKey: StaffTeamKey,
   classYearGroupLookup: Map<string, string>
 ) {
+  const storedSubTeam = person.sub_team?.trim();
+  if (storedSubTeam) {
+    return storedSubTeam;
+  }
+
   const text = combinedStaffText(person);
   const assignedYearGroup = resolvePreferredYearGroup(person, classYearGroupLookup);
 
@@ -681,6 +742,10 @@ function getStaffCardAccentLine(
   person: StaffDirectoryRecord,
   knownClassLookup: Set<string>
 ) {
+  if (person.sub_team?.trim()) {
+    return person.sub_team;
+  }
+
   const normalizedClass = normalizeLookupValue(person.class);
 
   if (normalizedClass && knownClassLookup.has(normalizedClass)) {
@@ -866,6 +931,9 @@ export function StaffDirectory({
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [staffHistory, setStaffHistory] = useState<StaffChangeLogEntry[]>([]);
+  const [isStaffHistoryLoading, setIsStaffHistoryLoading] = useState(false);
+  const [staffHistoryError, setStaffHistoryError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const departmentOptions = useMemo(
@@ -904,6 +972,10 @@ export function StaffDirectory({
           person.first_name,
           person.role,
           person.email,
+          person.team,
+          person.sub_team,
+          person.year_group_label,
+          person.milepost_label,
           person.class,
           person.staff_id
         ]
@@ -930,6 +1002,55 @@ export function StaffDirectory({
     staff.find((person) => person.id === selectedStaffId) ??
     null;
 
+  useEffect(() => {
+    if (!canManageStaff || !selectedStaffId || modalMode === "create") {
+      setStaffHistory([]);
+      setStaffHistoryError(null);
+      setIsStaffHistoryLoading(false);
+      return;
+    }
+
+    const staffRecordId = selectedStaffId;
+    let isMounted = true;
+
+    async function loadStaffHistory() {
+      setIsStaffHistoryLoading(true);
+      setStaffHistoryError(null);
+
+      try {
+        const params = new URLSearchParams();
+        params.set("staffRecordId", staffRecordId);
+        const response = await fetch(`/api/staff/history?${params.toString()}`);
+        const json = (await response.json()) as StaffHistoryResponse;
+
+        if (!response.ok) {
+          throw new Error(json.error ?? "Could not load staff history.");
+        }
+
+        if (isMounted) {
+          setStaffHistory(json.history ?? []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setStaffHistory([]);
+          setStaffHistoryError(
+            error instanceof Error ? error.message : "Could not load staff history."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsStaffHistoryLoading(false);
+        }
+      }
+    }
+
+    void loadStaffHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [canManageStaff, modalMode, selectedStaffId]);
+
   function actionStateClass(personId: string, mode: Exclude<ModalMode, "create">) {
     return selectedStaffId === personId && modalMode === mode ? " active" : "";
   }
@@ -942,6 +1063,9 @@ export function StaffDirectory({
     setIsSaving(false);
     setIsUploadingPhoto(false);
     setPhotoUploadError(null);
+    setStaffHistory([]);
+    setStaffHistoryError(null);
+    setIsStaffHistoryLoading(false);
   }
 
   function openCreateModal() {
@@ -1142,6 +1266,10 @@ export function StaffDirectory({
       "Role",
       "Email",
       "Department",
+      "Team",
+      "Sub Team",
+      "Year Group Label",
+      "Milepost Label",
       "Designation",
       "Assigned Class",
       "Timetable Label",
@@ -1162,6 +1290,10 @@ export function StaffDirectory({
           row.role,
           row.email,
           row.department,
+          row.team,
+          row.subTeam,
+          row.yearGroupLabel,
+          row.milepostLabel,
           row.designation,
           row.assignedClass,
           row.timetableLabel,
@@ -1191,6 +1323,10 @@ export function StaffDirectory({
       "Role",
       "Email",
       "Department",
+      "Team",
+      "Sub Team",
+      "Year Group Label",
+      "Milepost Label",
       "Designation",
       "Assigned Class",
       "Timetable Label",
@@ -1211,6 +1347,10 @@ export function StaffDirectory({
             <td>${htmlEscape(row.role)}</td>
             <td>${htmlEscape(row.email)}</td>
             <td>${htmlEscape(row.department)}</td>
+            <td>${htmlEscape(row.team)}</td>
+            <td>${htmlEscape(row.subTeam)}</td>
+            <td>${htmlEscape(row.yearGroupLabel)}</td>
+            <td>${htmlEscape(row.milepostLabel)}</td>
             <td>${htmlEscape(row.designation)}</td>
             <td>${htmlEscape(row.assignedClass)}</td>
             <td>${htmlEscape(row.timetableLabel)}</td>
@@ -1321,24 +1461,24 @@ export function StaffDirectory({
           <div className="directory-guidance-panel">
             <p className="directory-guidance-title">Field guide for team organisation</p>
             <p className="directory-guidance-copy">
-              <strong>Class:</strong> use this for structural placement such as named homeroom
-              classes, year groups, or mileposts. Named classes are treated as homeroom teachers.
-              Broad labels like <code>MP1</code> or <code>Year 1</code> are treated as support
-              staff within that section.
+              <strong>Team:</strong> use this for the main Staff Directory section such as{" "}
+              <code>SLT</code>, <code>Preschool</code>, <code>MP1</code>, <code>MP2</code>,{" "}
+              <code>MP3</code>, <code>Specialist</code>, or <code>Support</code>.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Department:</strong> use this for the broad area shown on the staff card,
-              such as <code>Primary</code>, <code>Preschool</code>, or <code>Specialist</code>.
+              <strong>Sub Team:</strong> use this for the subgroup heading shown inside each
+              section, such as <code>Year 1</code>, <code>Year 6</code>, <code>Music</code>, or{" "}
+              <code>P.E.</code>.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Role:</strong> use this for the staff type, for example{" "}
-              <code>Homeroom</code>, <code>Specialist</code>, <code>HoD</code>, or{" "}
-              <code>Head of Primary</code>.
+              <strong>Year Group Label</strong> and <strong>Milepost Label</strong> are now the
+              staff-facing labels the app should use instead of trying to infer them from other
+              fields.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Designation:</strong> use this for the exact specialist or support team,
-              such as <code>Maths Support</code>, <code>Counselling</code>, <code>EAL</code>,{" "}
-              <code>SEN</code>, <code>Mandarin</code>, or <code>Music</code>.
+              <strong>Department</strong>, <strong>Role</strong>, and <strong>Designation</strong>{" "}
+              can still describe the staff member, but they no longer need to secretly control the
+              grouping structure.
             </p>
           </div>
         ) : null}
@@ -1482,6 +1622,14 @@ export function StaffDirectory({
                         <strong>{activeStaff.department ?? "—"}</strong>
                       </div>
                       <div className="directory-modal-row">
+                        <span>Team</span>
+                        <strong>{activeStaff.team ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Sub Team</span>
+                        <strong>{activeStaff.sub_team ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
                         <span>Assigned Class</span>
                         <strong>{activeStaff.class ?? "—"}</strong>
                       </div>
@@ -1492,6 +1640,14 @@ export function StaffDirectory({
                       <div className="directory-modal-row">
                         <span>Status</span>
                         <strong>{activeStaff.status ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Year Group Label</span>
+                        <strong>{activeStaff.year_group_label ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
+                        <span>Milepost Label</span>
+                        <strong>{activeStaff.milepost_label ?? "—"}</strong>
                       </div>
                     </div>
                   </div>
@@ -1531,6 +1687,33 @@ export function StaffDirectory({
                     Close
                   </button>
                 </div>
+                {canManageStaff ? (
+                  <section className="directory-modal-footer-card">
+                    <h3 className="directory-modal-heading">Recent changes</h3>
+                    {isStaffHistoryLoading ? (
+                      <p className="directory-history-meta">Loading change history...</p>
+                    ) : staffHistoryError ? (
+                      <p className="directory-history-error">{staffHistoryError}</p>
+                    ) : staffHistory.length ? (
+                      <div className="directory-history-list">
+                        {staffHistory.map((entry) => (
+                          <article className="directory-history-entry" key={entry.id}>
+                            <p className="directory-history-change">
+                              <strong>{entry.field_name.replace(/_/g, " ")}</strong>:{" "}
+                              {entry.old_value || "blank"} → {entry.new_value || "blank"}
+                            </p>
+                            <p className="directory-history-meta">
+                              {new Date(entry.changed_at).toLocaleString()} by{" "}
+                              {entry.changed_by_email || "Unknown user"}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="directory-history-meta">No recorded changes yet.</p>
+                    )}
+                  </section>
+                ) : null}
               </>
             ) : (
               <>
@@ -1585,6 +1768,26 @@ export function StaffDirectory({
                           value={String(formValues.department ?? "")}
                           onChange={(event) =>
                             setFormValues((current) => ({ ...current, department: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Team</span>
+                        <input
+                          type="text"
+                          value={String(formValues.team ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, team: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Sub Team</span>
+                        <input
+                          type="text"
+                          value={String(formValues.sub_team ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, sub_team: event.target.value }))
                           }
                         />
                       </label>
@@ -1773,6 +1976,32 @@ export function StaffDirectory({
                         </div>
                       </div>
                       <label className="field">
+                        <span>Year Group Label</span>
+                        <input
+                          type="text"
+                          value={String(formValues.year_group_label ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              year_group_label: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Milepost Label</span>
+                        <input
+                          type="text"
+                          value={String(formValues.milepost_label ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              milepost_label: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
                         <span>Status</span>
                         <input
                           type="text"
@@ -1868,6 +2097,33 @@ export function StaffDirectory({
                     Cancel
                   </button>
                 </div>
+                {activeStaff && canManageStaff ? (
+                  <section className="directory-modal-footer-card">
+                    <h3 className="directory-modal-heading">Recent changes</h3>
+                    {isStaffHistoryLoading ? (
+                      <p className="directory-history-meta">Loading change history...</p>
+                    ) : staffHistoryError ? (
+                      <p className="directory-history-error">{staffHistoryError}</p>
+                    ) : staffHistory.length ? (
+                      <div className="directory-history-list">
+                        {staffHistory.map((entry) => (
+                          <article className="directory-history-entry" key={entry.id}>
+                            <p className="directory-history-change">
+                              <strong>{entry.field_name.replace(/_/g, " ")}</strong>:{" "}
+                              {entry.old_value || "blank"} → {entry.new_value || "blank"}
+                            </p>
+                            <p className="directory-history-meta">
+                              {new Date(entry.changed_at).toLocaleString()} by{" "}
+                              {entry.changed_by_email || "Unknown user"}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="directory-history-meta">No recorded changes yet.</p>
+                    )}
+                  </section>
+                ) : null}
               </>
             )}
           </section>

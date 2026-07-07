@@ -21,7 +21,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const body = (await request.json()) as StaffDirectoryUpsertInput;
-    const staffRecord = await updateStaffDirectoryRecord(context.params.staffId, body);
+    const staffRecord = await updateStaffDirectoryRecord(context.params.staffId, body, {
+      changedByEmail: session.user.email ?? null,
+      changeSource: "staff-directory-api"
+    });
     return NextResponse.json({ staffRecord });
   } catch (error) {
     return NextResponse.json(

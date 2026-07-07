@@ -15,7 +15,10 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as StaffDirectoryUpsertInput;
-    const staffRecord = await createStaffDirectoryRecord(body);
+    const staffRecord = await createStaffDirectoryRecord(body, {
+      changedByEmail: session.user.email ?? null,
+      changeSource: "staff-directory-api"
+    });
     return NextResponse.json({ staffRecord });
   } catch (error) {
     return NextResponse.json(

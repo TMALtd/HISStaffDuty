@@ -208,6 +208,10 @@ export type StaffProfile = {
   role: string | null;
   email: string | null;
   department: string | null;
+  team: string | null;
+  sub_team: string | null;
+  year_group_label: string | null;
+  milepost_label: string | null;
   class: string | null;
   extension: string | null;
   max_duties: number | null;
@@ -290,6 +294,10 @@ export type StaffDirectoryUpsertInput = {
   role: string | null;
   email: string | null;
   department: string | null;
+  team: string | null;
+  sub_team: string | null;
+  year_group_label: string | null;
+  milepost_label: string | null;
   class: string | null;
   extension: string | null;
   max_duties: number | null;
@@ -305,6 +313,18 @@ export type StaffDirectoryUpsertInput = {
   can_view_class: boolean;
   can_view_year_group_classes: boolean;
   timetable_access_year_group: string | null;
+};
+
+export type StaffChangeLogEntry = {
+  id: string;
+  staff_record_id: string;
+  staff_id: string | null;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by_email: string | null;
+  change_source: string | null;
+  changed_at: string;
 };
 
 export type DutyRosterRecord = DutySummary & {

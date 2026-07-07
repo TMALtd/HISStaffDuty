@@ -59,6 +59,7 @@ import {
   type StudentRosterImportSummary,
   type StaffDirectoryRecord,
   type StaffDirectoryUpsertInput,
+  type StaffChangeLogEntry,
   type StaffProfile,
   type StudentChangeLogEntry,
   type StudentRow
@@ -159,6 +160,33 @@ type StudentAuditField =
   | "nationality"
   | "academic_house";
 
+type StaffAuditField =
+  | "staff_id"
+  | "name"
+  | "first_name"
+  | "role"
+  | "email"
+  | "department"
+  | "team"
+  | "sub_team"
+  | "year_group_label"
+  | "milepost_label"
+  | "class"
+  | "extension"
+  | "max_duties"
+  | "status"
+  | "unavailable_reason"
+  | "timetable"
+  | "photo_url"
+  | "designation"
+  | "system_role"
+  | "can_view_own_timetable"
+  | "can_edit_own_timetable"
+  | "can_view_year_group_timetables"
+  | "can_view_class"
+  | "can_view_year_group_classes"
+  | "timetable_access_year_group";
+
 const DEFAULT_GRADEBOOK_TERMS: GradebookTerm[] = [
   { id: "default-term-1", term_key: "term-1", term_label: "Term 1", start_date: null, end_date: null, sort_order: 1 },
   { id: "default-term-2", term_key: "term-2", term_label: "Term 2", start_date: null, end_date: null, sort_order: 2 },
@@ -171,6 +199,7 @@ const LEGACY_STUDENT_ROSTER_VIEW_NAME = "student_class_roster_legacy";
 const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
 const STUDENT_PROFILE_OVERRIDES_TABLE = "student_profile_overrides";
 const STUDENT_CHANGE_LOG_TABLE = "student_change_log";
+const STAFF_CHANGE_LOG_TABLE = "staff_change_log";
 const STUDENT_ACADEMIC_YEARS_TABLE = "student_academic_years";
 const STUDENT_ROSTER_ENTRIES_TABLE = "student_roster_entries";
 const SUBJECTS_TABLE = "gradebook_subjects";
@@ -1128,6 +1157,10 @@ function normalizeStaffProfile(row: Record<string, unknown>): StaffProfile {
     role: row.role ? String(row.role) : null,
     email: row.email ? String(row.email) : null,
     department: row.department ? String(row.department) : null,
+    team: row.team ? String(row.team) : null,
+    sub_team: row.sub_team ? String(row.sub_team) : null,
+    year_group_label: row.year_group_label ? String(row.year_group_label) : null,
+    milepost_label: row.milepost_label ? String(row.milepost_label) : null,
     class: row.class ? String(row.class) : null,
     extension: row.extension ? String(row.extension) : null,
     max_duties:
@@ -3467,6 +3500,10 @@ function buildStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
     role: normalizeOptionalText(input.role),
     email: normalizeOptionalText(input.email)?.toLowerCase() ?? null,
     department: normalizeOptionalText(input.department),
+    team: normalizeOptionalText(input.team),
+    sub_team: normalizeOptionalText(input.sub_team),
+    year_group_label: normalizeOptionalText(input.year_group_label),
+    milepost_label: normalizeOptionalText(input.milepost_label),
     class: normalizeOptionalText(input.class),
     extension: normalizeOptionalText(input.extension),
     max_duties: normalizeOptionalNumber(input.max_duties),
@@ -3508,6 +3545,15 @@ function buildLegacyStaffDirectoryPayload(input: StaffDirectoryUpsertInput) {
 function getMissingStaffAccessMigrationMessage(error: Error) {
   const message = error.message.toLowerCase();
 
+  if (
+    message.includes("year_group_label") ||
+    message.includes("milepost_label") ||
+    message.includes("sub_team") ||
+    message.includes("team")
+  ) {
+    return "The staff table is missing the Staff Directory grouping columns. Run supabase_staff_directory_groups.sql first.";
+  }
+
   if (message.includes("can_edit_own_timetable")) {
     return "The staff table is missing the can_edit_own_timetable column. Run supabase_staff_timetable_edit_access.sql first.";
   }
@@ -3530,8 +3576,12 @@ function getMissingStaffAccessMigrationMessage(error: Error) {
   return null;
 }
 
-function requiresModernStaffAccessColumns(input: StaffDirectoryUpsertInput) {
+function requiresModernStaffDirectoryColumns(input: StaffDirectoryUpsertInput) {
   return (
+    Boolean(normalizeOptionalText(input.team)) ||
+    Boolean(normalizeOptionalText(input.sub_team)) ||
+    Boolean(normalizeOptionalText(input.year_group_label)) ||
+    Boolean(normalizeOptionalText(input.milepost_label)) ||
     Boolean(input.can_view_own_timetable) ||
     Boolean(input.can_edit_own_timetable) ||
     Boolean(input.can_view_year_group_timetables) ||
@@ -3614,8 +3664,149 @@ export async function getStaffDirectoryClassOptions(): Promise<StaffDirectoryCla
   );
 }
 
+function normalizeStaffAuditValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+export async function logStaffChangeAudit(input: {
+  beforeStaff: StaffProfile | null;
+  afterStaff: StaffProfile | null;
+  changedByEmail?: string | null;
+  changeSource?: string | null;
+}): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const staffRecordId = normalizeRequiredText(
+    input.afterStaff?.id ?? input.beforeStaff?.id ?? null,
+    "Staff record ID"
+  );
+
+  const auditFields: StaffAuditField[] = [
+    "staff_id",
+    "name",
+    "first_name",
+    "role",
+    "email",
+    "department",
+    "team",
+    "sub_team",
+    "year_group_label",
+    "milepost_label",
+    "class",
+    "extension",
+    "max_duties",
+    "status",
+    "unavailable_reason",
+    "timetable",
+    "photo_url",
+    "designation",
+    "system_role",
+    "can_view_own_timetable",
+    "can_edit_own_timetable",
+    "can_view_year_group_timetables",
+    "can_view_class",
+    "can_view_year_group_classes",
+    "timetable_access_year_group"
+  ];
+
+  const changes = auditFields
+    .map((fieldName) => {
+      const beforeValue = normalizeStaffAuditValue(input.beforeStaff?.[fieldName] ?? null);
+      const afterValue = normalizeStaffAuditValue(input.afterStaff?.[fieldName] ?? null);
+
+      if (beforeValue === afterValue) {
+        return null;
+      }
+
+      return {
+        staff_record_id: staffRecordId,
+        staff_id: normalizeStaffAuditValue(input.afterStaff?.staff_id ?? input.beforeStaff?.staff_id),
+        field_name: fieldName,
+        old_value: beforeValue,
+        new_value: afterValue,
+        changed_by_email: normalizeOptionalText(input.changedByEmail)?.toLowerCase() ?? null,
+        change_source: normalizeOptionalText(input.changeSource) ?? "staff-directory",
+        changed_at: new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+
+  if (!changes.length) {
+    return;
+  }
+
+  const result = await supabase.from(STAFF_CHANGE_LOG_TABLE).insert(changes);
+
+  if (result.error) {
+    if (isMissingSupabaseRelationError(new Error(result.error.message), STAFF_CHANGE_LOG_TABLE)) {
+      throw new Error(
+        "Staff change log table is not set up yet. Run supabase_staff_change_log.sql first."
+      );
+    }
+
+    throw new Error(result.error.message);
+  }
+}
+
+export async function getStaffChangeLog(input: {
+  staffRecordId?: string | null;
+  limit?: number;
+}): Promise<StaffChangeLogEntry[]> {
+  const supabase = createSupabaseAdminClient();
+  const limit = Number.isFinite(input.limit) ? Math.max(1, Math.floor(input.limit ?? 50)) : 50;
+  let query = supabase
+    .from(STAFF_CHANGE_LOG_TABLE)
+    .select("id, staff_record_id, staff_id, field_name, old_value, new_value, changed_by_email, change_source, changed_at")
+    .order("changed_at", { ascending: false })
+    .limit(limit);
+
+  if (input.staffRecordId) {
+    query = query.eq("staff_record_id", input.staffRecordId);
+  }
+
+  const result = await query;
+
+  if (result.error) {
+    if (isMissingSupabaseRelationError(new Error(result.error.message), STAFF_CHANGE_LOG_TABLE)) {
+      throw new Error(
+        "Staff change log table is not set up yet. Run supabase_staff_change_log.sql first."
+      );
+    }
+
+    throw new Error(result.error.message);
+  }
+
+  return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id ?? ""),
+    staff_record_id: String(row.staff_record_id ?? ""),
+    staff_id: normalizeStaffAuditValue(row.staff_id),
+    field_name: String(row.field_name ?? ""),
+    old_value: normalizeStaffAuditValue(row.old_value),
+    new_value: normalizeStaffAuditValue(row.new_value),
+    changed_by_email: normalizeStaffAuditValue(row.changed_by_email),
+    change_source: normalizeStaffAuditValue(row.change_source),
+    changed_at: String(row.changed_at ?? "")
+  }));
+}
+
 export async function createStaffDirectoryRecord(
-  input: StaffDirectoryUpsertInput
+  input: StaffDirectoryUpsertInput,
+  options?: {
+    changedByEmail?: string | null;
+    changeSource?: string | null;
+  }
 ): Promise<StaffDirectoryRecord> {
   const supabase = createSupabaseAdminClient();
   const id = normalizeOptionalText(input.id) ?? `staff-${randomUUID()}`;
@@ -3643,7 +3834,7 @@ export async function createStaffDirectoryRecord(
       lastError = new Error(result.error.message);
       const migrationMessage = getMissingStaffAccessMigrationMessage(lastError);
 
-      if (migrationMessage && requiresModernStaffAccessColumns(input)) {
+      if (migrationMessage && requiresModernStaffDirectoryColumns(input)) {
         throw new Error(migrationMessage);
       }
 
@@ -3660,6 +3851,13 @@ export async function createStaffDirectoryRecord(
 
   const profile = normalizeStaffProfile(data);
 
+  await logStaffChangeAudit({
+    beforeStaff: null,
+    afterStaff: profile,
+    changedByEmail: options?.changedByEmail ?? null,
+    changeSource: options?.changeSource ?? "staff-directory-create"
+  });
+
   return {
     ...profile,
     assigned_duties: []
@@ -3668,10 +3866,27 @@ export async function createStaffDirectoryRecord(
 
 export async function updateStaffDirectoryRecord(
   id: string,
-  input: StaffDirectoryUpsertInput
+  input: StaffDirectoryUpsertInput,
+  options?: {
+    changedByEmail?: string | null;
+    changeSource?: string | null;
+  }
 ): Promise<StaffDirectoryRecord> {
   const supabase = createSupabaseAdminClient();
   const normalizedId = normalizeRequiredText(id, "Staff ID");
+  const existingResult = await supabase
+    .from(STAFF_TABLE)
+    .select("*")
+    .eq("id", normalizedId)
+    .single();
+
+  if (existingResult.error) {
+    throw new Error(existingResult.error.message);
+  }
+
+  const beforeStaff = existingResult.data
+    ? normalizeStaffProfile(existingResult.data as Record<string, unknown>)
+    : null;
   const payloads = [buildStaffDirectoryPayload(input), buildLegacyStaffDirectoryPayload(input)];
   let data: Record<string, unknown> | null = null;
   let lastError: Error | null = null;
@@ -3688,7 +3903,7 @@ export async function updateStaffDirectoryRecord(
       lastError = new Error(result.error.message);
       const migrationMessage = getMissingStaffAccessMigrationMessage(lastError);
 
-      if (migrationMessage && requiresModernStaffAccessColumns(input)) {
+      if (migrationMessage && requiresModernStaffDirectoryColumns(input)) {
         throw new Error(migrationMessage);
       }
 
@@ -3704,6 +3919,13 @@ export async function updateStaffDirectoryRecord(
   }
 
   const profile = normalizeStaffProfile(data);
+
+  await logStaffChangeAudit({
+    beforeStaff,
+    afterStaff: profile,
+    changedByEmail: options?.changedByEmail ?? null,
+    changeSource: options?.changeSource ?? "staff-directory-update"
+  });
 
   return {
     ...profile,
