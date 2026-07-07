@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getCurrentStaffAccessOrNull } from "@/lib/auth";
 import {
   archiveLegacyStudentRoster,
+  getStudents,
   getStudentAcademicYears,
   getStudentRosterClassOptions,
   importStudentRosterClassCsv,
+  logStudentChangeAudit,
   setActiveStudentAcademicYear,
   upsertStudentAcademicYear,
   upsertStudentClassAssignment,
@@ -120,9 +122,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
     }
 
+    const academicYearLabel = body.academicYearLabel ?? undefined;
+    const studentSchoolId = String(body.studentSchoolId ?? "");
+    const beforeStudent =
+      (await getStudents({}, academicYearLabel)).find((student) => student.school_id === studentSchoolId) ?? null;
+
     await upsertStudentClassAssignment(
       {
-        studentSchoolId: body.studentSchoolId,
+        studentSchoolId,
         className: body.className ?? null,
         classCode: body.classCode ?? null
       },
@@ -131,8 +138,8 @@ export async function PATCH(request: Request) {
 
     await upsertStudentProfileOverride(
       {
-        studentSchoolId: body.studentSchoolId,
-        academicYearLabel: body.academicYearLabel ?? undefined,
+        studentSchoolId,
+        academicYearLabel,
         school: body.school ?? null,
         designation: body.designation ?? null,
         yearGroup: body.yearGroup ?? null,
@@ -148,6 +155,18 @@ export async function PATCH(request: Request) {
       },
       session.user.email ?? null
     );
+
+    const afterStudent =
+      (await getStudents({}, academicYearLabel)).find((student) => student.school_id === studentSchoolId) ?? null;
+
+    await logStudentChangeAudit({
+      studentSchoolId,
+      academicYearLabel,
+      beforeStudent,
+      afterStudent,
+      changedByEmail: session.user.email ?? null,
+      changeSource: "student-editor"
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

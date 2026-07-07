@@ -142,6 +142,22 @@ type StudentRosterImportRow = {
   source_filename: string | null;
 };
 
+type StudentAuditField =
+  | "class_code"
+  | "class_name"
+  | "school"
+  | "designation"
+  | "year_group"
+  | "milepost"
+  | "level"
+  | "full_name"
+  | "surname"
+  | "first_name"
+  | "preferred_name"
+  | "gender"
+  | "nationality"
+  | "academic_house";
+
 const DEFAULT_GRADEBOOK_TERMS: GradebookTerm[] = [
   { id: "default-term-1", term_key: "term-1", term_label: "Term 1", start_date: null, end_date: null, sort_order: 1 },
   { id: "default-term-2", term_key: "term-2", term_label: "Term 2", start_date: null, end_date: null, sort_order: 2 },
@@ -153,6 +169,7 @@ const VIEW_NAME = "student_class_roster";
 const LEGACY_STUDENT_ROSTER_VIEW_NAME = "student_class_roster_legacy";
 const STUDENT_CLASS_ASSIGNMENTS_TABLE = "student_class_assignments";
 const STUDENT_PROFILE_OVERRIDES_TABLE = "student_profile_overrides";
+const STUDENT_CHANGE_LOG_TABLE = "student_change_log";
 const STUDENT_ACADEMIC_YEARS_TABLE = "student_academic_years";
 const STUDENT_ROSTER_ENTRIES_TABLE = "student_roster_entries";
 const SUBJECTS_TABLE = "gradebook_subjects";
@@ -2177,6 +2194,77 @@ export async function getStudents(
     );
 }
 
+export async function logStudentChangeAudit(input: {
+  studentSchoolId: string;
+  academicYearLabel?: string | null;
+  beforeStudent: StudentRow | null;
+  afterStudent: StudentRow | null;
+  changedByEmail?: string | null;
+  changeSource?: string | null;
+}): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const studentSchoolId = normalizeRequiredText(input.studentSchoolId, "Student school ID");
+  const resolvedAcademicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : input.academicYearLabel;
+
+  const auditFields: StudentAuditField[] = [
+    "class_code",
+    "class_name",
+    "school",
+    "designation",
+    "year_group",
+    "milepost",
+    "level",
+    "full_name",
+    "surname",
+    "first_name",
+    "preferred_name",
+    "gender",
+    "nationality",
+    "academic_house"
+  ];
+
+  const changes = auditFields
+    .map((fieldName) => {
+      const beforeValue = normalizeStudentAuditValue(input.beforeStudent?.[fieldName] ?? null);
+      const afterValue = normalizeStudentAuditValue(input.afterStudent?.[fieldName] ?? null);
+
+      if (beforeValue === afterValue) {
+        return null;
+      }
+
+      return {
+        student_school_id: studentSchoolId,
+        academic_year_label: resolvedAcademicYearLabel ?? "",
+        field_name: fieldName,
+        old_value: beforeValue,
+        new_value: afterValue,
+        changed_by_email: normalizeOptionalText(input.changedByEmail)?.toLowerCase() ?? null,
+        change_source: normalizeOptionalText(input.changeSource) ?? "student-editor",
+        changed_at: new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+
+  if (!changes.length) {
+    return;
+  }
+
+  const result = await supabase.from(STUDENT_CHANGE_LOG_TABLE).insert(changes);
+
+  if (result.error) {
+    if (isMissingSupabaseRelationError(new Error(result.error.message), STUDENT_CHANGE_LOG_TABLE)) {
+      throw new Error(
+        "Student change log table is not set up yet. Run supabase_student_change_log.sql first."
+      );
+    }
+
+    throw new Error(result.error.message);
+  }
+}
+
 export async function upsertStudentClassAssignment(
   input: StudentClassAssignmentInput,
   assignedByEmail?: string | null
@@ -3102,6 +3190,11 @@ function normalizeStudentYearGroupLabel(value: string | null | undefined) {
   }
 
   return normalized;
+}
+
+function normalizeStudentAuditValue(value: string | null | undefined) {
+  const normalized = normalizeOptionalText(value);
+  return normalized ?? null;
 }
 
 function normalizeStudentGenderValue(value: string | null | undefined): "M" | "F" | null {
