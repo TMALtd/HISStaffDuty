@@ -760,16 +760,21 @@ function getStaffCardAccentLine(
     return person.milepost_label;
   }
 
+  const specialistSubject = getStaffSpecialistSubject(person);
+  if (specialistSubject?.trim()) {
+    return specialistSubject;
+  }
+
   if (person.sub_team?.trim()) {
     return person.sub_team;
   }
 
-  if (person.designation?.trim()) {
-    return person.designation;
-  }
-
   if (person.timetable?.trim()) {
     return person.timetable;
+  }
+
+  if (person.designation?.trim()) {
+    return person.designation;
   }
 
   if (person.class?.trim()) {
@@ -796,10 +801,14 @@ function toTitleCaseLabel(value: string | null | undefined) {
 }
 
 function getStaffTeachingType(person: StaffDirectoryRecord) {
-  const role = normalizeLookupValue(person.role);
-  const searchableText = combinedStaffText(person);
+  const leadershipLabel = getStaffLeadershipLabel(person);
+  if (leadershipLabel) {
+    return leadershipLabel;
+  }
 
-  if (role.includes("specialist") || searchableText.includes("specialist")) {
+  const role = normalizeLookupValue(person.role);
+
+  if (role.includes("specialist")) {
     return "Specialist teacher";
   }
 
@@ -815,17 +824,26 @@ function getStaffTeachingType(person: StaffDirectoryRecord) {
     return "Support staff";
   }
 
+  const searchableText = combinedStaffText(person);
+  if (
+    searchableText.includes("specialist") &&
+    getStaffSpecialistSubject(person)
+  ) {
+    return "Specialist teacher";
+  }
+
   return toTitleCaseLabel(person.role) ?? "Staff member";
 }
 
 function getStaffLeadershipLabel(person: StaffDirectoryRecord) {
   const searchableText = combinedStaffText(person);
+  const role = normalizeLookupValue(person.role);
 
-  if (includesAny(searchableText, ["head of year", "hoy"])) {
+  if (role === "hoy" || includesAny(searchableText, ["head of year", "hoy"])) {
     return "Head of Year";
   }
 
-  if (includesAny(searchableText, ["head of department", "hod"])) {
+  if (role === "hod" || includesAny(searchableText, ["head of department", "hod"])) {
     return "Head of Department";
   }
 
@@ -1681,26 +1699,44 @@ export function StaffDirectory({
 
         {showAdminGuidance ? (
           <div className="directory-guidance-panel">
-            <p className="directory-guidance-title">Field guide for team organisation</p>
+            <p className="directory-guidance-title">Field guide for staff cards</p>
             <p className="directory-guidance-copy">
-              <strong>Team:</strong> use this for the main Staff Directory section such as{" "}
-              <code>SLT</code>, <code>Preschool</code>, <code>MP1</code>, <code>MP2</code>,{" "}
+              <strong>Directory Section:</strong> use this for the main Staff Directory section such
+              as <code>SLT</code>, <code>Preschool</code>, <code>MP1</code>, <code>MP2</code>,{" "}
               <code>MP3</code>, <code>Specialist</code>, or <code>Support</code>.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Sub Team:</strong> use this for the subgroup heading shown inside each
-              section, such as <code>Year 1</code>, <code>Year 6</code>, <code>Music</code>, or{" "}
-              <code>P.E.</code>.
+              <strong>Directory Group / Detail:</strong> use this for the subgroup heading shown
+              inside each section, such as <code>Preschool 1</code>, <code>Preschool 2</code>,{" "}
+              <code>Year 1</code>, <code>Music</code>, or <code>P.E.</code>.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Year Group Label</strong> and <strong>Milepost Label</strong> are now the
-              staff-facing labels the app should use instead of trying to infer them from other
-              fields.
+              <strong>Team / Subject Area:</strong> use this to describe the staff member&apos;s
+              wider working team or specialist subject, such as <code>Primary</code>,{" "}
+              <code>P.E.</code>, <code>Mandarin</code>, or <code>Music</code>.
             </p>
             <p className="directory-guidance-copy">
-              <strong>Department</strong>, <strong>Role</strong>, and <strong>Designation</strong>{" "}
-              can still describe the staff member, but they no longer need to secretly control the
-              grouping structure.
+              <strong>Assigned Class:</strong> fill this in for class-based staff. Leave it blank
+              for staff who teach across a year group, milepost, or subject team.
+            </p>
+            <p className="directory-guidance-copy">
+              <strong>Year Group:</strong> use this for year-group staff such as{" "}
+              <code>Preschool 1</code>, <code>Preschool 2</code>, <code>Year 1</code>, or{" "}
+              <code>Year 6</code>. <strong>Milepost:</strong> use this for milepost-wide staff such
+              as <code>MP1</code>, <code>MP2</code>, or <code>MP3</code>.
+            </p>
+            <p className="directory-guidance-copy">
+              <strong>Teaching Role:</strong> use this for the actual teaching identity such as{" "}
+              <code>Homeroom</code>, <code>Specialist</code>, <code>Co-Teacher</code>,{" "}
+              <code>HoY</code>, or <code>HoD</code>.
+            </p>
+            <p className="directory-guidance-copy">
+              <strong>Teaching Stream:</strong> use this for <code>Mainstream</code>,{" "}
+              <code>Bilingual</code>, or another stream where relevant.
+            </p>
+            <p className="directory-guidance-copy">
+              The app now uses these saved fields directly so each staff card shows one clear set
+              of labels instead of repeating the same information in multiple places.
             </p>
           </div>
         ) : null}
