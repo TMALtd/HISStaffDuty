@@ -779,6 +779,204 @@ function getStaffCardAccentLine(
   return "Staff profile";
 }
 
+function toTitleCaseLabel(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^[A-Z0-9.\-/& ]+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return trimmed
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getStaffTeachingType(person: StaffDirectoryRecord) {
+  const role = normalizeLookupValue(person.role);
+  const searchableText = combinedStaffText(person);
+
+  if (role.includes("specialist") || searchableText.includes("specialist")) {
+    return "Specialist teacher";
+  }
+
+  if (role.includes("homeroom") || role.includes("home room")) {
+    return "Homeroom teacher";
+  }
+
+  if (role.includes("co-teacher") || role.includes("co teacher")) {
+    return "Co-teacher";
+  }
+
+  if (role.includes("support")) {
+    return "Support staff";
+  }
+
+  return toTitleCaseLabel(person.role) ?? "Staff member";
+}
+
+function getStaffLeadershipLabel(person: StaffDirectoryRecord) {
+  const searchableText = combinedStaffText(person);
+
+  if (includesAny(searchableText, ["head of year", "hoy"])) {
+    return "Head of Year";
+  }
+
+  if (includesAny(searchableText, ["head of department", "hod"])) {
+    return "Head of Department";
+  }
+
+  if (
+    includesAny(searchableText, [
+      "principal",
+      "assistant principal",
+      "vice principal",
+      "deputy",
+      "head of primary",
+      "head of school",
+      "senior leadership",
+      "slt"
+    ])
+  ) {
+    return "Senior Leadership";
+  }
+
+  return null;
+}
+
+function getStaffTeachingStream(person: StaffDirectoryRecord) {
+  const normalized = normalizeLookupValue(person.designation);
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.includes("mainstream")) {
+    return "Mainstream";
+  }
+
+  if (normalized.includes("bilingual")) {
+    return "Bilingual";
+  }
+
+  if (normalized.includes("preschool")) {
+    return "Preschool";
+  }
+
+  return toTitleCaseLabel(person.designation);
+}
+
+function getStaffSpecialistSubject(person: StaffDirectoryRecord) {
+  if (normalizeLookupValue(getStaffTeachingType(person)) !== "specialist teacher") {
+    return null;
+  }
+
+  const searchableText = combinedStaffText(person);
+  const subjectMatches: Array<[string, string]> = [
+    ["physical education", "P.E."],
+    ["p.e.", "P.E."],
+    [" pe ", "P.E."],
+    ["bahasa melayu", "BM"],
+    [" bahasa ", "BM"],
+    [" bm ", "BM"],
+    ["mandarin", "Mandarin"],
+    ["music", "Music"],
+    ["steam", "STEAM"],
+    ["coding", "Coding"],
+    ["ipc", "IPC"],
+    ["eal", "EAL"],
+    ["sen", "SEN"],
+    ["reading support", "Reading Support"],
+    ["maths support", "Maths Support"]
+  ];
+
+  for (const [needle, label] of subjectMatches) {
+    if (searchableText.includes(needle)) {
+      return label;
+    }
+  }
+
+  const fallbackCandidates = [person.department, person.team, person.sub_team]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .filter(
+      (value) =>
+        !["specialist", "specialist teams", "support", "support teams"].includes(
+          value.toLowerCase()
+        )
+    );
+
+  return fallbackCandidates[0] ?? null;
+}
+
+function getStaffTeamLabel(person: StaffDirectoryRecord) {
+  const values = [person.team, person.department, person.sub_team]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  if (!values.length) {
+    return null;
+  }
+
+  const distinctValues = values.filter(
+    (value, index) =>
+      values.findIndex((candidate) => normalizeLookupValue(candidate) === normalizeLookupValue(value)) ===
+      index
+  );
+
+  return distinctValues[0] ?? null;
+}
+
+function getStaffTimetableAccessLabel(
+  person: StaffDirectoryRecord,
+  classYearGroupLookup: Map<string, string>
+) {
+  const accessParts: string[] = [];
+  const normalizedAccessYearGroup = normalizeLookupValue(person.timetable_access_year_group);
+  const resolvedYearGroup = resolvePreferredYearGroup(person, classYearGroupLookup);
+  const accessYearGroupLabel =
+    person.timetable_access_year_group?.trim() ||
+    resolvedYearGroup ||
+    null;
+
+  if (person.can_view_own_timetable) {
+    accessParts.push("Own timetable");
+  }
+
+  if (person.can_view_class) {
+    accessParts.push("Own class");
+  }
+
+  if (person.can_view_year_group_timetables) {
+    accessParts.push(
+      normalizedAccessYearGroup === normalizeLookupValue(ALL_TIMETABLES_ACCESS_VALUE)
+        ? "All year-group timetables"
+        : `${accessYearGroupLabel ?? "Year group"} timetables`
+    );
+  }
+
+  if (person.can_view_year_group_classes) {
+    accessParts.push(
+      normalizedAccessYearGroup === normalizeLookupValue(ALL_TIMETABLES_ACCESS_VALUE)
+        ? "All year-group classes"
+        : `${accessYearGroupLabel ?? "Year group"} classes`
+    );
+  }
+
+  if (!accessParts.length) {
+    return "No extra timetable access";
+  }
+
+  return accessParts.join(" | ");
+}
+
+function getStaffPrimaryLine(person: StaffDirectoryRecord) {
+  return getStaffTeachingType(person);
+}
+
 function isDistinctPlacementValue(
   value: string | null | undefined,
   ...others: Array<string | null | undefined>
@@ -1536,7 +1734,7 @@ export function StaffDirectory({
                       <div className="staff-management-copy">
                         <h2 className="directory-name">{person.name}</h2>
                         <p className="staff-management-line primary">
-                          {person.department ?? "Department pending"}
+                          {getStaffPrimaryLine(person)}
                         </p>
                         <p className="staff-management-line accent">
                           {getStaffCardAccentLine(person, knownClassLookup)}
@@ -1632,6 +1830,10 @@ export function StaffDirectory({
                     <h3 className="directory-modal-heading">Personal Information</h3>
                     <div className="directory-modal-list">
                       <div className="directory-modal-row">
+                        <span>Full Name</span>
+                        <strong>{activeStaff.name ?? "—"}</strong>
+                      </div>
+                      <div className="directory-modal-row">
                         <span>Staff ID</span>
                         <strong>{activeStaff.staff_id ?? "—"}</strong>
                       </div>
@@ -1644,8 +1846,8 @@ export function StaffDirectory({
                         <strong>{activeStaff.email ?? "—"}</strong>
                       </div>
                       <div className="directory-modal-row">
-                        <span>Role</span>
-                        <strong>{activeStaff.role ?? "—"}</strong>
+                        <span>System Role</span>
+                        <strong>{toTitleCaseLabel(activeStaff.system_role) ?? "—"}</strong>
                       </div>
                       <div className="directory-modal-row">
                         <span>Status</span>
@@ -1655,68 +1857,83 @@ export function StaffDirectory({
                   </div>
 
                   <div className="directory-modal-section">
-                    <h3 className="directory-modal-heading">Placement</h3>
+                    <h3 className="directory-modal-heading">Teaching Profile</h3>
                     <div className="directory-modal-list">
+                      <div className="directory-modal-row">
+                        <span>Teacher Type</span>
+                        <strong>{getStaffTeachingType(activeStaff)}</strong>
+                      </div>
+                      {getStaffLeadershipLabel(activeStaff) ? (
+                        <div className="directory-modal-row">
+                          <span>Leadership</span>
+                          <strong>{getStaffLeadershipLabel(activeStaff)}</strong>
+                        </div>
+                      ) : null}
+                      {getStaffTeachingStream(activeStaff) ? (
+                        <div className="directory-modal-row">
+                          <span>Teaching Stream</span>
+                          <strong>{getStaffTeachingStream(activeStaff)}</strong>
+                        </div>
+                      ) : null}
+                      {getStaffTeamLabel(activeStaff) ? (
+                        <div className="directory-modal-row">
+                          <span>Team</span>
+                          <strong>{getStaffTeamLabel(activeStaff)}</strong>
+                        </div>
+                      ) : null}
+                      {getStaffSpecialistSubject(activeStaff) ? (
+                        <div className="directory-modal-row">
+                          <span>Specialist Subject</span>
+                          <strong>{getStaffSpecialistSubject(activeStaff)}</strong>
+                        </div>
+                      ) : null}
                       {activeStaff.class?.trim() ? (
                         <div className="directory-modal-row">
                           <span>Assigned Class</span>
                           <strong>{activeStaff.class}</strong>
                         </div>
                       ) : null}
-                      {activeStaff.team?.trim() ? (
-                        <div className="directory-modal-row">
-                          <span>Directory Section</span>
-                          <strong>{activeStaff.team}</strong>
-                        </div>
-                      ) : null}
-                      {activeStaff.sub_team?.trim() &&
-                      isDistinctPlacementValue(activeStaff.sub_team, activeStaff.team, activeStaff.class) ? (
-                        <div className="directory-modal-row">
-                          <span>Directory Group</span>
-                          <strong>{activeStaff.sub_team}</strong>
-                        </div>
-                      ) : null}
-                      {activeStaff.year_group_label?.trim() ? (
+                      {resolvePreferredYearGroup(activeStaff, classYearGroupLookup) ? (
                         <div className="directory-modal-row">
                           <span>Year Group</span>
-                          <strong>{activeStaff.year_group_label}</strong>
+                          <strong>{resolvePreferredYearGroup(activeStaff, classYearGroupLookup)}</strong>
                         </div>
                       ) : null}
-                      {activeStaff.milepost_label?.trim() ? (
+                      {resolveExplicitMilepost(activeStaff) ? (
                         <div className="directory-modal-row">
                           <span>Milepost</span>
-                          <strong>{activeStaff.milepost_label}</strong>
+                          <strong>{String(resolveExplicitMilepost(activeStaff)).toUpperCase()}</strong>
                         </div>
                       ) : null}
-                      {activeStaff.timetable_access_year_group?.trim() ? (
-                        <div className="directory-modal-row">
-                          <span>Year Group Access</span>
-                          <strong>{activeStaff.timetable_access_year_group}</strong>
-                        </div>
-                      ) : null}
-                      {isDistinctPlacementValue(activeStaff.department, activeStaff.team) ? (
-                        <div className="directory-modal-row">
-                          <span>Department</span>
-                          <strong>{activeStaff.department}</strong>
-                        </div>
-                      ) : null}
-                      {isDistinctPlacementValue(
-                        activeStaff.designation,
-                        activeStaff.department,
-                        activeStaff.team,
-                        activeStaff.year_group_label,
-                        activeStaff.milepost_label
-                      ) ? (
-                        <div className="directory-modal-row">
-                          <span>Designation</span>
-                          <strong>{activeStaff.designation}</strong>
-                        </div>
-                      ) : null}
+                      <div className="directory-modal-row">
+                        <span>Timetable Access</span>
+                        <strong>{getStaffTimetableAccessLabel(activeStaff, classYearGroupLookup)}</strong>
+                      </div>
                     </div>
                   </div>
 
                   <div className="directory-modal-section">
                     <h3 className="directory-modal-heading">Work Details</h3>
+                    <div className="directory-modal-list">
+                      {activeStaff.timetable?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Timetable Label</span>
+                          <strong>{activeStaff.timetable}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.extension?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Extension</span>
+                          <strong>{activeStaff.extension}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.max_duties !== null && activeStaff.max_duties !== undefined ? (
+                        <div className="directory-modal-row">
+                          <span>Max Duties</span>
+                          <strong>{activeStaff.max_duties}</strong>
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="directory-modal-summary">
                       <span>Assigned Duties</span>
                       <strong>{activeStaff.assigned_duties.length}</strong>
@@ -1825,7 +2042,7 @@ export function StaffDirectory({
                         />
                       </label>
                       <label className="field">
-                        <span>Role</span>
+                        <span>Teaching Role</span>
                         <input
                           type="text"
                           value={String(formValues.role ?? "")}
@@ -1851,7 +2068,7 @@ export function StaffDirectory({
                     <h3 className="directory-modal-heading">Assignment and Status</h3>
                     <div className="directory-form-grid">
                       <label className="field">
-                        <span>Department</span>
+                        <span>Team / Subject Area</span>
                         <input
                           type="text"
                           value={String(formValues.department ?? "")}
@@ -1871,7 +2088,7 @@ export function StaffDirectory({
                         />
                       </label>
                       <label className="field">
-                        <span>Directory Group</span>
+                        <span>Directory Group / Detail</span>
                         <input
                           type="text"
                           value={String(formValues.sub_team ?? "")}
@@ -1912,7 +2129,7 @@ export function StaffDirectory({
                         </select>
                       </label>
                       <label className="field">
-                        <span>Year Group Label</span>
+                        <span>Year Group</span>
                         <input
                           type="text"
                           value={String(formValues.year_group_label ?? "")}
@@ -1925,7 +2142,7 @@ export function StaffDirectory({
                         />
                       </label>
                       <label className="field">
-                        <span>Milepost Label</span>
+                        <span>Milepost</span>
                         <input
                           type="text"
                           value={String(formValues.milepost_label ?? "")}
@@ -2072,7 +2289,7 @@ export function StaffDirectory({
                         />
                       </label>
                       <label className="field">
-                        <span>Designation</span>
+                        <span>Teaching Stream</span>
                         <input
                           type="text"
                           value={String(formValues.designation ?? "")}
