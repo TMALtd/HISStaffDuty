@@ -742,14 +742,26 @@ function getStaffCardAccentLine(
   person: StaffDirectoryRecord,
   knownClassLookup: Set<string>
 ) {
-  if (person.sub_team?.trim()) {
-    return person.sub_team;
-  }
-
   const normalizedClass = normalizeLookupValue(person.class);
 
   if (normalizedClass && knownClassLookup.has(normalizedClass)) {
     return person.class ?? "Staff profile";
+  }
+
+  if (person.class?.trim()) {
+    return person.class;
+  }
+
+  if (person.year_group_label?.trim()) {
+    return person.year_group_label;
+  }
+
+  if (person.milepost_label?.trim()) {
+    return person.milepost_label;
+  }
+
+  if (person.sub_team?.trim()) {
+    return person.sub_team;
   }
 
   if (person.designation?.trim()) {
@@ -765,6 +777,18 @@ function getStaffCardAccentLine(
   }
 
   return "Staff profile";
+}
+
+function isDistinctPlacementValue(
+  value: string | null | undefined,
+  ...others: Array<string | null | undefined>
+) {
+  const normalizedValue = normalizeLookupValue(value);
+  if (!normalizedValue) {
+    return false;
+  }
+
+  return others.every((other) => normalizeLookupValue(other) !== normalizedValue);
 }
 
 function classOptionLabel(option: StaffDirectoryClassOption) {
@@ -1593,7 +1617,9 @@ export function StaffDirectory({
                 </p>
                 <p className="staff-management-line accent">
                   {modalMode === "view"
-                    ? activeStaff?.department ?? "Department pending"
+                    ? activeStaff
+                      ? getStaffCardAccentLine(activeStaff, knownClassLookup)
+                      : "Staff profile"
                     : "Class assignment can be updated here directly."}
                 </p>
               </div>
@@ -1618,22 +1644,6 @@ export function StaffDirectory({
                         <strong>{activeStaff.email ?? "—"}</strong>
                       </div>
                       <div className="directory-modal-row">
-                        <span>Department</span>
-                        <strong>{activeStaff.department ?? "—"}</strong>
-                      </div>
-                      <div className="directory-modal-row">
-                        <span>Team</span>
-                        <strong>{activeStaff.team ?? "—"}</strong>
-                      </div>
-                      <div className="directory-modal-row">
-                        <span>Sub Team</span>
-                        <strong>{activeStaff.sub_team ?? "—"}</strong>
-                      </div>
-                      <div className="directory-modal-row">
-                        <span>Assigned Class</span>
-                        <strong>{activeStaff.class ?? "—"}</strong>
-                      </div>
-                      <div className="directory-modal-row">
                         <span>Role</span>
                         <strong>{activeStaff.role ?? "—"}</strong>
                       </div>
@@ -1641,14 +1651,67 @@ export function StaffDirectory({
                         <span>Status</span>
                         <strong>{activeStaff.status ?? "—"}</strong>
                       </div>
-                      <div className="directory-modal-row">
-                        <span>Year Group Label</span>
-                        <strong>{activeStaff.year_group_label ?? "—"}</strong>
-                      </div>
-                      <div className="directory-modal-row">
-                        <span>Milepost Label</span>
-                        <strong>{activeStaff.milepost_label ?? "—"}</strong>
-                      </div>
+                    </div>
+                  </div>
+
+                  <div className="directory-modal-section">
+                    <h3 className="directory-modal-heading">Placement</h3>
+                    <div className="directory-modal-list">
+                      {activeStaff.class?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Assigned Class</span>
+                          <strong>{activeStaff.class}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.team?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Directory Section</span>
+                          <strong>{activeStaff.team}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.sub_team?.trim() &&
+                      isDistinctPlacementValue(activeStaff.sub_team, activeStaff.team, activeStaff.class) ? (
+                        <div className="directory-modal-row">
+                          <span>Directory Group</span>
+                          <strong>{activeStaff.sub_team}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.year_group_label?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Year Group</span>
+                          <strong>{activeStaff.year_group_label}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.milepost_label?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Milepost</span>
+                          <strong>{activeStaff.milepost_label}</strong>
+                        </div>
+                      ) : null}
+                      {activeStaff.timetable_access_year_group?.trim() ? (
+                        <div className="directory-modal-row">
+                          <span>Year Group Access</span>
+                          <strong>{activeStaff.timetable_access_year_group}</strong>
+                        </div>
+                      ) : null}
+                      {isDistinctPlacementValue(activeStaff.department, activeStaff.team) ? (
+                        <div className="directory-modal-row">
+                          <span>Department</span>
+                          <strong>{activeStaff.department}</strong>
+                        </div>
+                      ) : null}
+                      {isDistinctPlacementValue(
+                        activeStaff.designation,
+                        activeStaff.department,
+                        activeStaff.team,
+                        activeStaff.year_group_label,
+                        activeStaff.milepost_label
+                      ) ? (
+                        <div className="directory-modal-row">
+                          <span>Designation</span>
+                          <strong>{activeStaff.designation}</strong>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1762,52 +1825,12 @@ export function StaffDirectory({
                         />
                       </label>
                       <label className="field">
-                        <span>Department</span>
-                        <input
-                          type="text"
-                          value={String(formValues.department ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, department: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Team</span>
-                        <input
-                          type="text"
-                          value={String(formValues.team ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, team: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Sub Team</span>
-                        <input
-                          type="text"
-                          value={String(formValues.sub_team ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, sub_team: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
                         <span>Role</span>
                         <input
                           type="text"
                           value={String(formValues.role ?? "")}
                           onChange={(event) =>
                             setFormValues((current) => ({ ...current, role: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Designation</span>
-                        <input
-                          type="text"
-                          value={String(formValues.designation ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({ ...current, designation: event.target.value }))
                           }
                         />
                       </label>
@@ -1827,6 +1850,36 @@ export function StaffDirectory({
                   <div className="directory-modal-section">
                     <h3 className="directory-modal-heading">Assignment and Status</h3>
                     <div className="directory-form-grid">
+                      <label className="field">
+                        <span>Department</span>
+                        <input
+                          type="text"
+                          value={String(formValues.department ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, department: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Directory Section</span>
+                        <input
+                          type="text"
+                          value={String(formValues.team ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, team: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Directory Group</span>
+                        <input
+                          type="text"
+                          value={String(formValues.sub_team ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, sub_team: event.target.value }))
+                          }
+                        />
+                      </label>
                       <label className="field">
                         <span>Assigned Class</span>
                         <select
@@ -1858,6 +1911,39 @@ export function StaffDirectory({
                           ))}
                         </select>
                       </label>
+                      <label className="field">
+                        <span>Year Group Label</span>
+                        <input
+                          type="text"
+                          value={String(formValues.year_group_label ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              year_group_label: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Milepost Label</span>
+                        <input
+                          type="text"
+                          value={String(formValues.milepost_label ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({
+                              ...current,
+                              milepost_label: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+                      <div className="field field-span-2">
+                        <p className="directory-form-help">
+                          Use <strong>Year Group Label</strong> for class or year-group staff. Use{" "}
+                          <strong>Milepost Label</strong> for milepost-wide staff. Keep only the one that
+                          applies.
+                        </p>
+                      </div>
                       <label className="field">
                         <span>Timetable Label</span>
                         <input
@@ -1976,38 +2062,22 @@ export function StaffDirectory({
                         </div>
                       </div>
                       <label className="field">
-                        <span>Year Group Label</span>
-                        <input
-                          type="text"
-                          value={String(formValues.year_group_label ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              year_group_label: event.target.value
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Milepost Label</span>
-                        <input
-                          type="text"
-                          value={String(formValues.milepost_label ?? "")}
-                          onChange={(event) =>
-                            setFormValues((current) => ({
-                              ...current,
-                              milepost_label: event.target.value
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="field">
                         <span>Status</span>
                         <input
                           type="text"
                           value={String(formValues.status ?? "")}
                           onChange={(event) =>
                             setFormValues((current) => ({ ...current, status: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Designation</span>
+                        <input
+                          type="text"
+                          value={String(formValues.designation ?? "")}
+                          onChange={(event) =>
+                            setFormValues((current) => ({ ...current, designation: event.target.value }))
                           }
                         />
                       </label>
