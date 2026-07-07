@@ -9,6 +9,7 @@ import {
   type StaffDirectoryClassOption,
   type FilterOptions,
   type FilterState,
+  type StudentChangeLogEntry,
   type StudentAcademicYear,
   type StudentRow
 } from "@/lib/types";
@@ -20,6 +21,11 @@ type FiltersResponse = {
 
 type StudentsResponse = {
   students: StudentRow[];
+  error?: string;
+};
+
+type StudentHistoryResponse = {
+  history: StudentChangeLogEntry[];
   error?: string;
 };
 
@@ -88,6 +94,76 @@ function getStudentYearLabel(student: StudentRow) {
   }
 
   return "Unknown";
+}
+
+function formatStudentHistoryField(fieldName: string) {
+  switch (fieldName) {
+    case "class_code":
+      return "Class Code";
+    case "class_name":
+      return "Class";
+    case "school":
+      return "School";
+    case "designation":
+      return "Designation";
+    case "year_group":
+      return "Year Group";
+    case "milepost":
+      return "Milepost";
+    case "level":
+      return "Level";
+    case "full_name":
+      return "Full Name";
+    case "surname":
+      return "Surname";
+    case "first_name":
+      return "First Name";
+    case "preferred_name":
+      return "Preferred Name";
+    case "gender":
+      return "Gender";
+    case "nationality":
+      return "Nationality";
+    case "academic_house":
+      return "House";
+    default:
+      return fieldName
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
+function formatStudentHistoryValue(fieldName: string, value: string | null) {
+  if (!value) {
+    return "Empty";
+  }
+
+  if (fieldName === "year_group") {
+    return formatStaffFacingYearGroup(value) || value;
+  }
+
+  if (fieldName === "gender") {
+    return getInitial(value);
+  }
+
+  return value;
+}
+
+function formatHistoryTimestamp(value: string) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-MY", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(parsed);
 }
 
 function getYearGroupSortOrder(label: string) {
@@ -252,6 +328,9 @@ export function StaffDashboard({
   const [editingStudentId, setEditingStudentId] = useState("");
   const [editorDraft, setEditorDraft] = useState<StudentEditorDraft | null>(null);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [studentHistory, setStudentHistory] = useState<StudentChangeLogEntry[]>([]);
+  const [isStudentHistoryLoading, setIsStudentHistoryLoading] = useState(false);
+  const [studentHistoryError, setStudentHistoryError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -339,6 +418,9 @@ export function StaffDashboard({
       nationality: student.nationality ?? "",
       academic_house: student.academic_house ?? ""
     });
+    setStudentHistory([]);
+    setStudentHistoryError("");
+    setIsStudentHistoryLoading(true);
     setError("");
     setStatus("");
   }
@@ -347,7 +429,58 @@ export function StaffDashboard({
     setEditingStudentId("");
     setEditorDraft(null);
     setIsSavingStudent(false);
+    setStudentHistory([]);
+    setStudentHistoryError("");
+    setIsStudentHistoryLoading(false);
   }
+
+  useEffect(() => {
+    if (!canManageRosterYears || !editingStudentId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadStudentHistory() {
+      setIsStudentHistoryLoading(true);
+      setStudentHistoryError("");
+
+      try {
+        const params = new URLSearchParams({ studentSchoolId: editingStudentId });
+        if (academicYear) {
+          params.set("academicYearLabel", academicYear);
+        }
+
+        const response = await fetch(`/api/students/history?${params.toString()}`);
+        const json = (await response.json()) as StudentHistoryResponse;
+
+        if (!response.ok) {
+          throw new Error(json.error ?? "Could not load student history.");
+        }
+
+        if (isMounted) {
+          setStudentHistory(json.history ?? []);
+        }
+      } catch (historyError) {
+        if (isMounted) {
+          setStudentHistoryError(
+            historyError instanceof Error ? historyError.message : "Could not load student history."
+          );
+          setStudentHistory([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsStudentHistoryLoading(false);
+        }
+      }
+    }
+
+    void loadStudentHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [academicYear, canManageRosterYears, editingStudentId]);
 
   async function saveStudentEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -832,6 +965,31 @@ export function StaffDashboard({
                   </div>
                 </section>
               </div>
+              <section className="directory-modal-footer-card">
+                <h3 className="directory-modal-heading">Change History</h3>
+                {studentHistoryError ? <div className="status-banner error compact-banner">{studentHistoryError}</div> : null}
+                {isStudentHistoryLoading ? (
+                  <p className="hint">Loading student history...</p>
+                ) : studentHistory.length ? (
+                  <div className="directory-modal-list">
+                    {studentHistory.map((entry) => (
+                      <div className="directory-modal-row" key={entry.id}>
+                        <strong>
+                          {formatStudentHistoryField(entry.field_name)}:{" "}
+                          {formatStudentHistoryValue(entry.field_name, entry.old_value)} →{" "}
+                          {formatStudentHistoryValue(entry.field_name, entry.new_value)}
+                        </strong>
+                        <span>
+                          {formatHistoryTimestamp(entry.changed_at)}
+                          {entry.changed_by_email ? ` by ${entry.changed_by_email}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="hint">No saved changes have been recorded for this student yet.</p>
+                )}
+              </section>
               <div className="directory-modal-actions">
                 <button className="button secondary" type="button" onClick={closeStudentEditor}>
                   Cancel

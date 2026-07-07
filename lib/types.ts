@@ -40,6 +40,18 @@ export type StudentRow = {
   class_assignment_source: "roster" | "override";
 };
 
+export type StudentChangeLogEntry = {
+  id: string;
+  student_school_id: string;
+  academic_year_label: string | null;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by_email: string | null;
+  change_source: string | null;
+  changed_at: string;
+};
+
 export type GradebookSubject = {
   id: string;
   name: string;

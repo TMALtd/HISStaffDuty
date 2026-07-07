@@ -60,6 +60,7 @@ import {
   type StaffDirectoryRecord,
   type StaffDirectoryUpsertInput,
   type StaffProfile,
+  type StudentChangeLogEntry,
   type StudentRow
 } from "@/lib/types";
 
@@ -2263,6 +2264,57 @@ export async function logStudentChangeAudit(input: {
 
     throw new Error(result.error.message);
   }
+}
+
+export async function getStudentChangeLog(input: {
+  studentSchoolId: string;
+  academicYearLabel?: string | null;
+  limit?: number;
+}): Promise<StudentChangeLogEntry[]> {
+  const supabase = createSupabaseAdminClient();
+  const studentSchoolId = normalizeRequiredText(input.studentSchoolId, "Student school ID");
+  const resolvedAcademicYearLabel =
+    input.academicYearLabel === undefined
+      ? await getActiveStudentAcademicYearLabelOrNull()
+      : input.academicYearLabel;
+  const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
+
+  let query = supabase
+    .from(STUDENT_CHANGE_LOG_TABLE)
+    .select(
+      "id, student_school_id, academic_year_label, field_name, old_value, new_value, changed_by_email, change_source, changed_at"
+    )
+    .eq("student_school_id", studentSchoolId)
+    .order("changed_at", { ascending: false })
+    .limit(limit);
+
+  if (resolvedAcademicYearLabel) {
+    query = query.eq("academic_year_label", resolvedAcademicYearLabel);
+  }
+
+  const result = await query;
+
+  if (result.error) {
+    if (isMissingSupabaseRelationError(new Error(result.error.message), STUDENT_CHANGE_LOG_TABLE)) {
+      throw new Error(
+        "Student change log table is not set up yet. Run supabase_student_change_log.sql first."
+      );
+    }
+
+    throw new Error(result.error.message);
+  }
+
+  return (result.data ?? []).map((row) => ({
+    id: String(row.id ?? ""),
+    student_school_id: String(row.student_school_id ?? ""),
+    academic_year_label: normalizeOptionalText(row.academic_year_label),
+    field_name: String(row.field_name ?? ""),
+    old_value: normalizeOptionalText(row.old_value),
+    new_value: normalizeOptionalText(row.new_value),
+    changed_by_email: normalizeOptionalText(row.changed_by_email),
+    change_source: normalizeOptionalText(row.change_source),
+    changed_at: String(row.changed_at ?? "")
+  }));
 }
 
 export async function upsertStudentClassAssignment(
